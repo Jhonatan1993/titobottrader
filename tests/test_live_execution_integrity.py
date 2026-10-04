@@ -161,3 +161,78 @@ def test_auth_manager_database_status_and_auth():
     assert user is not None
     assert user["role"] == "admin"
 
+def test_alpaca_adapter_preflight_buy_validation(monkeypatch):
+    """Verifica que AlpacaAdapter verifique el poder de compra antes de enviar una compra"""
+    from execution.alpaca_adapter import AlpacaAdapter
+    adapter = AlpacaAdapter(api_key="mock", secret_key="mock")
+    adapter.is_configured = True
+
+    # Simular cuenta con solo $0.20 de cash
+    monkeypatch.setattr(adapter, "test_connection", lambda: {
+        "connected": True,
+        "cash": 0.20,
+        "buying_power": 0.20
+    })
+
+    res = adapter.submit_order("AAPL", 1.0, "buy")
+    assert res["success"] is False
+    assert "Poder de compra insuficiente en Alpaca" in res["error"]
+
+def test_alpaca_adapter_preflight_sell_validation_zero_holdings(monkeypatch):
+    """Verifica que AlpacaAdapter impida vender acciones que el usuario no tiene en cuenta"""
+    from execution.alpaca_adapter import AlpacaAdapter
+    adapter = AlpacaAdapter(api_key="mock", secret_key="mock")
+    adapter.is_configured = True
+
+    # El usuario no tiene acciones de NVDA en Alpaca
+    monkeypatch.setattr(adapter, "get_positions", lambda: [])
+
+    res = adapter.submit_order("NVDA", 5.0, "sell")
+    assert res["success"] is False
+    assert "Sin acciones disponibles en Alpaca para vender NVDA" in res["error"]
+
+def test_alpaca_phantom_paper_positions_purged_on_live_activation(monkeypatch):
+    """Verifica que al activar LIVE_REAL en Alpaca se purguen las posiciones simuladas de Wall Street"""
+    engine = RealTimeTradingEngine(initial_balance=100000.0, execution_environment="PAPER")
+    engine.active_broker = "ALPACA"
+    engine.feed.alpaca.is_configured = True
+
+    # Simular conexión exitosa de Alpaca Live y posición real existente de TSLA
+    monkeypatch.setattr(engine.feed.alpaca, "test_connection", lambda: {
+        "connected": True,
+        "cash": 50000.0,
+        "equity": 52000.0
+    })
+    monkeypatch.setattr(engine.feed.alpaca, "get_positions", lambda: [
+        {
+            "symbol": "TSLA",
+            "avg_entry_price": "200.00",
+            "current_price": "205.00",
+            "qty": "10",
+            "market_value": "2050.00",
+            "unrealized_pl": "50.00",
+            "unrealized_plpc": "0.025"
+        }
+    ])
+
+    # Inyectar una posición simulada de papel de Apple
+    engine.open_positions["AAPL"] = {
+        "symbol": "AAPL",
+        "entry_price": 180.0,
+        "quantity": 5.0,
+        "side": "BUY",
+        "category": "TRADFI"
+    }
+    assert "AAPL" in engine.open_positions
+
+    # Pasar Alpaca a LIVE_REAL
+    res = engine.set_execution_environment("LIVE_REAL", broker="ALPACA")
+    assert res["success"] is True
+
+    # La posición simulada de AAPL debe haber sido purgada
+    assert "AAPL" not in engine.open_positions
+    # Y la posición real de TSLA debe haber sido sincronizada en la cartera
+    assert "TSLA" in engine.open_positions
+    assert engine.open_positions["TSLA"]["quantity"] == 10.0
+
+

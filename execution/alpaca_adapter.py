@@ -72,12 +72,37 @@ class AlpacaAdapter:
         return {}
 
     def submit_order(self, symbol: str, qty: float, side: str = "buy", order_type: str = "market") -> Dict[str, Any]:
+        """
+        Envía una orden con dinero real o sandbox a Alpaca con verificación pre-flight de saldo y acciones disponibles.
+        """
         if not self.is_configured:
             return {"success": False, "error": "Alpaca API no configurada"}
         try:
+            # Pre-flight check para compras y ventas
+            is_buy = side.lower() == "buy"
+            
+            if is_buy:
+                acc = self.test_connection()
+                if acc.get("connected"):
+                    cash_avail = float(acc.get("cash", acc.get("buying_power", 0.0)))
+                    if cash_avail < 1.0:
+                        return {"success": False, "error": f"Poder de compra insuficiente en Alpaca (${cash_avail:.2f} USD disponibles)."}
+            else:
+                positions = self.get_positions()
+                matching_pos = next((p for p in positions if p.get("symbol", "").upper() == symbol.upper()), None)
+                if not matching_pos:
+                    return {"success": False, "error": f"Sin acciones disponibles en Alpaca para vender {symbol} (Saldo en cartera: 0)."}
+                
+                avail_shares = float(matching_pos.get("qty", 0.0))
+                if avail_shares <= 0.0:
+                    return {"success": False, "error": f"Sin acciones libres en Alpaca para vender {symbol} (Acciones disponibles: 0)."}
+                
+                # Ajustar cantidad al saldo real poseído para evitar ventas en corto accidentales
+                qty = min(qty, avail_shares)
+
             payload = {
-                "symbol": symbol,
-                "qty": str(qty) if isinstance(qty, int) else f"{qty:.2f}",
+                "symbol": symbol.upper(),
+                "qty": str(int(qty)) if isinstance(qty, int) or qty.is_integer() else f"{qty:.2f}",
                 "side": side.lower(),
                 "type": order_type.lower(),
                 "time_in_force": "day"

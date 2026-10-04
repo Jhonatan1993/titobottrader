@@ -277,6 +277,44 @@ class RealTimeTradingEngine:
                 self.broker_config["alpaca"]["base_url"] = "https://api.alpaca.markets"
                 self.broker_wallets["ALPACA"]["cash"] = float(conn.get("cash", 0.0))
                 self.broker_wallets["ALPACA"]["initial_balance"] = float(conn.get("equity", 0.0))
+
+                # LIMPIEZA DE POSICIONES SIMULADAS PREVIAS DE MODO PAPER:
+                tradfi_symbols_set = {"AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AMD", "INTC", "SPY", "QQQ", "DIA"}
+                for s in list(self.open_positions.keys()):
+                    pos = self.open_positions[s]
+                    if pos.get("broker") == "ALPACA" or pos.get("category") in ["TRADFI", "ETF"] or s in tradfi_symbols_set or pos.get("symbol") in tradfi_symbols_set:
+                        del self.open_positions[s]
+
+                # Sincronizar posiciones reales que el usuario tenga abiertas en Alpaca
+                try:
+                    alp_pos = self.feed.alpaca.get_positions()
+                    for p in alp_pos:
+                        sym = p.get("symbol", "").upper()
+                        if sym:
+                            self.open_positions[sym] = {
+                                "symbol": sym,
+                                "name": sym,
+                                "broker": "ALPACA",
+                                "category": "TRADFI",
+                                "type": "TRADFI_STOCK",
+                                "icon": "🏛️",
+                                "entry_price": float(p.get("avg_entry_price", 0.0)),
+                                "current_price": float(p.get("current_price", p.get("avg_entry_price", 0.0))),
+                                "quantity": float(p.get("qty", 0.0)),
+                                "invested_amount": float(p.get("market_value", 0.0)),
+                                "current_value": float(p.get("market_value", 0.0)),
+                                "stop_loss": 0.0,
+                                "take_profit": 0.0,
+                                "entry_time": datetime.datetime.now().strftime("%H:%M:%S"),
+                                "entry_timestamp": time.time(),
+                                "entry_confidence": 0.90,
+                                "reason": "Posición real sincronizada desde Alpaca Custodia",
+                                "current_pnl": float(p.get("unrealized_pl", 0.0)),
+                                "current_pnl_percent": float(p.get("unrealized_plpc", 0.0)) * 100
+                            }
+                except Exception as e:
+                    print(f"[ENGINE] Error sincronizando posiciones reales de Alpaca: {e}")
+
                 if self.active_broker == "ALPACA":
                     self.execution_environment = "LIVE_REAL"
                     self.cash_balance = self.broker_wallets["ALPACA"]["cash"]
@@ -940,7 +978,23 @@ class RealTimeTradingEngine:
 
         # Enrutamiento de venta en Alpaca
         if broker_id == "ALPACA" and self.feed.alpaca.is_configured:
-            self.feed.alpaca.submit_order(symbol, quantity, "sell")
+            alp_res = self.feed.alpaca.submit_order(symbol, quantity, "sell")
+            if not alp_res.get("success"):
+                err_msg = str(alp_res.get("error", ""))
+                if "sin acciones" in err_msg.lower() or "insufficient" in err_msg.lower() or "not found" in err_msg.lower() or "position" in err_msg.lower():
+                    self.agent._add_thought(f"ℹ️ Posición de {symbol} purgada: No existen acciones libres en Alpaca Wall Street.", "INFO", symbol, "🧹")
+                    return
+                else:
+                    self.agent._add_thought(f"⚠️ Venta en Alpaca no completada ({err_msg}). Posición mantenida para reintento.", "WARNING", symbol, "🛑")
+                    self.open_positions[symbol] = pos
+                    if pnl > 0:
+                        wallet["cash"] = round(wallet["cash"] - invested, 2)
+                        wallet["profit_vault"] = round(wallet.get("profit_vault", 0.0) - pnl, 2)
+                    else:
+                        wallet["cash"] = round(wallet["cash"] - exit_value, 2)
+                    if broker_id == self.active_broker:
+                        self.cash_balance = wallet["cash"]
+                    return
 
         trade_record = {
             "symbol": symbol,

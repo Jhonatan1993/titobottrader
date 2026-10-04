@@ -678,6 +678,83 @@
             from { transform: translateX(50px); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
+
+        /* Media Queries Responsivas Panel Admin */
+        @media (max-width: 1024px) {
+            .admin-container {
+                padding: 20px 16px;
+            }
+            .metrics-grid {
+                grid-template-columns: repeat(2, 1fr) !important;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .admin-nav {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 12px;
+                padding: 12px 14px;
+            }
+            .nav-brand {
+                justify-content: space-between;
+                width: 100%;
+            }
+            .nav-actions {
+                width: 100%;
+                justify-content: space-between;
+            }
+            .btn-nav {
+                padding: 7px 12px;
+                font-size: 12px;
+            }
+            .admin-container {
+                padding: 14px 10px;
+            }
+            .metrics-grid {
+                grid-template-columns: 1fr !important;
+                gap: 10px;
+            }
+            .cloud-db-card {
+                padding: 14px !important;
+            }
+            .cloud-db-form {
+                flex-direction: column !important;
+                align-items: stretch !important;
+            }
+            .cloud-db-form input {
+                width: 100% !important;
+            }
+            .cloud-db-form button {
+                width: 100% !important;
+                justify-content: center;
+            }
+            .table-card {
+                padding: 14px !important;
+            }
+            .table-controls {
+                flex-direction: column !important;
+                align-items: stretch !important;
+                gap: 10px !important;
+            }
+            .table-controls > div {
+                width: 100% !important;
+            }
+            .table-responsive {
+                overflow-x: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+                width: 100%;
+                display: block;
+            }
+            .users-table {
+                min-width: 650px;
+            }
+            .modal-content {
+                width: 95% !important;
+                max-width: 100% !important;
+                padding: 16px !important;
+            }
+        }
     </style>
 </head>
 <body>
