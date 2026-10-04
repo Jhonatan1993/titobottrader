@@ -755,10 +755,28 @@
                 </div>
                 <div class="metric-value mono" id="metric-admins" style="color:var(--binance-gold);">0</div>
                 <span class="metric-badge" style="color:var(--binance-gold);">Control total del sistema</span>
+        </div>
+
+        <!-- Cloud Database & Disaster Recovery Banner -->
+        <div style="background: rgba(13, 20, 36, 0.8); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 18px 24px; margin-bottom: 24px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px;">
+            <div>
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
+                    <span style="font-size:18px;">☁️</span>
+                    <span style="font-weight:700; font-size:15px; color:#F8FAFC;">Persistencia y Escalabilidad Cloud (PostgreSQL / Supabase)</span>
+                    <span id="storage-type-badge" class="brand-badge" style="font-size:10.5px;">Cargando estado...</span>
+                </div>
+                <p style="font-size:12px; color:var(--text-secondary); line-height:1.4;">
+                    Garantiza tolerancia a fallos total: Si el servidor VPS se reinstala o migra, tus usuarios y contraseñas quedan 100% seguros e intactos en la nube.
+                </p>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px; min-width:320px; flex:1; max-width:540px;">
+                <input type="text" id="cloud-db-url" placeholder="postgresql://postgres:pass@db.supabase.co:5432/postgres" style="background:#070B14; border:1px solid var(--border-subtle); color:#F8FAFC; border-radius:8px; padding:8px 12px; font-size:12px; font-family:monospace; width:100%;">
+                <button class="btn-primary" onclick="connectCloudDB()" style="white-space:nowrap; padding:8px 16px; font-size:12px; border:none; border-radius:6px; cursor:pointer;">Conectar & Migrar</button>
             </div>
         </div>
 
         <!-- Search & Filter Bar -->
+
         <div class="filter-bar">
             <div class="search-box">
                 <span>🔍</span>
@@ -1033,7 +1051,45 @@
             document.getElementById('metric-active').innerText = metrics.active_users || 0;
             document.getElementById('metric-restricted').innerText = metrics.restricted_users || 0;
             document.getElementById('metric-admins').innerText = metrics.admin_users || 0;
+            if (metrics.storage_type) {
+                const badge = document.getElementById('storage-type-badge');
+                if (badge) {
+                    badge.innerText = metrics.storage_type;
+                    if (metrics.storage_type.includes('PostgreSQL')) {
+                        badge.style.color = 'var(--emerald-win)';
+                        badge.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+                        badge.style.background = 'rgba(16, 185, 129, 0.12)';
+                    } else {
+                        badge.style.color = 'var(--cyber-cyan)';
+                    }
+                }
+            }
         }
+
+        async function connectCloudDB() {
+            const url = document.getElementById('cloud-db-url').value.trim();
+            if (!url) {
+                alert("Por favor ingresa la URL de conexión a tu base de datos PostgreSQL / Supabase.");
+                return;
+            }
+            try {
+                const res = await fetch('/api/admin/set-database-url', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ database_url: url })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert("🎉 " + data.message);
+                    window.location.reload();
+                } else {
+                    alert("❌ Error: " + (data.error || 'No se pudo conectar a PostgreSQL'));
+                }
+            } catch (err) {
+                alert("❌ Error de comunicación: " + err.message);
+            }
+        }
+
 
         function renderUsersTable(users) {
             const tbody = document.getElementById('users-tbody');

@@ -168,10 +168,17 @@ class RealTimeTradingEngine:
         if not acc.get("authenticated"):
             return
         usdt_val = float(acc.get("usdt_free", 0.0))
-        self.cash_balance = usdt_val
-        balances = acc.get("balances", {})
+        total_stable = float(acc.get("total_stable_free", 0.0))
+        real_cash = usdt_val if usdt_val > 0 else total_stable
+        
+        # Sincronizar efectivo real directamente a la cartera de Binance
+        self.broker_wallets["BINANCE"]["cash"] = round(real_cash, 2)
+        if self.active_broker == "BINANCE":
+            self.cash_balance = round(real_cash, 2)
 
+        balances = acc.get("balances", {})
         active_synced_symbols = set()
+        total_crypto_invested = 0.0
 
         for c_sym in ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "AVAX", "LINK", "NEAR"]:
             asset_data = balances.get(c_sym)
@@ -187,10 +194,12 @@ class RealTimeTradingEngine:
                         invested_est = round(qty_safe * cur_p, 2)
                         if qty_safe > 0 and invested_est >= 5.0:
                             active_synced_symbols.add(c_sym)
+                            total_crypto_invested += invested_est
                             if c_sym not in self.open_positions:
                                 self.open_positions[c_sym] = {
                                     "symbol": c_sym,
                                     "name": cur_asset["name"],
+                                    "broker": "BINANCE",
                                     "category": "CRYPTO",
                                     "type": cur_asset["type"],
                                     "icon": cur_asset.get("icon", "🪙"),
@@ -200,8 +209,11 @@ class RealTimeTradingEngine:
                                     "invested_amount": invested_est,
                                     "current_value": invested_est,
                                     "stop_loss": self.agent.learner.get_adaptive_sl_tp(c_sym, 0.018, 0.040, cur_p, cur_asset.get("resistance"), cur_asset.get("support"))["suggested_sl"],
+                                    "initial_stop_loss": self.agent.learner.get_adaptive_sl_tp(c_sym, 0.018, 0.040, cur_p, cur_asset.get("resistance"), cur_asset.get("support"))["suggested_sl"],
+                                    "highest_price": cur_p,
                                     "take_profit": self.agent.learner.get_adaptive_sl_tp(c_sym, 0.018, 0.040, cur_p, cur_asset.get("resistance"), cur_asset.get("support"))["suggested_tp"],
                                     "entry_time": datetime.datetime.now().strftime("%H:%M:%S"),
+                                    "entry_timestamp": time.time(),
                                     "entry_confidence": 92,
                                     "reason": f"Posición activa en cartera real Binance Spot ({qty_safe:.5f} {c_sym}).",
                                     "current_pnl": 0.0,
@@ -222,13 +234,23 @@ class RealTimeTradingEngine:
                                 pos["current_pnl"] = round(pos["current_value"] - pos["invested_amount"], 2)
                                 pos["current_pnl_percent"] = round(((cur_p - pos["entry_price"]) / pos["entry_price"]) * 100, 2) if pos.get("entry_price") else 0.0
 
-        # Remover cualquier posición fantasma o residuo de polvo que no cumpla con el mínimo nocional
+        # Remover cualquier posición fantasma de cripto que no exista físicamente en Binance Spot
         to_remove = [
             sym for sym, pos in self.open_positions.items() 
             if pos.get("category") == "CRYPTO" and (sym not in active_synced_symbols or pos.get("invested_amount", 0) < 5.0 or pos.get("quantity", 0) <= 0)
         ]
         for sym in to_remove:
             del self.open_positions[sym]
+
+        # Recalcular capital base del broker si estamos en MODO REAL
+        if self.broker_wallets["BINANCE"].get("environment") == "LIVE_REAL":
+            total_real_equity = round(real_cash + total_crypto_invested, 2)
+            if total_real_equity > 0 and (self.broker_wallets["BINANCE"]["initial_balance"] <= 1.0 or abs(self.broker_wallets["BINANCE"]["initial_balance"] - 30.0) < 0.01):
+                self.broker_wallets["BINANCE"]["initial_balance"] = total_real_equity
+                self.broker_config["binance_initial_balance"] = total_real_equity
+                if self.active_broker == "BINANCE":
+                    self.initial_balance = total_real_equity
+
 
     def set_execution_environment(self, env: str, custom_balance: Optional[float] = None, broker: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -292,15 +314,29 @@ class RealTimeTradingEngine:
                 self.broker_wallets["BINANCE"]["environment"] = "LIVE_REAL"
                 self.broker_config["binance_environment"] = "LIVE_REAL"
                 self.broker_config["execution_environment"] = "LIVE_REAL"
+
+                # LIMPIEZA DE POSICIONES CRIPTO PREVIAS DE MODO PAPER:
+                # Al conmutar a MODO REAL, eliminamos las posiciones simuladas para no intentar vender activos inexistentes
+                crypto_symbols_set = {"BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "AVAX", "LINK", "NEAR"}
+                for s in list(self.open_positions.keys()):
+                    pos = self.open_positions[s]
+                    if pos.get("category") == "CRYPTO" or s in crypto_symbols_set or pos.get("symbol") in crypto_symbols_set:
+                        del self.open_positions[s]
+
                 self._sync_binance_wallet_positions(acc)
+                b_eq = self.get_broker_equity("BINANCE")
+                self.broker_wallets["BINANCE"]["initial_balance"] = b_eq
+                self.broker_config["binance_initial_balance"] = b_eq
+
                 if self.active_broker == "BINANCE":
                     self.execution_environment = "LIVE_REAL"
                     self.cash_balance = self.broker_wallets["BINANCE"]["cash"]
-                    self.initial_balance = self.broker_wallets["BINANCE"]["initial_balance"]
+                    self.initial_balance = b_eq
+
                 save_broker_config(self.broker_config)
-                b_eq = self.get_broker_equity("BINANCE")
-                self.agent._add_thought(f"🔥 MODO DINERO REAL ACTIVADO en Binance Spot. Saldo real: ${b_eq:,.2f} USD.", "WARNING", icon="🪙")
+                self.agent._add_thought(f"🔥 MODO DINERO REAL ACTIVADO en Binance Spot. Saldo real en custodia: ${b_eq:,.2f} USD (Disponible: ${self.broker_wallets['BINANCE']['cash']:,.2f} USDT).", "WARNING", icon="🪙")
                 return {"success": True, "broker": "BINANCE", "environment": "LIVE_REAL", "equity": b_eq}
+
             else:
                 self.feed.binance.live_trading_enabled = False
                 target_wallet = self.broker_wallets.get(target_b, self.broker_wallets["BINANCE"])
@@ -884,16 +920,23 @@ class RealTimeTradingEngine:
             if real_res.get("success"):
                 self.agent._add_thought(f"🔥 VENTA REAL BINANCE: Vendidos {quantity} {symbol} en Spot.", "WARNING", symbol, "⚡")
             else:
-                self.agent._add_thought(f"⚠️ Venta real en Binance no completada ({real_res.get('error')}). Posición mantenida para reintento.", "WARNING", symbol, "🛑")
-                self.open_positions[symbol] = pos
-                if pnl > 0:
-                    wallet["cash"] = round(wallet["cash"] - invested, 2)
-                    wallet["profit_vault"] = round(wallet.get("profit_vault", 0.0) - pnl, 2)
+                err_msg = str(real_res.get('error', ''))
+                if "-2010" in err_msg or "Sin saldo disponible" in err_msg or "insufficient balance" in err_msg.lower():
+                    self.agent._add_thought(f"ℹ️ Posición de {symbol} purgada: No existe saldo físico libre en Binance Spot.", "INFO", symbol, "🧹")
+                    self._sync_binance_wallet_positions(self.feed.binance.get_account_balances())
+                    return
                 else:
-                    wallet["cash"] = round(wallet["cash"] - exit_value, 2)
-                if broker_id == self.active_broker:
-                    self.cash_balance = wallet["cash"]
-                return
+                    self.agent._add_thought(f"⚠️ Venta real en Binance no completada ({err_msg}). Posición mantenida para reintento.", "WARNING", symbol, "🛑")
+                    self.open_positions[symbol] = pos
+                    if pnl > 0:
+                        wallet["cash"] = round(wallet["cash"] - invested, 2)
+                        wallet["profit_vault"] = round(wallet.get("profit_vault", 0.0) - pnl, 2)
+                    else:
+                        wallet["cash"] = round(wallet["cash"] - exit_value, 2)
+                    if broker_id == self.active_broker:
+                        self.cash_balance = wallet["cash"]
+                    return
+
 
         # Enrutamiento de venta en Alpaca
         if broker_id == "ALPACA" and self.feed.alpaca.is_configured:

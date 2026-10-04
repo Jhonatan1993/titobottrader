@@ -66,3 +66,98 @@ def test_engine_total_equity_truth():
     eq = engine.get_total_equity()
     assert eq == 115.25
     assert engine.get_broker_equity(active_b) == 115.25
+
+def test_binance_adapter_preflight_buy_validation(monkeypatch):
+    """Verifica que create_market_order impida comprar si no hay balance USDT mínimo suficiente"""
+    adapter = BinanceAdapter(api_key="mock", secret_key="mock")
+    adapter.is_configured = True
+    adapter.live_trading_enabled = True
+
+    # Mock get_account_balances devolviendo solo 2.0 USDT (menor al mínimo nocional de 5.0)
+    monkeypatch.setattr(adapter, "get_account_balances", lambda: {"authenticated": True, "balances": {"USDT": 2.0}, "usdt_free": 2.0, "total_stable_free": 2.0})
+
+    order = adapter.create_market_order("BTCUSDT", "BUY", 0.001)
+    assert order["success"] is False
+    assert "Saldo insuficiente en Binance Spot" in order["error"]
+
+def test_binance_adapter_preflight_sell_validation_zero_holdings(monkeypatch):
+    """Verifica que create_market_order cancele la venta si el usuario no tiene ninguna moneda en Binance (evita error -2010)"""
+    adapter = BinanceAdapter(api_key="mock", secret_key="mock")
+    adapter.is_configured = True
+    adapter.live_trading_enabled = True
+
+    # El usuario tiene 0.0 NEAR en Binance
+    monkeypatch.setattr(adapter, "get_account_balances", lambda: {"authenticated": True, "balances": {"USDT": 30.0, "NEAR": {"free": 0.0}}, "usdt_free": 30.0, "total_stable_free": 30.0})
+
+    order = adapter.create_market_order("NEARUSDT", "SELL", 1.0962)
+    assert order["success"] is False
+    assert "Sin saldo disponible en Binance Spot para vender NEAR" in order["error"]
+
+def test_binance_adapter_preflight_sell_clamping(monkeypatch):
+    """Verifica que la cantidad a vender se ajuste automáticamente a los tokens reales en Binance para evitar rechazos por redondeo"""
+    import requests
+    adapter = BinanceAdapter(api_key="mock", secret_key="mock")
+    adapter.is_configured = True
+    adapter.live_trading_enabled = True
+
+    # El usuario tiene 1.45 NEAR en Binance, pero el bot cree que tiene 1.50
+    monkeypatch.setattr(adapter, "get_account_balances", lambda: {"authenticated": True, "balances": {"NEAR": {"free": 1.45}}, "usdt_free": 20.0, "total_stable_free": 20.0})
+    
+    # Mock requests.post para observar la llamada enviada
+    called_url = []
+    class MockResponse:
+        status_code = 200
+        def json(self):
+            return {"symbol": "NEARUSDT", "orderId": 123456, "status": "FILLED", "executedQty": "1.4"}
+
+    def mock_post(url, headers, timeout):
+        called_url.append(url)
+        return MockResponse()
+
+    monkeypatch.setattr(requests, "post", mock_post)
+
+    order = adapter.create_market_order("NEARUSDT", "SELL", 1.50)
+    assert order["success"] is True
+    assert len(called_url) == 1
+    # Debe haber ajustado la query a quantity=1.4 (redondeado hacia abajo con el stepSize de NEAR que es 0.1)
+    assert "quantity=1.4" in called_url[0]
+
+def test_phantom_paper_positions_purged_on_live_activation(monkeypatch):
+    """Verifica que al pasar de PAPER a LIVE_REAL se limpien las posiciones simuladas de cripto"""
+    engine = RealTimeTradingEngine(initial_balance=100.0, execution_environment="PAPER")
+    engine.active_broker = "BINANCE"
+    engine.feed.binance.is_configured = True
+
+    monkeypatch.setattr(engine.feed.binance, "get_account_balances", lambda: {
+        "authenticated": True,
+        "balances": {"USDT": {"free": 100.0}},
+        "usdt_free": 100.0,
+        "total_stable_free": 100.0
+    })
+
+    # Inyectar una posición simulada
+    engine.open_positions["NEAR"] = {
+        "symbol": "NEAR",
+        "entry_price": 5.0,
+        "quantity": 1.0962,
+        "side": "BUY"
+    }
+    assert "NEAR" in engine.open_positions
+
+    # Cambiar a LIVE_REAL
+    res = engine.set_execution_environment("LIVE_REAL")
+    assert res["success"] is True
+    # La posición simulada debe haber sido purgada para evitar vender en real tokens inexistentes
+    assert "NEAR" not in engine.open_positions
+
+def test_auth_manager_database_status_and_auth():
+    """Verifica que el gestor de autenticación funcione y mantenga la integridad de datos"""
+    from dashboard.auth_manager import init_auth_db, authenticate, is_using_postgres
+    init_auth_db()
+    using_pg = is_using_postgres()
+    # Verificar autenticación de admin inicial
+    user, err = authenticate("admin", "admin123")
+    assert err is None
+    assert user is not None
+    assert user["role"] == "admin"
+

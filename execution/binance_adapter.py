@@ -96,18 +96,25 @@ class BinanceAdapter:
                 data = resp.json()
                 balances = {}
                 usdt_free = 0.0
+                total_stable_free = 0.0
                 for b in data.get("balances", []):
                     free = float(b.get("free", 0.0))
                     locked = float(b.get("locked", 0.0))
-                    if free > 0 or locked > 0:
-                        balances[b.get("asset")] = {"free": free, "locked": locked, "total": free + locked}
-                    if b.get("asset") == "USDT":
+                    total = free + locked
+                    asset_name = b.get("asset")
+                    if total > 0:
+                        balances[asset_name] = {"free": free, "locked": locked, "total": total}
+                    if asset_name in ["USDT", "USDC", "FDUSD", "BUSD"]:
+                        total_stable_free += free
+                    if asset_name == "USDT":
                         usdt_free = free
                 return {
                     "authenticated": True,
                     "can_trade": data.get("canTrade", False),
                     "balances": balances,
-                    "usdt_free": usdt_free
+                    "usdt_free": usdt_free,
+                    "total_stable_free": total_stable_free,
+                    "raw_balances": data.get("balances", [])
                 }
             else:
                 return {"authenticated": False, "error": f"Error Binance ({resp.status_code}): {resp.text}"}
@@ -116,7 +123,7 @@ class BinanceAdapter:
 
     def create_market_order(self, symbol: str, side: str, quantity: float = 0.0, quote_order_qty: float = 0.0) -> Dict[str, Any]:
         """
-        Envía una orden Spot con dinero real a Binance con doble confirmación de seguridad.
+        Envía una orden Spot con dinero real a Binance con doble confirmación de seguridad y validación de saldo.
         """
         if not self.is_configured:
             return {"success": False, "error": "Llaves API no configuradas"}
@@ -130,31 +137,62 @@ class BinanceAdapter:
                 "side": side.upper(),
                 "type": "MARKET"
             }
-            if side.upper() == "BUY" and quote_order_qty > 0:
-                params["quoteOrderQty"] = f"{quote_order_qty:.2f}"
+            
+            # Validación estricta de saldos antes de enviar al exchange para evitar error -2010
+            acc = self.get_account_balances()
+            if not acc.get("authenticated"):
+                return {"success": False, "error": f"No se pudo verificar saldo en Binance: {acc.get('error')}"}
+
+            if side.upper() == "BUY":
+                avail_usdt = float(acc.get("usdt_free", 0.0))
+                if avail_usdt < 5.0:
+                    return {
+                        "success": False, 
+                        "error": f"Saldo insuficiente en Binance Spot. Saldo disponible: ${avail_usdt:.2f} USDT (El mínimo por orden en Binance es $5.00 USDT)."
+                    }
+                # Asegurar no exceder el saldo disponible
+                target_spend = min(quote_order_qty, avail_usdt) if quote_order_qty > 0 else min(10.0, avail_usdt)
+                if target_spend > avail_usdt * 0.995:
+                    target_spend = round(avail_usdt * 0.99, 2)
+                if target_spend < 5.0:
+                    return {"success": False, "error": f"Saldo disponible insuficiente (${avail_usdt:.2f} USDT) para cumplir el mínimo de $5.00 USDT."}
+                params["quoteOrderQty"] = f"{target_spend:.2f}"
             else:
                 import math
                 sym_clean = symbol.upper().replace("USDT", "")
+                free_qty = float(acc.get("balances", {}).get(sym_clean, {}).get("free", 0.0))
+                if free_qty <= 0.0:
+                    return {
+                        "success": False, 
+                        "error": f"Sin saldo disponible en Binance Spot para vender {sym_clean} (Saldo en cartera: 0.0)."
+                    }
+                
+                # Ajustar cantidad exacta al saldo real libre en Binance
+                actual_qty = min(quantity, free_qty) if quantity > 0 else free_qty
+                
                 if sym_clean == "BTC":
-                    qty_floored = math.floor(quantity * 100000) / 100000
+                    qty_floored = math.floor(actual_qty * 100000) / 100000
                     params["quantity"] = f"{qty_floored:.5f}"
                 elif sym_clean == "ETH":
-                    qty_floored = math.floor(quantity * 10000) / 10000
+                    qty_floored = math.floor(actual_qty * 10000) / 10000
                     params["quantity"] = f"{qty_floored:.4f}"
                 elif sym_clean in ["BNB", "SOL"]:
-                    qty_floored = math.floor(quantity * 1000) / 1000
+                    qty_floored = math.floor(actual_qty * 1000) / 1000
                     params["quantity"] = f"{qty_floored:.3f}"
                 elif sym_clean in ["AVAX", "LINK"]:
-                    qty_floored = math.floor(quantity * 100) / 100
+                    qty_floored = math.floor(actual_qty * 100) / 100
                     params["quantity"] = f"{qty_floored:.2f}"
                 elif sym_clean in ["NEAR", "XRP", "ADA"]:
-                    qty_floored = math.floor(quantity * 10) / 10
+                    qty_floored = math.floor(actual_qty * 10) / 10
                     params["quantity"] = f"{qty_floored:.1f}"
                 elif sym_clean == "DOGE":
-                    params["quantity"] = f"{int(quantity)}"
+                    params["quantity"] = f"{int(actual_qty)}"
                 else:
-                    qty_floored = math.floor(quantity * 100) / 100
+                    qty_floored = math.floor(actual_qty * 100) / 100
                     params["quantity"] = f"{qty_floored:.2f}"
+                
+                if float(params.get("quantity", 0)) <= 0:
+                    return {"success": False, "error": f"Cantidad de {sym_clean} disponible ({free_qty}) es inferior al mínimo fraccional operable."}
 
             signed_query = self._sign_query(params)
             url = f"{self.base_url}/order?{signed_query}"
@@ -165,6 +203,7 @@ class BinanceAdapter:
                 return {"success": False, "error": resp.text}
         except Exception as e:
             return {"success": False, "error": str(e)}
+
 
     def test_connection(self) -> Dict[str, Any]:
         """

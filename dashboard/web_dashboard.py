@@ -12,8 +12,9 @@ from execution.trading_engine import RealTimeTradingEngine
 from dashboard.auth_manager import (
     init_auth_db, authenticate, get_user_by_id, list_users,
     create_user, update_user, set_user_status, change_user_password,
-    delete_user, get_auth_metrics
+    delete_user, get_auth_metrics, update_database_url
 )
+
 from dashboard.security_guard import (
     get_secure_session_key, RATE_LIMITER, log_security_event, mask_secret, harden_data_files
 )
@@ -253,6 +254,15 @@ def api_admin_delete_user(user_id):
     if not ok:
         return jsonify({"success": False, "error": err}), 400
     return jsonify({"success": True})
+
+@app.route("/api/admin/set-database-url", methods=["POST"])
+def api_admin_set_database_url():
+    data = request.get_json(silent=True) or {}
+    db_url = data.get("database_url", "")
+    res = update_database_url(db_url)
+    if res.get("success"):
+        return jsonify(res)
+    return jsonify(res), 400
 
 @app.route("/")
 def index():
