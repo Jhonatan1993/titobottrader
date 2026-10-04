@@ -235,4 +235,47 @@ def test_alpaca_phantom_paper_positions_purged_on_live_activation(monkeypatch):
     assert "TSLA" in engine.open_positions
     assert engine.open_positions["TSLA"]["quantity"] == 10.0
 
+def test_binance_notional_filter_failure_cleans_position(monkeypatch):
+    """Verifica que el error -1013 (Filter failure: NOTIONAL) archive la posición y no quede en bucle infinito"""
+    engine = RealTimeTradingEngine(initial_balance=30.0, execution_environment="LIVE_REAL")
+    engine.active_broker = "BINANCE"
+    engine.feed.binance.is_configured = True
+    engine.feed.binance.live_trading_enabled = True
+
+    # Inyectar posición de NEAR
+    engine.open_positions["NEAR"] = {
+        "symbol": "NEAR",
+        "name": "NEAR Protocol",
+        "broker": "BINANCE",
+        "category": "CRYPTO",
+        "type": "CRYPTO",
+        "entry_price": 4.992,
+        "quantity": 1.0962,
+        "invested_amount": 5.47,
+        "current_value": 5.43,
+        "current_pnl": -0.04
+    }
+
+    # Simular que Binance responde con error -1013 NOTIONAL
+    monkeypatch.setattr(engine.feed.binance, "create_market_order", lambda sym, side, qty: {
+        "success": False,
+        "error": '{"code":-1013,"msg":"Filter failure: NOTIONAL"}',
+        "is_dust": True
+    })
+
+    # Simular saldo Binance
+    monkeypatch.setattr(engine.feed.binance, "get_account_balances", lambda: {
+        "authenticated": True,
+        "balances": {"USDT": {"free": 8.35}},
+        "usdt_free": 8.35,
+        "total_stable_free": 8.35
+    })
+
+    # Ejecutar venta
+    engine._execute_sell("NEAR", {"price": 4.954, "symbol": "NEAR"}, {"reason_simple": "Escudo activado"})
+
+    # La posición DEBE haber sido liberada y no reinsertada para reintento
+    assert "NEAR" not in engine.open_positions
+
+
 

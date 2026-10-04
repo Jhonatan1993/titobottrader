@@ -234,18 +234,24 @@ class RealTimeTradingEngine:
                                 pos["current_pnl"] = round(pos["current_value"] - pos["invested_amount"], 2)
                                 pos["current_pnl_percent"] = round(((cur_p - pos["entry_price"]) / pos["entry_price"]) * 100, 2) if pos.get("entry_price") else 0.0
 
-        # Remover cualquier posición fantasma de cripto que no exista físicamente en Binance Spot
-        to_remove = [
-            sym for sym, pos in self.open_positions.items() 
-            if pos.get("category") == "CRYPTO" and (sym not in active_synced_symbols or pos.get("invested_amount", 0) < 5.0 or pos.get("quantity", 0) <= 0)
-        ]
+        # Remover cualquier posición fantasma o saldo de polvo (dust < $5.00) que no sea operable en Binance
+        to_remove = []
+        is_live = self.broker_wallets["BINANCE"].get("environment") == "LIVE_REAL"
+        for sym, pos in list(self.open_positions.items()):
+            if pos.get("category") == "CRYPTO":
+                pos_val = round(pos.get("quantity", 0.0) * pos.get("current_price", 0.0), 2)
+                if sym not in active_synced_symbols or pos.get("quantity", 0) <= 0:
+                    to_remove.append(sym)
+                elif is_live and (pos_val < 5.0 or pos.get("invested_amount", 0.0) < 5.0):
+                    to_remove.append(sym)
         for sym in to_remove:
             del self.open_positions[sym]
 
         # Recalcular capital base del broker si estamos en MODO REAL
-        if self.broker_wallets["BINANCE"].get("environment") == "LIVE_REAL":
+        if is_live:
+            # En modo real, el capital base es exactamente el total depositado/reconocido en custodia
             total_real_equity = round(real_cash + total_crypto_invested, 2)
-            if total_real_equity > 0 and (self.broker_wallets["BINANCE"]["initial_balance"] <= 1.0 or abs(self.broker_wallets["BINANCE"]["initial_balance"] - 30.0) < 0.01):
+            if total_real_equity > 0:
                 self.broker_wallets["BINANCE"]["initial_balance"] = total_real_equity
                 self.broker_config["binance_initial_balance"] = total_real_equity
                 if self.active_broker == "BINANCE":
@@ -815,7 +821,7 @@ class RealTimeTradingEngine:
         kelly_pct = decision_data.get("budget_percent", 20.0)
         effective_pct = min(kelly_pct, 30.0)
 
-        min_trade = 5.0
+        min_trade = 6.0 if (broker_id == "BINANCE" and self.execution_environment == "LIVE_REAL") else 5.0
         if available_cash <= 35.0:
             target_amount = round(min(available_cash * 0.40, 10.0), 2)
             target_amount = max(min_trade, target_amount)
@@ -844,6 +850,9 @@ class RealTimeTradingEngine:
             actual_investment = round(quantity * price, 2)
 
         if actual_investment <= 0 or actual_investment > available_cash:
+            return
+
+        if broker_id == "BINANCE" and self.execution_environment == "LIVE_REAL" and actual_investment < 6.0:
             return
 
         wallet["cash"] = round(wallet["cash"] - actual_investment, 2)
@@ -963,6 +972,13 @@ class RealTimeTradingEngine:
                     self.agent._add_thought(f"ℹ️ Posición de {symbol} purgada: No existe saldo físico libre en Binance Spot.", "INFO", symbol, "🧹")
                     self._sync_binance_wallet_positions(self.feed.binance.get_account_balances())
                     return
+                elif "-1013" in err_msg or "NOTIONAL" in err_msg or real_res.get("is_dust") or "Filter failure" in err_msg:
+                    self.agent._add_thought(
+                        f"ℹ️ Posición de {symbol} archivada: El valor remanente (${exit_value:.2f} USD) es inferior al mínimo de $5.00 USD exigido por Binance Spot. Los tokens permanecen seguros en tu billetera de Binance.",
+                        "INFO", symbol, "🪙"
+                    )
+                    self._sync_binance_wallet_positions(self.feed.binance.get_account_balances())
+                    return
                 else:
                     self.agent._add_thought(f"⚠️ Venta real en Binance no completada ({err_msg}). Posición mantenida para reintento.", "WARNING", symbol, "🛑")
                     self.open_positions[symbol] = pos
@@ -1009,10 +1025,10 @@ class RealTimeTradingEngine:
             "exit_value": exit_value,
             "pnl": pnl,
             "pnl_percent": pnl_pct,
-            "entry_time": pos["entry_time"],
+            "entry_time": pos.get("entry_time", datetime.datetime.now().strftime("%H:%M:%S")),
             "exit_time": datetime.datetime.now().strftime("%H:%M:%S"),
-            "exit_reason": decision_data["reason_simple"],
-            "exit_type": decision_data["decision"],
+            "exit_reason": decision_data.get("reason_simple", "Venta ejecutada"),
+            "exit_type": decision_data.get("decision", "SELL"),
             "success": pnl > 0
         }
         self.journal.record_trade(trade_record)

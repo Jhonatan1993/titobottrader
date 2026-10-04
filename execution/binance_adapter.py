@@ -145,17 +145,17 @@ class BinanceAdapter:
 
             if side.upper() == "BUY":
                 avail_usdt = float(acc.get("usdt_free", 0.0))
-                if avail_usdt < 5.0:
+                if avail_usdt < 6.0:
                     return {
                         "success": False, 
-                        "error": f"Saldo insuficiente en Binance Spot. Saldo disponible: ${avail_usdt:.2f} USDT (El mínimo por orden en Binance es $5.00 USDT)."
+                        "error": f"Saldo insuficiente en Binance Spot. Saldo disponible: ${avail_usdt:.2f} USDT (Se requiere un mínimo seguro de $6.00 USDT para cumplir el filtro NOTIONAL de Binance y comisiones)."
                     }
                 # Asegurar no exceder el saldo disponible
                 target_spend = min(quote_order_qty, avail_usdt) if quote_order_qty > 0 else min(10.0, avail_usdt)
                 if target_spend > avail_usdt * 0.995:
                     target_spend = round(avail_usdt * 0.99, 2)
-                if target_spend < 5.0:
-                    return {"success": False, "error": f"Saldo disponible insuficiente (${avail_usdt:.2f} USDT) para cumplir el mínimo de $5.00 USDT."}
+                if target_spend < 5.20:
+                    return {"success": False, "error": f"Saldo disponible insuficiente (${avail_usdt:.2f} USDT) para cumplir el mínimo seguro de $5.20 USDT."}
                 params["quoteOrderQty"] = f"{target_spend:.2f}"
             else:
                 import math
@@ -192,7 +192,7 @@ class BinanceAdapter:
                     params["quantity"] = f"{qty_floored:.2f}"
                 
                 if float(params.get("quantity", 0)) <= 0:
-                    return {"success": False, "error": f"Cantidad de {sym_clean} disponible ({free_qty}) es inferior al mínimo fraccional operable."}
+                    return {"success": False, "is_dust": True, "error": f"Cantidad de {sym_clean} disponible ({free_qty}) es inferior al mínimo fraccional operable."}
 
             signed_query = self._sign_query(params)
             url = f"{self.base_url}/order?{signed_query}"
@@ -200,7 +200,9 @@ class BinanceAdapter:
             if resp.status_code in [200, 201]:
                 return {"success": True, "data": resp.json()}
             else:
-                return {"success": False, "error": resp.text}
+                err_text = resp.text
+                is_dust = "-1013" in err_text or "NOTIONAL" in err_text or "Filter failure" in err_text
+                return {"success": False, "error": err_text, "is_dust": is_dust}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
