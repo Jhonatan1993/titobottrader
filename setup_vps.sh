@@ -17,9 +17,19 @@ ufw allow 22/tcp comment 'SSH'
 ufw allow 5055/tcp comment 'TitoBotTrader Dashboard'
 ufw --force enable
 
-# 3. Crear entorno virtual de Python
-echo "🐍 [3/6] Creando entorno virtual aislado de Python..."
+# 3. Descargar o actualizar desde GitHub
+echo "📥 [3/7] Obteniendo el código desde GitHub..."
 INSTALL_DIR="/root/titobot"
+if [ ! -d "$INSTALL_DIR/.git" ]; then
+    rm -rf "$INSTALL_DIR"
+    git clone https://github.com/Jhonatan1993/titobottrader.git "$INSTALL_DIR"
+else
+    cd "$INSTALL_DIR"
+    git pull origin main
+fi
+
+# 4. Crear entorno virtual de Python
+echo "🐍 [4/7] Creando entorno virtual aislado de Python..."
 cd "$INSTALL_DIR"
 python3 -m venv venv
 source venv/bin/activate
