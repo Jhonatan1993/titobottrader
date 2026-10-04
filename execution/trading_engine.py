@@ -549,38 +549,42 @@ class RealTimeTradingEngine:
             pos["current_pnl"] = round(pnl, 2)
             pos["current_pnl_percent"] = round(pnl_pct, 2)
 
+            pos["highest_price"] = max(pos.get("highest_price", entry_price), current_price)
+            entry_ts = pos.get("entry_timestamp", 0)
+            elapsed = time.time() - entry_ts if entry_ts > 0 else 999
+
             # TRAILING STOP ADAPTATIVO POR CATEGORÍA:
-            # Protege ganancias progresivamente y traslada beneficios a la Bóveda ante retrocesos
+            # Protege ganancias progresivamente con holgura dinámica para no asfixiar la orden
             if category in ["TRADFI_STOCK", "ETF"]:
-                if pnl_pct >= 0.8:
-                    secured_sl = round(entry_price * 1.005, 2 if entry_price < 1000 else 1)
+                if pnl_pct >= 1.2:
+                    secured_sl = round(pos["highest_price"] * 0.993, 2 if entry_price < 1000 else 1)
                     if pos.get("stop_loss", 0) < secured_sl:
                         pos["stop_loss"] = secured_sl
-                        self.agent._add_thought(f"🔒 Trailing Stop TradFi en {sym}: Asegurando +0.5% ganancia (${secured_sl:,.2f}).", "INFO", sym, "🔒")
-                elif pnl_pct >= 0.4:
+                        self.agent._add_thought(f"🔒 Trailing Stop TradFi en {sym}: Asegurando ganancia en ${secured_sl:,.2f}.", "INFO", sym, "🔒")
+                elif pnl_pct >= 0.6:
                     secured_sl = round(entry_price * 1.002, 2 if entry_price < 1000 else 1)
                     if pos.get("stop_loss", 0) < secured_sl:
                         pos["stop_loss"] = secured_sl
                         self.agent._add_thought(f"🔒 Trailing Stop TradFi en {sym}: Asegurando +0.2% ganancia (${secured_sl:,.2f}).", "INFO", sym, "🔒")
-                elif pnl_pct >= 0.10:
+                elif pnl_pct >= 0.25 and elapsed >= 20.0:
                     secured_sl = round(entry_price * 1.0005, 2 if entry_price < 1000 else 1)
                     if pos.get("stop_loss", 0) < secured_sl:
                         pos["stop_loss"] = secured_sl
                         self.agent._add_thought(f"🛡️ Break-Even TradFi en {sym}: Escudo en ${secured_sl:,.2f} para eliminar riesgo (Cero Pérdidas).", "INFO", sym, "🛡️")
             else:
-                # Cripto: Mayor rango dinámico de volatilidad
-                if pnl_pct >= 1.5:
-                    secured_sl = round(entry_price * 1.010, 2 if entry_price < 1000 else 1)
+                # Cripto: Mayor rango dinámico de volatilidad (evita cierre prematuro en los primeros segundos)
+                if pnl_pct >= 2.0:
+                    secured_sl = round(pos["highest_price"] * 0.988, 2 if entry_price < 1000 else 1)
                     if pos.get("stop_loss", 0) < secured_sl:
                         pos["stop_loss"] = secured_sl
-                        self.agent._add_thought(f"🔒 Trailing Stop Cripto en {sym}: Asegurando +1.0% ganancia (${secured_sl:,.2f}).", "INFO", sym, "🔒")
-                elif pnl_pct >= 0.7:
-                    secured_sl = round(entry_price * 1.004, 2 if entry_price < 1000 else 1)
+                        self.agent._add_thought(f"🔒 Trailing Stop Cripto en {sym}: Asegurando ganancia en ${secured_sl:,.2f}.", "INFO", sym, "🔒")
+                elif pnl_pct >= 1.2:
+                    secured_sl = round(entry_price * 1.005, 2 if entry_price < 1000 else 1)
                     if pos.get("stop_loss", 0) < secured_sl:
                         pos["stop_loss"] = secured_sl
-                        self.agent._add_thought(f"🔒 Trailing Stop Cripto en {sym}: Asegurando +0.4% ganancia (${secured_sl:,.2f}).", "INFO", sym, "🔒")
-                elif pnl_pct >= 0.18:
-                    secured_sl = round(entry_price * 1.0008, 2 if entry_price < 1000 else 1)
+                        self.agent._add_thought(f"🔒 Trailing Stop Cripto en {sym}: Asegurando +0.5% ganancia (${secured_sl:,.2f}).", "INFO", sym, "🔒")
+                elif pnl_pct >= 0.70 and elapsed >= 25.0:
+                    secured_sl = round(entry_price * 1.001, 2 if entry_price < 1000 else 1)
                     if pos.get("stop_loss", 0) < secured_sl:
                         pos["stop_loss"] = secured_sl
                         self.agent._add_thought(f"🛡️ Break-Even Cripto en {sym}: Escudo en ${secured_sl:,.2f} protegiendo inversión (Cero Pérdidas).", "INFO", sym, "🛡️")
@@ -666,16 +670,19 @@ class RealTimeTradingEngine:
                 continue
             decision_data = self.agent.evaluate_asset(asset, self.open_positions)
             
-            # Protección de Tiempo Mínimo de Retención (Minimum Hold Time de 60 segundos)
+            # Protección de Tiempo Mínimo de Maduración (35 segundos para consolidación)
             entry_ts = pos.get("entry_timestamp", 0)
             elapsed = time.time() - entry_ts if entry_ts > 0 else 999
-            is_hard_sl = asset["price"] <= pos.get("stop_loss", 0)
+            
+            # Durante los primeros 30s se evalúa el SL inicial para no ser asfixiado por micro-ruido de segundos
+            active_sl = pos.get("initial_stop_loss", pos.get("stop_loss", 0)) if elapsed < 30.0 else pos.get("stop_loss", 0)
+            is_hard_sl = asset["price"] <= active_sl
             is_hard_tp = asset["price"] >= pos.get("take_profit", 999999)
             
-            if elapsed < 60.0 and not is_hard_sl and not is_hard_tp:
+            if elapsed < 35.0 and not is_hard_sl and not is_hard_tp:
                 continue
 
-            if decision_data["decision"] in ["SELL", "SELL_STOP_LOSS", "SELL_TAKE_PROFIT"] or "SELL" in decision_data.get("action_type", ""):
+            if is_hard_sl or is_hard_tp or decision_data["decision"] in ["SELL", "SELL_STOP_LOSS", "SELL_TAKE_PROFIT"] or "SELL" in decision_data.get("action_type", ""):
                 self._execute_sell(sym, asset, decision_data)
 
         # B. OPERACIÓN CONCURRENTE MULTIBROKER (TODOS LOS BROKERS OPERAN AL MISMO TIEMPO):
@@ -785,6 +792,8 @@ class RealTimeTradingEngine:
             "invested_amount": actual_investment,
             "current_value": actual_investment,
             "stop_loss": stop_loss,
+            "initial_stop_loss": stop_loss,
+            "highest_price": price,
             "take_profit": take_profit,
             "entry_time": datetime.datetime.now().strftime("%H:%M:%S"),
             "entry_timestamp": time.time(),
