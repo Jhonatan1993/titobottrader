@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-VPS_IP="179.236.240.245"
+VPS_IP="179.198.222.207"
 
 echo "=========================================================="
 echo "🚀 SUBIENDO Y DESPLEGANDO TITOBOTTRADER EN HOSTINGER VPS"
