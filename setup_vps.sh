@@ -14,8 +14,10 @@ apt-get install -y python3 python3-pip python3-venv ufw curl git rsync
 # 2. Configurar Firewall seguro
 echo "🛡️ [2/6] Configurando Firewall UFW..."
 ufw allow 22/tcp comment 'SSH'
-ufw allow 5055/tcp comment 'TitoBotTrader Dashboard'
+ufw allow 5050/tcp comment 'TitoBotTrader Dashboard 5050'
+ufw allow 5055/tcp comment 'TitoBotTrader Dashboard 5055'
 ufw --force enable
+
 
 # 3. Descargar o actualizar desde GitHub
 echo "📥 [3/7] Obteniendo el código desde GitHub..."
