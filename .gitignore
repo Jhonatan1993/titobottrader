@@ -1,0 +1,44 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environment variables & secrets
+.env
+.env.*
+*.env
+data/.session_secret
+data/broker_config.json
+*.pem
+*.key
+*.cert
+*.crt
+
+# Databases & local persistent storage
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/users.db
+historico_transacciones_*.json
+
+# Logs & security audit trails
+*.log
+data/security_audit.log
+logs/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Graphify & local agent artifacts
+.graphify/
+.agents/
+.pytest_cache/
+venv/
+*.pyc
+

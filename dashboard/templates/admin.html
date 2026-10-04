@@ -1,0 +1,1425 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Administración · TitoBotTrader</title>
+    <link rel="icon" type="image/png" href="/static/img/favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #070B14;
+            --bg-surface: #0D1424;
+            --bg-card: rgba(17, 26, 46, 0.7);
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-focus: rgba(56, 189, 248, 0.4);
+            --text-primary: #F8FAFC;
+            --text-secondary: #94A3B8;
+            --text-muted: #64748B;
+            --cyber-cyan: #38BDF8;
+            --cyber-cyan-bright: #00F0FF;
+            --cyber-cyan-glow: rgba(56, 189, 248, 0.2);
+            --binance-gold: #F0B90B;
+            --emerald-win: #10B981;
+            --emerald-glow: rgba(16, 185, 129, 0.2);
+            --rose-loss: #F43F5E;
+            --rose-glow: rgba(244, 63, 94, 0.2);
+            --amber-warn: #F59E0B;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Top Navigation Bar */
+        .admin-nav {
+            background: rgba(13, 20, 36, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 14px 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-badge {
+            background: rgba(56, 189, 248, 0.12);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            color: var(--cyber-cyan);
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 6px;
+            letter-spacing: 0.05em;
+        }
+
+        .brand-title {
+            font-size: 16px;
+            font-weight: 800;
+            letter-spacing: -0.01em;
+            color: #FFFFFF;
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn-nav {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+        }
+
+        .btn-nav-terminal {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--border-subtle);
+            color: var(--text-primary);
+        }
+        .btn-nav-terminal:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--cyber-cyan);
+            color: var(--cyber-cyan);
+        }
+
+        .btn-nav-logout {
+            background: rgba(244, 63, 94, 0.1);
+            border-color: rgba(244, 63, 94, 0.25);
+            color: #FDA4AF;
+        }
+        .btn-nav-logout:hover {
+            background: rgba(244, 63, 94, 0.2);
+            border-color: var(--rose-loss);
+            color: #FFFFFF;
+        }
+
+        /* Container */
+        .admin-container {
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 28px 24px;
+            flex: 1;
+        }
+
+        .page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .page-title {
+            font-size: 24px;
+            font-weight: 800;
+            color: #FFFFFF;
+            letter-spacing: -0.02em;
+        }
+
+        .page-subtitle {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .btn-primary-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(135deg, #0284C7 0%, #0369A1 100%);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            border-radius: 10px;
+            color: #FFFFFF;
+            padding: 10px 20px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(2, 132, 199, 0.35);
+            transition: all 0.2s ease;
+        }
+        .btn-primary-action:hover {
+            background: linear-gradient(135deg, #0369A1 0%, #075985 100%);
+            border-color: var(--cyber-cyan);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(56, 189, 248, 0.45);
+        }
+
+        /* Bento Grid Metrics */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .metric-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 14px;
+            padding: 18px 20px;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+        .metric-card:hover {
+            border-color: var(--border-focus);
+            transform: translateY(-2px);
+        }
+
+        .metric-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .metric-title {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        .metric-icon {
+            font-size: 20px;
+        }
+
+        .metric-value {
+            font-size: 28px;
+            font-weight: 800;
+            color: #FFFFFF;
+        }
+
+        .metric-badge {
+            font-size: 11px;
+            font-weight: 600;
+            margin-top: 6px;
+            display: inline-block;
+        }
+
+        /* Search & Filters Bar */
+        .filter-bar {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 14px;
+            padding: 14px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(3, 7, 18, 0.6);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 8px 14px;
+            flex: 1;
+            min-width: 260px;
+        }
+
+        .search-box input {
+            background: transparent;
+            border: none;
+            color: #FFFFFF;
+            font-size: 13px;
+            outline: none;
+            width: 100%;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .filter-pill {
+            padding: 6px 12px;
+            border-radius: 7px;
+            font-size: 12px;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .filter-pill:hover {
+            color: #FFFFFF;
+            background: rgba(255, 255, 255, 0.08);
+        }
+        .filter-pill.active {
+            background: rgba(56, 189, 248, 0.15);
+            border-color: rgba(56, 189, 248, 0.35);
+            color: var(--cyber-cyan);
+        }
+
+        /* Table Card */
+        .table-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        }
+
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th {
+            background: rgba(255, 255, 255, 0.02);
+            padding: 14px 18px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        td {
+            padding: 16px 18px;
+            font-size: 13px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            vertical-align: middle;
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        /* User Cell Meta */
+        .user-meta-cell {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(2, 132, 199, 0.4));
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 13px;
+            color: var(--cyber-cyan);
+            flex-shrink: 0;
+        }
+
+        .user-info {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.3;
+        }
+
+        .user-full-name {
+            font-weight: 700;
+            color: #FFFFFF;
+        }
+
+        .user-username {
+            font-size: 11.5px;
+            color: var(--text-muted);
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+
+        .badge-active {
+            background: rgba(16, 185, 129, 0.12);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #34D399;
+        }
+
+        .badge-restricted {
+            background: rgba(244, 63, 94, 0.14);
+            border: 1px solid rgba(244, 63, 94, 0.35);
+            color: #FB7185;
+            box-shadow: 0 0 10px rgba(244, 63, 94, 0.15);
+        }
+
+        .badge-suspended {
+            background: rgba(245, 158, 11, 0.14);
+            border: 1px solid rgba(245, 158, 11, 0.35);
+            color: #FBBF24;
+        }
+
+        .badge-admin {
+            background: rgba(240, 185, 11, 0.12);
+            border: 1px solid rgba(240, 185, 11, 0.3);
+            color: var(--binance-gold);
+        }
+
+        .badge-user {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
+        }
+
+        .badge-plan {
+            background: rgba(56, 189, 248, 0.08);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            color: var(--cyber-cyan);
+            font-weight: 600;
+        }
+
+        /* Table Action Buttons */
+        .action-btns-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-act {
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .btn-act-restrict {
+            background: rgba(244, 63, 94, 0.12);
+            border-color: rgba(244, 63, 94, 0.3);
+            color: #FDA4AF;
+        }
+        .btn-act-restrict:hover {
+            background: rgba(244, 63, 94, 0.25);
+            border-color: var(--rose-loss);
+            color: #FFFFFF;
+        }
+
+        .btn-act-activate {
+            background: rgba(16, 185, 129, 0.12);
+            border-color: rgba(16, 185, 129, 0.3);
+            color: #6EE7B7;
+        }
+        .btn-act-activate:hover {
+            background: rgba(16, 185, 129, 0.25);
+            border-color: var(--emerald-win);
+            color: #FFFFFF;
+        }
+
+        .btn-act-edit {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--border-subtle);
+            color: var(--text-secondary);
+        }
+        .btn-act-edit:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #FFFFFF;
+            border-color: var(--border-focus);
+        }
+
+        .btn-act-pwd {
+            background: rgba(240, 185, 11, 0.08);
+            border-color: rgba(240, 185, 11, 0.2);
+            color: var(--binance-gold);
+        }
+        .btn-act-pwd:hover {
+            background: rgba(240, 185, 11, 0.18);
+            color: #FFFFFF;
+        }
+
+        .btn-act-delete {
+            background: transparent;
+            border-color: transparent;
+            color: var(--text-muted);
+        }
+        .btn-act-delete:hover {
+            background: rgba(244, 63, 94, 0.15);
+            color: var(--rose-loss);
+        }
+
+        /* Modal Windows */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(3, 7, 18, 0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            padding: 20px;
+        }
+        .modal-overlay.active {
+            display: flex;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .modal-box {
+            background: #0E1626;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 18px;
+            width: 100%;
+            max-width: 540px;
+            padding: 28px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+            position: relative;
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 22px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 800;
+            color: #FFFFFF;
+        }
+
+        .btn-close-modal {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 20px;
+            cursor: pointer;
+            padding: 4px;
+            transition: color 0.15s;
+        }
+        .btn-close-modal:hover {
+            color: #FFFFFF;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .form-group-full {
+            grid-column: 1 / -1;
+        }
+
+        .modal-label {
+            display: block;
+            font-size: 11.5px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .modal-input, .modal-select {
+            width: 100%;
+            background: rgba(3, 7, 18, 0.6);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: #FFFFFF;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .modal-input:focus, .modal-select:focus {
+            border-color: var(--cyber-cyan);
+            box-shadow: 0 0 12px var(--cyber-cyan-glow);
+        }
+
+        .modal-footer {
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border-subtle);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .btn-modal-cancel {
+            padding: 10px 18px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-modal-cancel:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #FFFFFF;
+        }
+
+        .btn-modal-submit {
+            padding: 10px 20px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #0284C7 0%, #0369A1 100%);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            color: #FFFFFF;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+        }
+        .btn-modal-submit:hover {
+            border-color: var(--cyber-cyan);
+            box-shadow: 0 6px 18px rgba(56, 189, 248, 0.45);
+        }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast-msg {
+            background: #0E1626;
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 14px 18px;
+            font-size: 13px;
+            color: #FFFFFF;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideInRight 0.3s ease;
+        }
+        .toast-success {
+            border-left: 4px solid var(--emerald-win);
+        }
+        .toast-error {
+            border-left: 4px solid var(--rose-loss);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes slideInRight {
+            from { transform: translateX(50px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Top Navigation -->
+    <nav class="admin-nav">
+        <div class="nav-brand">
+            <img src="/static/img/titobot_logo.png" alt="TitoBotTrader" style="width:38px; height:38px; border-radius:50%; object-fit:cover; border:2px solid var(--cyber-cyan); box-shadow:0 0 10px rgba(56, 189, 248, 0.4);">
+            <span class="brand-badge">🛡️ ADMIN PORTAL</span>
+            <span class="brand-title">TitoBot<span style="color:var(--cyber-cyan);">Trader</span> · Panel de Control</span>
+        </div>
+        <div class="nav-actions">
+            <a href="/" class="btn-nav btn-nav-terminal" title="Volver al panel operativo de trading">
+                <span>←</span>
+                <span>Terminal de Trading</span>
+            </a>
+            <div style="font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:6px;">
+                <span>👤</span>
+                <span class="mono" style="color:var(--text-secondary);">admin</span>
+            </div>
+            <a href="/logout" class="btn-nav btn-nav-logout" title="Cerrar sesión">
+                <span>🚪</span>
+                <span>Salir</span>
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <main class="admin-container">
+        <!-- Header -->
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Gestión de Usuarios & Accesos</h1>
+                <p class="page-subtitle">Crea cuentas, modifica datos y restringe el acceso inmediato a usuarios por falta de pago.</p>
+            </div>
+            <button class="btn-primary-action" onclick="openCreateUserModal()">
+                <span>➕</span>
+                <span>Crear Nuevo Usuario</span>
+            </button>
+        </div>
+
+        <!-- Metrics Grid -->
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-title">Total Registrados</span>
+                    <span class="metric-icon">👥</span>
+                </div>
+                <div class="metric-value mono" id="metric-total">0</div>
+                <span class="metric-badge" style="color:var(--cyber-cyan);">Base de usuarios completa</span>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-title">Cuentas Activas</span>
+                    <span class="metric-icon">🟢</span>
+                </div>
+                <div class="metric-value mono" id="metric-active" style="color:var(--emerald-win);">0</div>
+                <span class="metric-badge" style="color:var(--emerald-win);">Acceso habilitado al bot</span>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-title">Restringidos (No Paga)</span>
+                    <span class="metric-icon">🔒</span>
+                </div>
+                <div class="metric-value mono" id="metric-restricted" style="color:var(--rose-loss);">0</div>
+                <span class="metric-badge" style="color:var(--rose-loss);">Acceso bloqueado por mora</span>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-title">Administradores</span>
+                    <span class="metric-icon">👑</span>
+                </div>
+                <div class="metric-value mono" id="metric-admins" style="color:var(--binance-gold);">0</div>
+                <span class="metric-badge" style="color:var(--binance-gold);">Control total del sistema</span>
+            </div>
+        </div>
+
+        <!-- Search & Filter Bar -->
+        <div class="filter-bar">
+            <div class="search-box">
+                <span>🔍</span>
+                <input type="text" id="search-input" placeholder="Buscar por nombre, usuario o email..." oninput="handleSearch()">
+            </div>
+
+            <div class="filter-group">
+                <button class="filter-pill active" data-status="all" onclick="setStatusFilter('all', this)">Todos</button>
+                <button class="filter-pill" data-status="active" onclick="setStatusFilter('active', this)">🟢 Activos</button>
+                <button class="filter-pill" data-status="restricted" onclick="setStatusFilter('restricted', this)">🔴 Restringidos (Mora)</button>
+                <button class="filter-pill" data-status="suspended" onclick="setStatusFilter('suspended', this)">🟡 Suspendidos</button>
+            </div>
+        </div>
+
+        <!-- Users Table -->
+        <div class="table-card">
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Usuario / Nombre</th>
+                            <th>Contacto</th>
+                            <th>Rol</th>
+                            <th>Plan / Membresía</th>
+                            <th>Vencimiento</th>
+                            <th>Estado de Acceso</th>
+                            <th>Último Ingreso</th>
+                            <th style="text-align: right;">Acciones de Control</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-tbody">
+                        <tr>
+                            <td colspan="8" style="text-align:center; padding: 40px; color: var(--text-muted);">
+                                Cargando usuarios...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal: Crear Nuevo Usuario -->
+    <div class="modal-overlay" id="modal-create-user">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3 class="modal-title">➕ Registrar Nuevo Usuario</h3>
+                <button class="btn-close-modal" onclick="closeModal('modal-create-user')">&times;</button>
+            </div>
+            <form onsubmit="submitCreateUser(event)">
+                <div class="form-grid">
+                    <div>
+                        <label class="modal-label">Nombre Completo *</label>
+                        <input type="text" id="create-fullname" class="modal-input" placeholder="Ej: Carlos Mendoza" required>
+                    </div>
+                    <div>
+                        <label class="modal-label">Nombre de Usuario *</label>
+                        <input type="text" id="create-username" class="modal-input" placeholder="Ej: cmendoza" required>
+                    </div>
+
+                    <div>
+                        <label class="modal-label">Correo Electrónico</label>
+                        <input type="email" id="create-email" class="modal-input" placeholder="carlos@gmail.com">
+                    </div>
+                    <div>
+                        <label class="modal-label">Contraseña Inicial *</label>
+                        <input type="password" id="create-password" class="modal-input" placeholder="Mínimo 4 caracteres" required>
+                    </div>
+
+                    <div>
+                        <label class="modal-label">Rol del Usuario</label>
+                        <select id="create-role" class="modal-select">
+                            <option value="user" selected>👤 Usuario Estándar (Trading)</option>
+                            <option value="admin">👑 Administrador (Control Total)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="modal-label">Estado Inicial</label>
+                        <select id="create-status" class="modal-select">
+                            <option value="active" selected>🟢 ACTIVO (Acceso Total)</option>
+                            <option value="restricted">🔴 RESTRINGIDO (No Paga)</option>
+                            <option value="suspended">🟡 SUSPENDIDO</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="modal-label">Plan / Membresía</label>
+                        <select id="create-plan" class="modal-select">
+                            <option value="Mensual VIP" selected>Mensual VIP</option>
+                            <option value="Trimestral Pro">Trimestral Pro</option>
+                            <option value="Semestral Elite">Semestral Elite</option>
+                            <option value="Anual Institucional">Anual Institucional</option>
+                            <option value="Vitalicio / Owner">Vitalicio / Owner</option>
+                            <option value="Prueba 7 Días">Prueba 7 Días</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="modal-label">Fecha de Vencimiento</label>
+                        <input type="date" id="create-expires" class="modal-input">
+                    </div>
+
+                    <div class="form-group-full">
+                        <label class="modal-label">Notas Administrativas</label>
+                        <textarea id="create-notes" class="modal-input" style="height:65px; resize:none;" placeholder="Observaciones de pago, WhatsApp, método de pago, etc."></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn-modal-cancel" onclick="closeModal('modal-create-user')">Cancelar</button>
+                    <button type="submit" class="btn-modal-submit">Crear Usuario</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Editar Usuario -->
+    <div class="modal-overlay" id="modal-edit-user">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3 class="modal-title">✏️ Modificar Datos de Usuario</h3>
+                <button class="btn-close-modal" onclick="closeModal('modal-edit-user')">&times;</button>
+            </div>
+            <form onsubmit="submitEditUser(event)">
+                <input type="hidden" id="edit-userid">
+                <div class="form-grid">
+                    <div>
+                        <label class="modal-label">Nombre Completo *</label>
+                        <input type="text" id="edit-fullname" class="modal-input" required>
+                    </div>
+                    <div>
+                        <label class="modal-label">Usuario (No modificable)</label>
+                        <input type="text" id="edit-username" class="modal-input" disabled style="opacity:0.6;">
+                    </div>
+
+                    <div>
+                        <label class="modal-label">Correo Electrónico</label>
+                        <input type="email" id="edit-email" class="modal-input">
+                    </div>
+                    <div>
+                        <label class="modal-label">Rol del Usuario</label>
+                        <select id="edit-role" class="modal-select">
+                            <option value="user">👤 Usuario Estándar</option>
+                            <option value="admin">👑 Administrador</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="modal-label">Estado de Cuenta</label>
+                        <select id="edit-status" class="modal-select">
+                            <option value="active">🟢 ACTIVO (Al Día)</option>
+                            <option value="restricted">🔴 RESTRINGIDO (No Paga)</option>
+                            <option value="suspended">🟡 SUSPENDIDO</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="modal-label">Plan / Membresía</label>
+                        <select id="edit-plan" class="modal-select">
+                            <option value="Mensual VIP">Mensual VIP</option>
+                            <option value="Trimestral Pro">Trimestral Pro</option>
+                            <option value="Semestral Elite">Semestral Elite</option>
+                            <option value="Anual Institucional">Anual Institucional</option>
+                            <option value="Vitalicio / Owner">Vitalicio / Owner</option>
+                            <option value="Prueba 7 Días">Prueba 7 Días</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group-full">
+                        <label class="modal-label">Fecha de Vencimiento de Acceso</label>
+                        <input type="date" id="edit-expires" class="modal-input">
+                    </div>
+
+                    <div class="form-group-full">
+                        <label class="modal-label">Restablecer Contraseña (Opcional)</label>
+                        <input type="text" id="edit-password" class="modal-input mono" placeholder="Dejar en blanco para mantener la contraseña actual">
+                        <span style="font-size:11px; color:var(--text-muted); margin-top:3px; display:block;">Si escribes una clave aquí, se actualizará al guardar los cambios.</span>
+                    </div>
+
+                    <div class="form-group-full">
+                        <label class="modal-label">Notas Administrativas</label>
+                        <textarea id="edit-notes" class="modal-input" style="height:65px; resize:none;"></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn-modal-cancel" onclick="closeModal('modal-edit-user')">Cancelar</button>
+                    <button type="submit" class="btn-modal-submit">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Restablecer Contraseña -->
+    <div class="modal-overlay" id="modal-change-password">
+        <div class="modal-box" style="max-width: 480px;">
+            <div class="modal-header">
+                <h3 class="modal-title">🔑 Restablecer Contraseña de Usuario</h3>
+                <button class="btn-close-modal" onclick="closeModal('modal-change-password')">&times;</button>
+            </div>
+            <form onsubmit="submitChangePassword(event)">
+                <input type="hidden" id="pwd-userid">
+                <div style="margin-bottom:16px;">
+                    <div style="font-size:13px; color:var(--text-secondary); margin-bottom:14px; background:rgba(255,255,255,0.03); padding:10px 14px; border-radius:8px; border:1px solid var(--border-subtle);">
+                        Restableciendo clave para: <strong id="pwd-username-display" style="color:var(--cyber-cyan-bright); font-family:'JetBrains Mono',monospace;"></strong>
+                    </div>
+
+                    <label class="modal-label">Nueva Contraseña de Acceso *</label>
+                    <div style="position:relative; display:flex; align-items:center;">
+                        <input type="text" id="new-password" class="modal-input mono" placeholder="Ingresa o genera una contraseña..." required style="padding-right:90px; letter-spacing:0.04em;">
+                        <button type="button" onclick="copyPasswordToClipboard()" style="position:absolute; right:10px; background:rgba(56,189,248,0.15); border:1px solid rgba(56,189,248,0.3); color:var(--cyber-cyan); border-radius:6px; font-size:11px; font-weight:700; padding:5px 8px; cursor:pointer;" title="Copiar al portapapeles para enviar al cliente">
+                            📋 Copiar
+                        </button>
+                    </div>
+
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+                        <button type="button" onclick="generateRandomPassword()" style="background:transparent; border:none; color:var(--binance-gold); font-size:12px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:5px; padding:0;">
+                            <span>🎲</span> <span>Generar clave aleatoria segura</span>
+                        </button>
+                        <span style="font-size:11px; color:var(--text-muted);">Mínimo 4 caracteres</span>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn-modal-cancel" onclick="closeModal('modal-change-password')">Cancelar</button>
+                    <button type="submit" class="btn-modal-submit">Guardar y Asignar Clave</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script>
+        let currentStatusFilter = 'all';
+        let searchQuery = '';
+        let usersData = [];
+
+        // Inicializar fecha por defecto (+30 días)
+        window.addEventListener('DOMContentLoaded', () => {
+            const nextMonth = new Date();
+            nextMonth.setDate(nextMonth.getDate() + 30);
+            const defaultDate = nextMonth.toISOString().split('T')[0];
+            const expiresInput = document.getElementById('create-expires');
+            if (expiresInput) expiresInput.value = defaultDate;
+
+            loadUsers();
+        });
+
+        async function loadUsers() {
+            try {
+                let url = `/api/admin/users?status=${currentStatusFilter}`;
+                if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`;
+                
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                if (data.success) {
+                    usersData = data.users || [];
+                    renderUsersTable(usersData);
+                    updateMetrics(data.metrics || {});
+                } else {
+                    showToast('Error cargando usuarios: ' + data.error, 'error');
+                }
+            } catch (err) {
+                console.error("Error al cargar usuarios:", err);
+                showToast("Error de conexión al obtener usuarios", "error");
+            }
+        }
+
+        function updateMetrics(metrics) {
+            document.getElementById('metric-total').innerText = metrics.total_users || 0;
+            document.getElementById('metric-active').innerText = metrics.active_users || 0;
+            document.getElementById('metric-restricted').innerText = metrics.restricted_users || 0;
+            document.getElementById('metric-admins').innerText = metrics.admin_users || 0;
+        }
+
+        function renderUsersTable(users) {
+            const tbody = document.getElementById('users-tbody');
+            if (!users || users.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" style="text-align:center; padding: 40px; color: var(--text-muted);">
+                            No se encontraron usuarios con los filtros seleccionados.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            let html = '';
+            users.forEach(u => {
+                const initials = (u.full_name || u.username).substring(0, 2).toUpperCase();
+                const isRestricted = u.status === 'restricted';
+                const isActive = u.status === 'active';
+                const isSuspended = u.status === 'suspended';
+                const isAdmin = u.role === 'admin';
+
+                let statusBadge = '';
+                if (isActive) {
+                    statusBadge = `<span class="badge badge-active">🟢 ACTIVO (AL DÍA)</span>`;
+                } else if (isRestricted) {
+                    statusBadge = `<span class="badge badge-restricted">🔴 RESTRINGIDO (NO PAGA)</span>`;
+                } else {
+                    statusBadge = `<span class="badge badge-suspended">🟡 SUSPENDIDO</span>`;
+                }
+
+                const roleBadge = isAdmin
+                    ? `<span class="badge badge-admin">👑 ADMIN</span>`
+                    : `<span class="badge badge-user">👤 USUARIO</span>`;
+
+                // Botón rápido de restricción / activación con 1 clic
+                let toggleStatusBtn = '';
+                if (isActive) {
+                    toggleStatusBtn = `
+                        <button class="btn-act btn-act-restrict" onclick="quickToggleStatus(${u.id}, 'restricted')" title="Restringir cuenta inmediatamente por falta de pago">
+                            <span>🔒</span> <span>Restringir (No paga)</span>
+                        </button>
+                    `;
+                } else {
+                    toggleStatusBtn = `
+                        <button class="btn-act btn-act-activate" onclick="quickToggleStatus(${u.id}, 'active')" title="Reactivar cuenta (Pago confirmado)">
+                            <span>✅</span> <span>Reactivar (Pagó)</span>
+                        </button>
+                    `;
+                }
+
+                html += `
+                    <tr>
+                        <td>
+                            <div class="user-meta-cell">
+                                <div class="user-avatar">${initials}</div>
+                                <div class="user-info">
+                                    <span class="user-full-name">${escapeHtml(u.full_name)}</span>
+                                    <span class="user-username mono">@${escapeHtml(u.username)}</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <span style="color:var(--text-secondary); font-size:12px;">${u.email ? escapeHtml(u.email) : '<span style="color:var(--text-muted);">-</span>'}</span>
+                        </td>
+                        <td>${roleBadge}</td>
+                        <td>
+                            <span class="badge badge-plan">${escapeHtml(u.plan || 'Mensual VIP')}</span>
+                        </td>
+                        <td>
+                            <span class="mono" style="font-size:12px; color: ${isExpired(u.expires_at) ? 'var(--rose-loss)' : 'var(--text-secondary)'};">
+                                ${u.expires_at || 'Vitalicio'}
+                            </span>
+                        </td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            <span class="mono" style="font-size:11.5px; color:var(--text-muted);">${u.last_login ? u.last_login.split(' ')[0] : 'Nunca'}</span>
+                        </td>
+                        <td style="text-align: right;">
+                            <div class="action-btns-group" style="justify-content: flex-end;">
+                                ${toggleStatusBtn}
+                                <button class="btn-act btn-act-pwd" onclick="openChangePasswordModal(${u.id}, '${escapeHtml(u.username)}')" title="Restablecer o cambiar la contraseña del usuario">
+                                    <span>🔑</span> <span>Restablecer Clave</span>
+                                </button>
+                                <button class="btn-act btn-act-edit" onclick="openEditUserModal(${u.id})" title="Modificar datos del usuario">
+                                    <span>✏️</span> <span>Editar</span>
+                                </button>
+                                <button class="btn-act btn-act-delete" onclick="confirmDeleteUser(${u.id}, '${escapeHtml(u.username)}')" title="Eliminar usuario">
+                                    <span>🗑️</span>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+        }
+
+        function isExpired(expiresStr) {
+            if (!expiresStr) return false;
+            try {
+                const expDate = new Date(expiresStr);
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                return expDate < today;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function setStatusFilter(status, btn) {
+            currentStatusFilter = status;
+            document.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            loadUsers();
+        }
+
+        let searchTimeout = null;
+        function handleSearch() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                searchQuery = document.getElementById('search-input').value.trim();
+                loadUsers();
+            }, 300);
+        }
+
+        // Modales
+        function openCreateUserModal() {
+            document.getElementById('modal-create-user').classList.add('active');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+
+        async function submitCreateUser(e) {
+            e.preventDefault();
+            const fullName = document.getElementById('create-fullname').value.trim();
+            const username = document.getElementById('create-username').value.trim();
+            const email = document.getElementById('create-email').value.trim();
+            const password = document.getElementById('create-password').value;
+            const role = document.getElementById('create-role').value;
+            const status = document.getElementById('create-status').value;
+            const plan = document.getElementById('create-plan').value;
+            const expires = document.getElementById('create-expires').value;
+            const notes = document.getElementById('create-notes').value.trim();
+
+            try {
+                const res = await fetch('/api/admin/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        full_name: fullName,
+                        username: username,
+                        email: email,
+                        password: password,
+                        role: role,
+                        status: status,
+                        plan: plan,
+                        expires_at: expires,
+                        notes: notes
+                    })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`✅ Usuario '${username}' creado exitosamente`, 'success');
+                    closeModal('modal-create-user');
+                    // Limpiar campos
+                    document.getElementById('create-fullname').value = '';
+                    document.getElementById('create-username').value = '';
+                    document.getElementById('create-email').value = '';
+                    document.getElementById('create-password').value = '';
+                    document.getElementById('create-notes').value = '';
+                    loadUsers();
+                } else {
+                    showToast('❌ ' + data.error, 'error');
+                }
+            } catch (err) {
+                showToast('Error al crear usuario', 'error');
+            }
+        }
+
+        function openEditUserModal(userId) {
+            const user = usersData.find(u => u.id === userId);
+            if (!user) return;
+
+            document.getElementById('edit-userid').value = user.id;
+            document.getElementById('edit-fullname').value = user.full_name || '';
+            document.getElementById('edit-username').value = user.username || '';
+            document.getElementById('edit-email').value = user.email || '';
+            document.getElementById('edit-role').value = user.role || 'user';
+            document.getElementById('edit-status').value = user.status || 'active';
+            document.getElementById('edit-plan').value = user.plan || 'Mensual VIP';
+            document.getElementById('edit-expires').value = user.expires_at || '';
+            document.getElementById('edit-notes').value = user.notes || '';
+            const editPwdEl = document.getElementById('edit-password');
+            if (editPwdEl) editPwdEl.value = '';
+
+            document.getElementById('modal-edit-user').classList.add('active');
+        }
+
+        async function submitEditUser(e) {
+            e.preventDefault();
+            const userId = document.getElementById('edit-userid').value;
+            const fullName = document.getElementById('edit-fullname').value.trim();
+            const email = document.getElementById('edit-email').value.trim();
+            const role = document.getElementById('edit-role').value;
+            const status = document.getElementById('edit-status').value;
+            const plan = document.getElementById('edit-plan').value;
+            const expires = document.getElementById('edit-expires').value;
+            const notes = document.getElementById('edit-notes').value.trim();
+            const newPassword = document.getElementById('edit-password') ? document.getElementById('edit-password').value.trim() : '';
+
+            try {
+                const res = await fetch(`/api/admin/users/${userId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        full_name: fullName,
+                        email: email,
+                        role: role,
+                        status: status,
+                        plan: plan,
+                        expires_at: expires,
+                        notes: notes
+                    })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    // Si se indicó nueva contraseña en el formulario de edición, actualizarla
+                    if (newPassword) {
+                        await fetch(`/api/admin/users/${userId}/password`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ password: newPassword })
+                        });
+                        showToast('✅ Datos y nueva contraseña actualizados con éxito', 'success');
+                    } else {
+                        showToast('✅ Datos del usuario actualizados', 'success');
+                    }
+                    closeModal('modal-edit-user');
+                    loadUsers();
+                } else {
+                    showToast('❌ ' + data.error, 'error');
+                }
+            } catch (err) {
+                showToast('Error al actualizar usuario', 'error');
+            }
+        }
+
+        async function quickToggleStatus(userId, newStatus) {
+            const statusName = newStatus === 'restricted' ? 'RESTRINGIR por falta de pago' : 'REACTIVAR cuenta';
+            if (!confirm(`¿Estás seguro de que deseas ${statusName} para este usuario?`)) return;
+
+            try {
+                const res = await fetch(`/api/admin/users/${userId}/status`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    const msg = newStatus === 'restricted'
+                        ? '🔒 Cuenta restringida: El usuario no podrá operar ni ingresar.'
+                        : '✅ Cuenta reactivada: El usuario ya tiene acceso al bot.';
+                    showToast(msg, 'success');
+                    loadUsers();
+                } else {
+                    showToast('❌ ' + data.error, 'error');
+                }
+            } catch (err) {
+                showToast('Error al cambiar estado', 'error');
+            }
+        }
+
+        function openChangePasswordModal(userId, username) {
+            document.getElementById('pwd-userid').value = userId;
+            document.getElementById('pwd-username-display').innerText = '@' + username;
+            document.getElementById('new-password').value = '';
+            document.getElementById('modal-change-password').classList.add('active');
+        }
+
+        function generateRandomPassword() {
+            const prefixes = ['Quantum', 'Trading', 'Alpha', 'Crypto', 'WallSt', 'Bull', 'Winner', 'Secure'];
+            const randPrefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+            const randNum = Math.floor(1000 + Math.random() * 9000);
+            const special = ['#', '$', '!', '&', '@'][Math.floor(Math.random() * 5)];
+            const generated = `${randPrefix}${special}${randNum}`;
+            const input = document.getElementById('new-password');
+            if (input) {
+                input.value = generated;
+                showToast(`🎲 Clave generada: ${generated}`, 'success');
+            }
+        }
+
+        async function copyPasswordToClipboard() {
+            const input = document.getElementById('new-password');
+            if (!input || !input.value) {
+                showToast('⚠️ Escribe o genera una clave primero', 'error');
+                return;
+            }
+            try {
+                await navigator.clipboard.writeText(input.value);
+                showToast('📋 Contraseña copiada al portapapeles', 'success');
+            } catch (e) {
+                input.select();
+                document.execCommand('copy');
+                showToast('📋 Contraseña copiada al portapapeles', 'success');
+            }
+        }
+
+        async function submitChangePassword(e) {
+            e.preventDefault();
+            const userId = document.getElementById('pwd-userid').value;
+            const newPassword = document.getElementById('new-password').value.trim();
+
+            if (!newPassword || newPassword.length < 4) {
+                showToast('La contraseña debe tener al menos 4 caracteres', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/admin/users/${userId}/password`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: newPassword })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    showToast('🔑 Contraseña actualizada y restablecida con éxito', 'success');
+                    closeModal('modal-change-password');
+                } else {
+                    showToast('❌ ' + data.error, 'error');
+                }
+            } catch (err) {
+                showToast('Error al cambiar contraseña', 'error');
+            }
+        }
+
+        async function confirmDeleteUser(userId, username) {
+            if (!confirm(`⚠️ ATENCIÓN: ¿Estás seguro de eliminar permanentemente al usuario '@${username}'? Esta acción no se puede deshacer.`)) return;
+
+            try {
+                const res = await fetch(`/api/admin/users/${userId}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`🗑️ Usuario '@${username}' eliminado`, 'success');
+                    loadUsers();
+                } else {
+                    showToast('❌ ' + data.error, 'error');
+                }
+            } catch (err) {
+                showToast('Error al eliminar usuario', 'error');
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast-msg toast-${type}`;
+            toast.innerHTML = `<span>${type === 'success' ? '✅' : '⚠️'}</span> <div>${escapeHtml(message)}</div>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(10px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return String(text)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+    </script>
+</body>
+</html>
