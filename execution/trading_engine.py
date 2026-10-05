@@ -272,14 +272,13 @@ class RealTimeTradingEngine:
             spot_eq = float(acc.get("total_spot_equity", 0.0))
             total_real_equity = spot_eq if spot_eq > 0 else round(real_cash + total_crypto_invested, 2)
             if total_real_equity > 0:
+                self.broker_wallets["BINANCE"]["total_spot_equity"] = total_real_equity
                 self.broker_wallets["BINANCE"]["profit_vault"] = 0.0
                 self.broker_config["binance_profit_vault"] = 0.0
-                cur_base = float(self.broker_wallets["BINANCE"].get("initial_balance", 0.0))
-                if cur_base <= 0.0 or abs(cur_base - total_real_equity) > total_real_equity * 0.4:
-                    self.broker_wallets["BINANCE"]["initial_balance"] = total_real_equity
-                    self.broker_config["binance_initial_balance"] = total_real_equity
+                self.broker_wallets["BINANCE"]["initial_balance"] = total_real_equity
+                self.broker_config["binance_initial_balance"] = total_real_equity
                 if self.active_broker == "BINANCE":
-                    self.initial_balance = self.broker_wallets["BINANCE"]["initial_balance"]
+                    self.initial_balance = total_real_equity
 
 
     def set_execution_environment(self, env: str, custom_balance: Optional[float] = None, broker: Optional[str] = None) -> Dict[str, Any]:
@@ -463,6 +462,9 @@ class RealTimeTradingEngine:
         if not wallet:
             return round(self.get_total_equity(), 2)
         if wallet.get("environment") == "LIVE_REAL" and b == "BINANCE":
+            real_spot = float(wallet.get("total_spot_equity", 0.0))
+            if real_spot > 0:
+                return round(real_spot, 2)
             open_pos = self.get_broker_positions(b)
             crypto_val = sum(p.get("current_value", p.get("invested_amount", 0.0)) for p in open_pos)
             cash = wallet.get("cash", 0.0)
@@ -746,18 +748,20 @@ class RealTimeTradingEngine:
                     icon="🎯"
                 )
 
-            # Límite defensivo por broker (Tolerancia Cero y Límite Máximo)
+            # Límite defensivo por broker (Límite Máximo de Pérdida en USD)
             b_max_loss = b_wal.get("max_loss_amount", self.max_loss_amount)
-            b_loss_enabled = b_wal.get("loss_enabled", self.max_loss_enabled)
+            b_loss_enabled = b_wal.get("max_loss_enabled", b_wal.get("loss_enabled", self.max_loss_enabled))
             
             is_b_loss_triggered = False
-            if b_loss_enabled and not b_wal.get("loss_limit_reached", False):
-                if b_max_loss == 0.0 and b_profit < 0.0:
-                    is_b_loss_triggered = True
-                elif b_max_loss > 0.0 and b_profit <= -b_max_loss:
+            # Solo disparar límite de pérdida si está explícitamente habilitado Y se ha configurado un monto mayor a 0
+            if b_loss_enabled and b_max_loss > 0.0 and not b_wal.get("loss_limit_reached", False):
+                if b_profit <= -b_max_loss:
                     is_b_loss_triggered = True
 
             if is_b_loss_triggered:
+                b_wal["loss_limit_reached"] = True
+                if b_id == self.active_broker:
+                    self.loss_limit_reached = True
                 # Cierra exclusivamente las posiciones de este broker para proteger su capital
                 for sym in list(self.open_positions.keys()):
                     pos = self.open_positions[sym]
@@ -765,12 +769,11 @@ class RealTimeTradingEngine:
                     if pos_b == b_id:
                         asset = self.feed.get_asset(sym)
                         if asset:
-                            decision = {"decision": "EMERGENCY_SELL", "reason_simple": f"Escudo Defensivo [{b_wal.get('name', b_id)}]: Tolerancia Cero Activada"}
+                            decision = {"decision": "EMERGENCY_SELL", "reason_simple": f"Escudo Defensivo [{b_wal.get('name', b_id)}]: Límite de Pérdida (-${b_max_loss:,.2f}) alcanzado"}
                             self._execute_sell(sym, asset, decision)
-                b_wal["loss_limit_reached"] = False
                 self.agent._add_thought(
-                    f"🛡️ ESCUDO ACTIVADO [{b_wal.get('icon','💼')} {b_wal.get('name', b_id)}]: Tolerancia a pérdida disparada (${b_profit:,.2f} USD). "
-                    f"Posiciones cerradas para blindar capital base en ${b_wal['initial_balance']:,.2f} USD.",
+                    f"🛡️ ESCUDO ACTIVADO [{b_wal.get('icon','💼')} {b_wal.get('name', b_id)}]: Límite de pérdida alcanzado (${b_profit:,.2f} USD). "
+                    f"Operaciones detenidas para blindar capital base en ${b_wal['initial_balance']:,.2f} USD.",
                     "WARNING",
                     icon="🛡️"
                 )
