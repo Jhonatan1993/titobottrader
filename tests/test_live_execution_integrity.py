@@ -277,5 +277,90 @@ def test_binance_notional_filter_failure_cleans_position(monkeypatch):
     # La posición DEBE haber sido liberada y no reinsertada para reintento
     assert "NEAR" not in engine.open_positions
 
+def test_alpaca_idempotency_and_client_order_id(monkeypatch):
+    """Verifica que cada orden enviada a Alpaca cuente con un client_order_id único (UUID v4) para idempotencia"""
+    from execution.alpaca_adapter import AlpacaAdapter
+    adapter = AlpacaAdapter(api_key="mock", secret_key="mock")
+    adapter.is_configured = True
+
+    sent_payload = {}
+    class MockResponse:
+        status_code = 200
+        def json(self):
+            return {"id": "ord_123", "status": "accepted"}
+
+    def mock_post(url, json, headers, timeout):
+        nonlocal sent_payload
+        sent_payload = json
+        return MockResponse()
+
+    monkeypatch.setattr(adapter, "test_connection", lambda: {"connected": True, "cash": 500.0, "buying_power": 500.0})
+    monkeypatch.setattr("requests.post", mock_post)
+
+    res = adapter.submit_order("AAPL", qty=2.0, side="buy")
+    assert res["success"] is True
+    assert "client_order_id" in res
+    assert res["client_order_id"].startswith("tito_")
+    assert sent_payload.get("client_order_id") == res["client_order_id"]
+
+def test_alpaca_min_notional_rejection():
+    """Verifica que órdenes con nocional inferior a $1.00 USD sean rechazadas pre-flight según contrato Alpaca"""
+    from execution.alpaca_adapter import AlpacaAdapter
+    adapter = AlpacaAdapter(api_key="mock", secret_key="mock")
+    adapter.is_configured = True
+
+    res = adapter.submit_order("TSLA", notional=0.50, side="buy")
+    assert res["success"] is False
+    assert "Orden rechazada por contrato: el nocional ($0.50) debe ser >= $1.00 USD" in res["error"]
+
+def test_alpaca_in_flight_open_orders_reconciliation(monkeypatch):
+    """Verifica que el motor de trading reconcilie órdenes abiertas/in-flight al conectar o reconectar"""
+    engine = RealTimeTradingEngine(initial_balance=50000.0, execution_environment="LIVE_REAL")
+    engine.active_broker = "ALPACA"
+    engine.feed.alpaca.is_configured = True
+
+    monkeypatch.setattr(engine.feed.alpaca, "get_open_orders", lambda: [
+        {"id": "ord_pending_1", "symbol": "AAPL", "status": "accepted", "side": "buy"}
+    ])
+
+    orders = engine.feed.alpaca.get_open_orders()
+    assert len(orders) == 1
+    assert orders[0]["id"] == "ord_pending_1"
+    assert orders[0]["symbol"] == "AAPL"
+
+def test_finra_4210_pdt_shield():
+    """Verifica el cumplimiento estricto de la regla FINRA 4210 (Pattern Day Trader):
+       - Cuentas de margen con equity < $25,000 USD tienen un límite estricto de 3 day trades en 5 días.
+       - La 4.ª entrada intradía es bloqueada para proteger la cuenta de suspensión.
+       - Cuentas con >= $25,000 USD o cuentas Cash quedan exentas."""
+    from risk_management.risk_manager import RiskManager
+    rm = RiskManager(
+        initial_balance=5000.0,
+        risk_per_trade=0.01,
+        max_daily_loss=0.05,
+        max_open_trades=5,
+        pdt_protection=True,
+        max_day_trades_5d=3
+    )
+
+    # 1. Registrar 3 day trades dentro de la ventana móvil
+    rm.record_day_trade("AAPL")
+    rm.record_day_trade("TSLA")
+    rm.record_day_trade("NVDA")
+    assert rm.get_day_trades_in_window() == 3
+
+    # 2. Con equity < $25,000 en cuenta de margen TradFi, la 4ª orden debe ser bloqueada
+    assert rm.is_pdt_restricted(current_equity=5000.0, is_margin_account=True) is True
+    assert rm.can_open_trade(50.0, current_equity=5000.0, is_margin_account=True, is_tradfi=True) is False
+
+    # 3. Si el equity es de $25,000 o superior, NO hay restricción PDT según FINRA
+    assert rm.is_pdt_restricted(current_equity=25000.0, is_margin_account=True) is False
+    assert rm.can_open_trade(50.0, current_equity=25000.0, is_margin_account=True, is_tradfi=True) is True
+
+    # 4. Cuentas Cash tampoco tienen restricción PDT
+    assert rm.is_pdt_restricted(current_equity=5000.0, is_margin_account=False) is False
+    assert rm.can_open_trade(50.0, current_equity=5000.0, is_margin_account=False, is_tradfi=True) is True
+
+
 
 

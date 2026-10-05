@@ -7,6 +7,7 @@ from trade_journal.journal import TradeJournal
 from config.broker_config import load_broker_config, save_broker_config
 from execution.alpaca_adapter import AlpacaAdapter
 from execution.binance_adapter import BinanceAdapter
+from risk_management.risk_manager import RiskManager
 
 class RealTimeTradingEngine:
     """
@@ -34,6 +35,16 @@ class RealTimeTradingEngine:
             self.cash_balance = self.initial_balance
         self.max_open_positions = max_open_positions
         self.is_running = True
+
+        # Gestor de Riesgo y Regulación FINRA 4210 (PDT Shield)
+        self.risk_manager = RiskManager(
+            initial_balance=self.initial_balance,
+            risk_per_trade=0.01,
+            max_daily_loss=0.05,
+            max_open_trades=self.max_open_positions,
+            pdt_protection=True,
+            max_day_trades_5d=3
+        )
 
         # Configuración persistente de Circuit Breakers (Meta Ganancia & Límite Pérdida)
         self.profit_target_enabled = bool(self.broker_config.get("profit_target_enabled", True))
@@ -320,6 +331,14 @@ class RealTimeTradingEngine:
                             }
                 except Exception as e:
                     print(f"[ENGINE] Error sincronizando posiciones reales de Alpaca: {e}")
+
+                # Reconciliación obligatoria de órdenes en tránsito (In-flight orders en Alpaca)
+                try:
+                    open_orders = self.feed.alpaca.get_open_orders()
+                    if open_orders:
+                        self.agent._add_thought(f"⚠️ RECONCILIACIÓN IN-FLIGHT: Detectadas {len(open_orders)} órdenes abiertas en tránsito en Alpaca.", "WARNING", icon="🔄")
+                except Exception as e:
+                    print(f"[ENGINE] Error reconciliando órdenes abiertas de Alpaca: {e}")
 
                 if self.active_broker == "ALPACA":
                     self.execution_environment = "LIVE_REAL"
@@ -855,6 +874,23 @@ class RealTimeTradingEngine:
         if broker_id == "BINANCE" and self.execution_environment == "LIVE_REAL" and actual_investment < 6.0:
             return
 
+        if broker_id == "ALPACA" and actual_investment < 1.0:
+            return
+
+        # Verificación con RiskManager: Cupos, Drawdown Diario y Blindaje FINRA 4210 (PDT)
+        is_tradfi = (broker_id == "ALPACA" or category in ["TRADFI", "ETF"])
+        equity_now = self.get_broker_equity(broker_id)
+        if hasattr(self, "risk_manager"):
+            if not self.risk_manager.can_open_trade(
+                risk_amount=actual_investment * 0.02,
+                current_equity=equity_now,
+                is_margin_account=True,
+                is_tradfi=is_tradfi
+            ):
+                if is_tradfi and self.risk_manager.is_pdt_restricted(current_equity=equity_now):
+                    self.agent._add_thought(f"🛡️ ESCUDO FINRA 4210 (PDT): Entrada en {symbol} prevenida para proteger la cuenta de suspensión por Pattern Day Trader (< $25k USD).", "WARNING", symbol, "⚠️")
+                return
+
         wallet["cash"] = round(wallet["cash"] - actual_investment, 2)
         if broker_id == self.active_broker:
             self.cash_balance = wallet["cash"]
@@ -914,13 +950,24 @@ class RealTimeTradingEngine:
                     self.cash_balance = wallet["cash"]
                 return
 
-        # Enrutamiento de orden en Alpaca (Paper o Real)
+        # Enrutamiento de orden en Alpaca (Paper o Real) con idempotencia client_order_id
         if broker_id == "ALPACA" and self.feed.alpaca.is_configured:
             order_res = self.feed.alpaca.submit_order(symbol, quantity, "buy")
             if order_res.get("success"):
-                self.agent._add_thought(f"🏛️ ORDEN ALPACA ENVIADA: Compra de {quantity} {symbol} en Wall Street.", "INFO", symbol, "⚡")
+                cid = order_res.get("client_order_id", "")
+                position["broker_order_id"] = cid
+                self.agent._add_thought(f"🏛️ ORDEN ALPACA ENVIADA: Compra de {quantity} {symbol} en Wall Street (ID: {cid}).", "INFO", symbol, "⚡")
+            else:
+                self.agent._add_thought(f"⚠️ Error orden Alpaca: {order_res.get('error')}", "WARNING", symbol, "🛑")
+                if self.broker_wallets.get("ALPACA", {}).get("environment") == "LIVE_REAL":
+                    wallet["cash"] = round(wallet["cash"] + actual_investment, 2)
+                    if broker_id == self.active_broker:
+                        self.cash_balance = wallet["cash"]
+                    return
 
         self.open_positions[symbol] = position
+        if hasattr(self, "risk_manager"):
+            self.risk_manager.register_trade_open()
 
         cat_badge = "🏛️ Alpaca" if broker_id == "ALPACA" else "🪙 Binance"
         self.agent._add_thought(
@@ -1034,6 +1081,8 @@ class RealTimeTradingEngine:
         self.journal.record_trade(trade_record)
         self.agent.record_trade_result(trade_record)
         self.last_exit_times[symbol] = time.time()
+        if hasattr(self, "risk_manager"):
+            self.risk_manager.register_trade_close(pnl, symbol=symbol, is_intraday=True)
 
         if pnl > 0:
             self.agent._add_thought(

@@ -1,6 +1,9 @@
 import requests
 import time
 import datetime
+import uuid
+import threading
+from collections import deque
 from typing import Dict, List, Any, Optional
 
 class AlpacaAdapter:
@@ -11,6 +14,30 @@ class AlpacaAdapter:
         self.data_url = "https://data.alpaca.markets/v2"
         self.is_configured = bool(api_key and secret_key)
         self.last_error = ""
+        
+        # Rate Limiting: Alpaca permite máximo 200 peticiones por minuto por API Key.
+        # Establecemos un techo seguro de 180 req/min para evitar errores 429 Too Many Requests.
+        self._rate_limit_lock = threading.Lock()
+        self._request_timestamps = deque()
+        self._max_req_per_minute = 180
+
+    def _wait_for_rate_limit(self):
+        """Asegura que el ritmo de llamadas a Alpaca no exceda el límite FINRA/Alpaca de 200 req/min."""
+        with self._rate_limit_lock:
+            now = time.time()
+            # Purgar marcas de tiempo mayores a 60 segundos
+            while self._request_timestamps and now - self._request_timestamps[0] > 60.0:
+                self._request_timestamps.popleft()
+            
+            if len(self._request_timestamps) >= self._max_req_per_minute:
+                wait_time = 60.0 - (now - self._request_timestamps[0]) + 0.1
+                if wait_time > 0:
+                    time.sleep(wait_time)
+                    now = time.time()
+                    while self._request_timestamps and now - self._request_timestamps[0] > 60.0:
+                        self._request_timestamps.popleft()
+            
+            self._request_timestamps.append(time.time())
 
     def get_headers(self) -> Dict[str, str]:
         return {
@@ -23,6 +50,7 @@ class AlpacaAdapter:
         if not self.api_key or not self.secret_key:
             return {"connected": False, "error": "Llaves API no ingresadas. Agrega tu API Key y Secret Key de Alpaca Paper."}
         try:
+            self._wait_for_rate_limit()
             start_t = time.time()
             resp = requests.get(f"{self.base_url}/v2/account", headers=self.get_headers(), timeout=5)
             latency_ms = int((time.time() - start_t) * 1000)
@@ -34,6 +62,7 @@ class AlpacaAdapter:
                     "equity": float(data.get("equity", 0.0)),
                     "cash": float(data.get("cash", 0.0)),
                     "buying_power": float(data.get("buying_power", 0.0)),
+                    "daytrade_count": int(data.get("daytrade_count", 0)),
                     "currency": data.get("currency", "USD"),
                     "latency_ms": latency_ms
                 }
@@ -57,6 +86,7 @@ class AlpacaAdapter:
         if not self.api_key:
             return {}
         try:
+            self._wait_for_rate_limit()
             syms_str = ",".join(symbols)
             url = f"{self.data_url}/stocks/bars/latest?symbols={syms_str}&feed=iex"
             resp = requests.get(url, headers=self.get_headers(), timeout=4)
@@ -71,17 +101,62 @@ class AlpacaAdapter:
             pass
         return {}
 
-    def submit_order(self, symbol: str, qty: float, side: str = "buy", order_type: str = "market") -> Dict[str, Any]:
+    def get_open_orders(self, status: str = "open") -> List[Dict[str, Any]]:
         """
-        Envía una orden con dinero real o sandbox a Alpaca con verificación pre-flight de saldo y acciones disponibles.
+        Obtiene órdenes en tránsito (pending_new, accepted, partially_filled, open).
+        Esencial tras caídas de red para prevenir órdenes huérfanas o duplicaciones.
+        """
+        if not self.is_configured:
+            return []
+        try:
+            self._wait_for_rate_limit()
+            resp = requests.get(f"{self.base_url}/v2/orders?status={status}", headers=self.get_headers(), timeout=5)
+            if resp.status_code == 200:
+                return resp.json()
+            return []
+        except Exception as e:
+            self.last_error = str(e)
+            return []
+
+    def cancel_order(self, order_id: str) -> Dict[str, Any]:
+        """Cancela una orden específica por ID."""
+        if not self.is_configured:
+            return {"success": False, "error": "Alpaca no configurada"}
+        try:
+            self._wait_for_rate_limit()
+            resp = requests.delete(f"{self.base_url}/v2/orders/{order_id}", headers=self.get_headers(), timeout=5)
+            return {"success": resp.status_code in [200, 204]}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def submit_order(
+        self, 
+        symbol: str, 
+        qty: Optional[float] = None, 
+        side: str = "buy", 
+        order_type: str = "market", 
+        time_in_force: str = "day",
+        notional: Optional[float] = None,
+        client_order_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Envía una orden con dinero real o sandbox a Alpaca con:
+        1. Pre-flight check de saldo y acciones disponibles.
+        2. Idempotencia con client_order_id nativo (UUID v4) para evitar órdenes duplicadas en reintentos.
+        3. Blindaje de micro-órdenes fraccionadas (nocional >= $1.00 USD).
+        4. Rate limit check.
         """
         if not self.is_configured:
             return {"success": False, "error": "Alpaca API no configurada"}
         try:
-            # Pre-flight check para compras y ventas
+            # 1. Pre-flight checks para compras y ventas
             is_buy = side.lower() == "buy"
             
             if is_buy:
+                # Validar nocional mínimo si se envía notional
+                if notional is not None and notional < 1.00:
+                    return {"success": False, "error": f"Orden rechazada por contrato: el nocional (${notional:.2f}) debe ser >= $1.00 USD"}
+                
                 acc = self.test_connection()
                 if acc.get("connected"):
                     cash_avail = float(acc.get("cash", acc.get("buying_power", 0.0)))
@@ -98,27 +173,41 @@ class AlpacaAdapter:
                     return {"success": False, "error": f"Sin acciones libres en Alpaca para vender {symbol} (Acciones disponibles: 0)."}
                 
                 # Ajustar cantidad al saldo real poseído para evitar ventas en corto accidentales
-                qty = min(qty, avail_shares)
+                if qty is not None:
+                    qty = min(qty, avail_shares)
 
-            payload = {
+            # 2. Idempotencia: Generar identificador único de cliente
+            cid = client_order_id or f"tito_{uuid.uuid4().hex[:16]}"
+
+            payload: Dict[str, Any] = {
                 "symbol": symbol.upper(),
-                "qty": str(int(qty)) if isinstance(qty, int) or qty.is_integer() else f"{qty:.2f}",
                 "side": side.lower(),
                 "type": order_type.lower(),
-                "time_in_force": "day"
+                "time_in_force": time_in_force.lower(),
+                "client_order_id": cid
             }
+            
+            if notional is not None and notional >= 1.00:
+                payload["notional"] = str(round(notional, 2))
+            elif qty is not None:
+                payload["qty"] = str(int(qty)) if isinstance(qty, int) or qty.is_integer() else f"{qty:.2f}"
+            else:
+                return {"success": False, "error": "Debe especificar 'qty' o 'notional' para la orden."}
+
+            self._wait_for_rate_limit()
             resp = requests.post(f"{self.base_url}/v2/orders", json=payload, headers=self.get_headers(), timeout=6)
             if resp.status_code in [200, 201]:
-                return {"success": True, "order": resp.json()}
+                return {"success": True, "order": resp.json(), "client_order_id": cid}
             else:
-                return {"success": False, "error": resp.text}
+                return {"success": False, "error": resp.text, "client_order_id": cid}
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            return {"success": False, "error": str(e), "client_order_id": client_order_id}
 
     def close_all_positions(self) -> Dict[str, Any]:
         if not self.is_configured:
             return {"success": False, "error": "Alpaca API no configurada"}
         try:
+            self._wait_for_rate_limit()
             resp = requests.delete(f"{self.base_url}/v2/positions", headers=self.get_headers(), timeout=6)
             return {"success": resp.status_code in [200, 207]}
         except Exception as e:
@@ -129,6 +218,7 @@ class AlpacaAdapter:
         if not self.is_configured:
             return []
         try:
+            self._wait_for_rate_limit()
             resp = requests.get(f"{self.base_url}/v2/positions", headers=self.get_headers(), timeout=5)
             if resp.status_code == 200:
                 return resp.json()
@@ -141,6 +231,7 @@ class AlpacaAdapter:
         if not self.is_configured:
             return []
         try:
+            self._wait_for_rate_limit()
             url = f"{self.data_url}/stocks/bars?symbols={symbol.upper()}&timeframe={timeframe}&limit={limit}&feed=iex"
             resp = requests.get(url, headers=self.get_headers(), timeout=5)
             if resp.status_code == 200:
@@ -165,4 +256,3 @@ class AlpacaAdapter:
         except Exception:
             pass
         return []
-
