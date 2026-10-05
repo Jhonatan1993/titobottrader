@@ -119,7 +119,9 @@ class RealTimeTradingEngine:
                 alp_acc = self.feed.alpaca.get_account_summary()
                 if alp_acc.get("connected"):
                     self.broker_wallets["ALPACA"]["cash"] = float(alp_acc.get("cash", alpaca_paper_init))
-                    self.broker_wallets["ALPACA"]["initial_balance"] = float(alp_acc.get("equity", alpaca_paper_init))
+                    alp_vault = float(self.broker_wallets["ALPACA"].get("profit_vault", 0.0))
+                    total_eq = float(alp_acc.get("equity", alpaca_paper_init))
+                    self.broker_wallets["ALPACA"]["initial_balance"] = max(0.0, round(total_eq - alp_vault, 2))
         else:
             self.feed.alpaca.base_url = "https://paper-api.alpaca.markets"
 
@@ -266,13 +268,17 @@ class RealTimeTradingEngine:
 
         # Recalcular capital base del broker si estamos en MODO REAL
         if is_live:
-            # En modo real, el capital base es exactamente el total depositado/reconocido en custodia
+            # En modo real, el capital total en custodia es cash real + valor de criptos reales
             total_real_equity = round(real_cash + total_crypto_invested, 2)
+            vault = float(self.broker_wallets["BINANCE"].get("profit_vault", 0.0))
             if total_real_equity > 0:
-                self.broker_wallets["BINANCE"]["initial_balance"] = total_real_equity
-                self.broker_config["binance_initial_balance"] = total_real_equity
+                # El capital base es el saldo total real en Binance menos la bóveda de ganancias acumuladas,
+                # para que (Base + Bóveda) coincida exactamente con el saldo de Binance sin inflar el NAV.
+                real_base = max(0.0, round(total_real_equity - vault, 2))
+                self.broker_wallets["BINANCE"]["initial_balance"] = real_base
+                self.broker_config["binance_initial_balance"] = real_base
                 if self.active_broker == "BINANCE":
-                    self.initial_balance = total_real_equity
+                    self.initial_balance = real_base
 
 
     def set_execution_environment(self, env: str, custom_balance: Optional[float] = None, broker: Optional[str] = None) -> Dict[str, Any]:
@@ -402,13 +408,11 @@ class RealTimeTradingEngine:
 
                 self._sync_binance_wallet_positions(acc)
                 b_eq = self.get_broker_equity("BINANCE")
-                self.broker_wallets["BINANCE"]["initial_balance"] = b_eq
-                self.broker_config["binance_initial_balance"] = b_eq
 
                 if self.active_broker == "BINANCE":
                     self.execution_environment = "LIVE_REAL"
                     self.cash_balance = self.broker_wallets["BINANCE"]["cash"]
-                    self.initial_balance = b_eq
+                    self.initial_balance = self.broker_wallets["BINANCE"]["initial_balance"]
 
                 save_broker_config(self.broker_config)
                 self.agent._add_thought(f"🔥 MODO DINERO REAL ACTIVADO en Binance Spot. Saldo real en custodia: ${b_eq:,.2f} USD (Disponible: ${self.broker_wallets['BINANCE']['cash']:,.2f} USDT).", "WARNING", icon="🪙")
@@ -492,7 +496,9 @@ class RealTimeTradingEngine:
                 acc = self.feed.alpaca.get_account_summary()
                 if acc.get("connected"):
                     wallet["cash"] = float(acc.get("cash", 0.0))
-                    wallet["initial_balance"] = float(acc.get("equity", 0.0))
+                    alp_vault = float(wallet.get("profit_vault", 0.0))
+                    total_eq = float(acc.get("equity", 0.0))
+                    wallet["initial_balance"] = max(0.0, round(total_eq - alp_vault, 2))
             elif b == "BINANCE" and self.feed.binance.is_configured:
                 acc = self.feed.binance.get_account_balances()
                 if acc.get("authenticated"):
@@ -783,7 +789,9 @@ class RealTimeTradingEngine:
                         acc = self.feed.alpaca.get_account_summary()
                         if acc.get("connected"):
                             b_wal["cash"] = float(acc.get("cash", 0.0))
-                            b_wal["initial_balance"] = float(acc.get("equity", b_wal["initial_balance"]))
+                            alp_vault = float(b_wal.get("profit_vault", 0.0))
+                            total_eq = float(acc.get("equity", b_wal["initial_balance"]))
+                            b_wal["initial_balance"] = max(0.0, round(total_eq - alp_vault, 2))
 
         # 5. Escaneo y Operación Autónoma Continua 24/7
         if self.is_running:
