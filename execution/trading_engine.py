@@ -207,11 +207,11 @@ class RealTimeTradingEngine:
                 if cur_asset and qty > 0:
                     cur_p = cur_asset["price"]
                     val_usd = qty * cur_p
-                    # Solo considerar posiciones reales operables en Binance Spot (mínimo nocional >= $5.00 USD)
-                    if val_usd >= 5.0:
+                    # Considerar posiciones reales operables en Binance Spot (evitando descartar caídas leves de precio)
+                    if val_usd >= 0.50:
                         qty_safe = round(qty, 5) if c_sym == "BTC" else round(qty, 4)
                         invested_est = round(qty_safe * cur_p, 2)
-                        if qty_safe > 0 and invested_est >= 5.0:
+                        if qty_safe > 0 and invested_est >= 0.50:
                             active_synced_symbols.add(c_sym)
                             total_crypto_invested += invested_est
                             if c_sym not in self.open_positions:
@@ -253,7 +253,7 @@ class RealTimeTradingEngine:
                                 pos["current_pnl"] = round(pos["current_value"] - pos["invested_amount"], 2)
                                 pos["current_pnl_percent"] = round(((cur_p - pos["entry_price"]) / pos["entry_price"]) * 100, 2) if pos.get("entry_price") else 0.0
 
-        # Remover cualquier posición fantasma o saldo de polvo (dust < $5.00) que no sea operable en Binance
+        # Remover cualquier posición fantasma o saldo residual (< $0.50) que no sea del exchange
         to_remove = []
         is_live = self.broker_wallets["BINANCE"].get("environment") == "LIVE_REAL"
         for sym, pos in list(self.open_positions.items()):
@@ -261,20 +261,19 @@ class RealTimeTradingEngine:
                 pos_val = round(pos.get("quantity", 0.0) * pos.get("current_price", 0.0), 2)
                 if sym not in active_synced_symbols or pos.get("quantity", 0) <= 0:
                     to_remove.append(sym)
-                elif is_live and (pos_val < 5.0 or pos.get("invested_amount", 0.0) < 5.0):
+                elif is_live and (pos_val < 0.50 or pos.get("invested_amount", 0.0) < 0.50):
                     to_remove.append(sym)
         for sym in to_remove:
             del self.open_positions[sym]
 
         # Recalcular capital base del broker si estamos en MODO REAL
         if is_live:
-            # En modo real, el capital total en custodia es cash real + valor de criptos reales
-            total_real_equity = round(real_cash + total_crypto_invested, 2)
+            # En modo real, el capital total en custodia es cash real + valor de criptos reales (o total_spot_equity)
+            spot_eq = float(acc.get("total_spot_equity", 0.0))
+            total_real_equity = spot_eq if spot_eq > 0 else round(real_cash + total_crypto_invested, 2)
             vault = float(self.broker_wallets["BINANCE"].get("profit_vault", 0.0))
             if total_real_equity > 0:
-                # El capital base es el saldo total real en Binance menos la bóveda de ganancias acumuladas,
-                # para que (Base + Bóveda) coincida exactamente con el saldo de Binance sin inflar el NAV.
-                real_base = max(0.0, round(total_real_equity - vault, 2))
+                real_base = total_real_equity if vault == 0 else max(0.0, round(total_real_equity - vault, 2))
                 self.broker_wallets["BINANCE"]["initial_balance"] = real_base
                 self.broker_config["binance_initial_balance"] = real_base
                 if self.active_broker == "BINANCE":
@@ -389,6 +388,8 @@ class RealTimeTradingEngine:
                 self.broker_wallets["BINANCE"]["environment"] = "LIVE_REAL"
                 self.broker_config["binance_environment"] = "LIVE_REAL"
                 self.broker_config["execution_environment"] = "LIVE_REAL"
+                self.broker_wallets["BINANCE"]["profit_vault"] = 0.0
+                self.broker_config["binance_profit_vault"] = 0.0
 
                 # LIMPIEZA DE POSICIONES CRIPTO PREVIAS DE MODO PAPER:
                 # Al conmutar a MODO REAL, eliminamos las posiciones simuladas fantasmas,
@@ -402,7 +403,7 @@ class RealTimeTradingEngine:
                         free_q = float(asset_info.get("free", 0.0)) + float(asset_info.get("locked", 0.0))
                         asset_obj = self.feed.get_asset(s)
                         p_val = free_q * (asset_obj["price"] if asset_obj else 0.0)
-                        if p_val < 5.0:
+                        if free_q <= 0 or p_val < 0.50:
                             # Posición simulada fantasma o polvo inoperable -> eliminar
                             del self.open_positions[s]
 
@@ -459,6 +460,12 @@ class RealTimeTradingEngine:
         wallet = self.broker_wallets.get(b)
         if not wallet:
             return round(self.get_total_equity(), 2)
+        if wallet.get("environment") == "LIVE_REAL" and b == "BINANCE":
+            open_pos = self.get_broker_positions(b)
+            crypto_val = sum(p.get("current_value", p.get("invested_amount", 0.0)) for p in open_pos)
+            cash = wallet.get("cash", 0.0)
+            vault = wallet.get("profit_vault", 0.0)
+            return round(cash + crypto_val + vault, 2)
         base = wallet.get("initial_balance", 0.0)
         vault = wallet.get("profit_vault", 0.0)
         unrealized = sum(p.get("current_pnl", 0.0) for p in self.get_broker_positions(b))

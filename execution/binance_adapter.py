@@ -21,6 +21,23 @@ class BinanceAdapter:
         self.testnet_url = "https://testnet.binance.vision/api/v3"
         self.base_url = self.testnet_url if testnet else self.public_url
         self.is_configured = bool(api_key and secret_key)
+        self._cached_ticker_prices: Dict[str, float] = {}
+        self._last_ticker_fetch: float = 0.0
+
+    def get_all_ticker_prices(self) -> Dict[str, float]:
+        now = time.time()
+        if self._cached_ticker_prices and (now - self._last_ticker_fetch) < 10.0:
+            return self._cached_ticker_prices
+        try:
+            url = f"{self.public_url}/ticker/price"
+            resp = requests.get(url, timeout=3)
+            if resp.status_code == 200:
+                self._cached_ticker_prices = {item["symbol"]: float(item["price"]) for item in resp.json() if "symbol" in item and "price" in item}
+                self._last_ticker_fetch = now
+                return self._cached_ticker_prices
+        except Exception:
+            pass
+        return self._cached_ticker_prices
 
     def _sign_query(self, params: Dict[str, Any]) -> str:
         params["timestamp"] = int(time.time() * 1000)
@@ -97,6 +114,8 @@ class BinanceAdapter:
                 balances = {}
                 usdt_free = 0.0
                 total_stable_free = 0.0
+                total_spot_equity = 0.0
+                ticker_prices = self.get_all_ticker_prices()
                 for b in data.get("balances", []):
                     free = float(b.get("free", 0.0))
                     locked = float(b.get("locked", 0.0))
@@ -104,6 +123,13 @@ class BinanceAdapter:
                     asset_name = b.get("asset")
                     if total > 0:
                         balances[asset_name] = {"free": free, "locked": locked, "total": total}
+                        if asset_name in ["USDT", "USDC", "FDUSD", "BUSD", "DAI", "TUSD"]:
+                            total_spot_equity += total
+                        else:
+                            pair = f"{asset_name}USDT"
+                            price = ticker_prices.get(pair, 0.0)
+                            if price > 0:
+                                total_spot_equity += (total * price)
                     if asset_name in ["USDT", "USDC", "FDUSD", "BUSD"]:
                         total_stable_free += free
                     if asset_name == "USDT":
@@ -114,6 +140,7 @@ class BinanceAdapter:
                     "balances": balances,
                     "usdt_free": usdt_free,
                     "total_stable_free": total_stable_free,
+                    "total_spot_equity": round(total_spot_equity, 2),
                     "raw_balances": data.get("balances", [])
                 }
             else:
