@@ -271,13 +271,15 @@ class RealTimeTradingEngine:
             # En modo real, el capital total en custodia es cash real + valor de criptos reales (o total_spot_equity)
             spot_eq = float(acc.get("total_spot_equity", 0.0))
             total_real_equity = spot_eq if spot_eq > 0 else round(real_cash + total_crypto_invested, 2)
-            vault = float(self.broker_wallets["BINANCE"].get("profit_vault", 0.0))
             if total_real_equity > 0:
-                real_base = total_real_equity if vault == 0 else max(0.0, round(total_real_equity - vault, 2))
-                self.broker_wallets["BINANCE"]["initial_balance"] = real_base
-                self.broker_config["binance_initial_balance"] = real_base
+                self.broker_wallets["BINANCE"]["profit_vault"] = 0.0
+                self.broker_config["binance_profit_vault"] = 0.0
+                cur_base = float(self.broker_wallets["BINANCE"].get("initial_balance", 0.0))
+                if cur_base <= 0.0 or abs(cur_base - total_real_equity) > total_real_equity * 0.4:
+                    self.broker_wallets["BINANCE"]["initial_balance"] = total_real_equity
+                    self.broker_config["binance_initial_balance"] = total_real_equity
                 if self.active_broker == "BINANCE":
-                    self.initial_balance = real_base
+                    self.initial_balance = self.broker_wallets["BINANCE"]["initial_balance"]
 
 
     def set_execution_environment(self, env: str, custom_balance: Optional[float] = None, broker: Optional[str] = None) -> Dict[str, Any]:
@@ -464,8 +466,7 @@ class RealTimeTradingEngine:
             open_pos = self.get_broker_positions(b)
             crypto_val = sum(p.get("current_value", p.get("invested_amount", 0.0)) for p in open_pos)
             cash = wallet.get("cash", 0.0)
-            vault = wallet.get("profit_vault", 0.0)
-            return round(cash + crypto_val + vault, 2)
+            return round(cash + crypto_val, 2)
         base = wallet.get("initial_balance", 0.0)
         vault = wallet.get("profit_vault", 0.0)
         unrealized = sum(p.get("current_pnl", 0.0) for p in self.get_broker_positions(b))
@@ -1195,8 +1196,12 @@ class RealTimeTradingEngine:
         completed_trades = self.journal.get_trades(35, broker=active_b)
         
         vault_val = round(wallet.get("profit_vault", 0.0), 2)
-        total_profit = round(vault_val + unrealized_pnl, 2)
-        total_profit_pct = round((total_profit / initial_bal) * 100, 2) if initial_bal > 0 else 0.0
+        if wallet.get("environment") == "LIVE_REAL" and active_b == "BINANCE":
+            total_profit = round(unrealized_pnl, 2)
+            total_profit_pct = round((unrealized_pnl / initial_bal) * 100, 2) if initial_bal > 0 else 0.0
+        else:
+            total_profit = round(vault_val + unrealized_pnl, 2)
+            total_profit_pct = round((total_profit / initial_bal) * 100, 2) if initial_bal > 0 else 0.0
 
         if self.is_running:
             status_text = "OPERANDO EN VIVO (24/7)"
