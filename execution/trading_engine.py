@@ -138,7 +138,7 @@ class RealTimeTradingEngine:
         self.execution_environment = active_wallet.get("environment", "PAPER")
 
         # Si el entorno guardado en Binance es LIVE_REAL, verificar obligatoriamente la autenticación real
-        if self.active_broker == "BINANCE" and binance_env == "LIVE_REAL":
+        if binance_env == "LIVE_REAL":
             is_authenticated = False
             if self.feed.binance.is_configured:
                 self.feed.binance.live_trading_enabled = True
@@ -147,8 +147,11 @@ class RealTimeTradingEngine:
                     is_authenticated = True
                     self._sync_binance_wallet_positions(acc)
                     saved_real_init = float(self.broker_config.get("real_initial_balance", 0.0))
-                    self.initial_balance = saved_real_init if saved_real_init > 0 else round(self.cash_balance + self.get_invested_capital(), 2)
-                    self.loss_limit_reached = False
+                    self.broker_wallets["BINANCE"]["initial_balance"] = saved_real_init if saved_real_init > 0 else round(self.broker_wallets["BINANCE"]["cash"] + self.get_invested_capital(), 2)
+                    self.broker_wallets["BINANCE"]["environment"] = "LIVE_REAL"
+                    if self.active_broker == "BINANCE":
+                        self.initial_balance = self.broker_wallets["BINANCE"]["initial_balance"]
+                        self.loss_limit_reached = False
                 else:
                     err_msg = acc.get("error", "Error de autenticación API")
                     self.agent._add_thought(
@@ -158,12 +161,15 @@ class RealTimeTradingEngine:
                     )
 
             if not is_authenticated:
-                self.execution_environment = "PAPER"
+                self.broker_wallets["BINANCE"]["environment"] = "PAPER"
                 self.feed.binance.live_trading_enabled = False
+                self.broker_config["binance_environment"] = "PAPER"
                 self.broker_config["execution_environment"] = "PAPER"
-                self.paper_initial_balance = float(self.broker_config.get("paper_initial_balance", 10000.0))
-                self.cash_balance = self.paper_initial_balance
-                self.initial_balance = self.paper_initial_balance
+                if self.active_broker == "BINANCE":
+                    self.execution_environment = "PAPER"
+                    self.paper_initial_balance = float(self.broker_config.get("paper_initial_balance", 10000.0))
+                    self.cash_balance = self.paper_initial_balance
+                    self.initial_balance = self.paper_initial_balance
                 save_broker_config(self.broker_config)
 
         self.agent.update_learning_from_disk()
@@ -379,12 +385,20 @@ class RealTimeTradingEngine:
                 self.broker_config["execution_environment"] = "LIVE_REAL"
 
                 # LIMPIEZA DE POSICIONES CRIPTO PREVIAS DE MODO PAPER:
-                # Al conmutar a MODO REAL, eliminamos las posiciones simuladas para no intentar vender activos inexistentes
+                # Al conmutar a MODO REAL, eliminamos las posiciones simuladas fantasmas,
+                # pero PRESERVAMOS los datos de entrada de posiciones que ya están abiertas legítimamente en Binance.
                 crypto_symbols_set = {"BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "AVAX", "LINK", "NEAR"}
+                real_balances = acc.get("balances", {})
                 for s in list(self.open_positions.keys()):
                     pos = self.open_positions[s]
                     if pos.get("category") == "CRYPTO" or s in crypto_symbols_set or pos.get("symbol") in crypto_symbols_set:
-                        del self.open_positions[s]
+                        asset_info = real_balances.get(s, {})
+                        free_q = float(asset_info.get("free", 0.0)) + float(asset_info.get("locked", 0.0))
+                        asset_obj = self.feed.get_asset(s)
+                        p_val = free_q * (asset_obj["price"] if asset_obj else 0.0)
+                        if p_val < 5.0:
+                            # Posición simulada fantasma o polvo inoperable -> eliminar
+                            del self.open_positions[s]
 
                 self._sync_binance_wallet_positions(acc)
                 b_eq = self.get_broker_equity("BINANCE")
@@ -483,6 +497,11 @@ class RealTimeTradingEngine:
                 acc = self.feed.binance.get_account_balances()
                 if acc.get("authenticated"):
                     self._sync_binance_wallet_positions(acc)
+
+        # Mantener consistencia del flag live_trading_enabled para Binance en operaciones concurrentes
+        binance_is_live = (self.broker_wallets.get("BINANCE", {}).get("environment") == "LIVE_REAL")
+        if self.feed.binance.is_configured:
+            self.feed.binance.live_trading_enabled = binance_is_live
 
         self.cash_balance = wallet["cash"]
         self.initial_balance = wallet["initial_balance"]
@@ -924,7 +943,9 @@ class RealTimeTradingEngine:
         }
 
         # Enrutamiento de orden real en Binance
-        if self.execution_environment == "LIVE_REAL" and broker_id == "BINANCE":
+        binance_is_live = (self.broker_wallets.get("BINANCE", {}).get("environment") == "LIVE_REAL" or self.execution_environment == "LIVE_REAL")
+        if broker_id == "BINANCE" and binance_is_live:
+            self.feed.binance.live_trading_enabled = True
             pair = asset.get("binance_pair", f"{symbol}USDT")
             real_res = self.feed.binance.create_market_order(pair, "BUY", quantity=quantity, quote_order_qty=actual_investment)
             if real_res.get("success"):
@@ -1008,7 +1029,9 @@ class RealTimeTradingEngine:
             self.cash_balance = wallet["cash"]
 
         # Enrutamiento de orden de venta real en Binance
-        if self.execution_environment == "LIVE_REAL" and broker_id == "BINANCE":
+        binance_is_live = (self.broker_wallets.get("BINANCE", {}).get("environment") == "LIVE_REAL" or self.execution_environment == "LIVE_REAL")
+        if broker_id == "BINANCE" and binance_is_live:
+            self.feed.binance.live_trading_enabled = True
             pair = asset.get("binance_pair", f"{symbol}USDT")
             real_res = self.feed.binance.create_market_order(pair, "SELL", quantity)
             if real_res.get("success"):
