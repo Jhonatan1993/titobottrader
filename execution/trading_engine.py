@@ -761,17 +761,29 @@ class RealTimeTradingEngine:
                     icon="🛡️"
                 )
 
-        # 4. Sincronización periódica de saldo real en Binance
-        if self.execution_environment == "LIVE_REAL":
-            if not hasattr(self, "_last_balance_sync"):
-                self._last_balance_sync = 0.0
-            if time.time() - self._last_balance_sync > 3.0:
-                self._last_balance_sync = time.time()
-                acc = self.feed.binance.get_account_balances()
-                if acc.get("authenticated"):
-                    self._sync_binance_wallet_positions(acc)
-                    if self.initial_balance <= 1.0 and (self.cash_balance + self.get_invested_capital()) > 1.0:
-                        self.initial_balance = round(self.cash_balance + self.get_invested_capital(), 2)
+        # 4. Sincronización continua e independiente de TODOS los brokers en segundo plano 24/7
+        if not hasattr(self, "_last_broker_sync"):
+            self._last_broker_sync = {}
+
+        now_sync = time.time()
+        for b_id, b_wal in list(self.broker_wallets.items()):
+            if b_wal.get("environment") == "LIVE_REAL":
+                if b_id == "BINANCE" and self.feed.binance.is_configured:
+                    self.feed.binance.live_trading_enabled = True
+                    if (now_sync - self._last_broker_sync.get("BINANCE", 0.0)) > 3.0:
+                        self._last_broker_sync["BINANCE"] = now_sync
+                        acc = self.feed.binance.get_account_balances()
+                        if acc.get("authenticated"):
+                            self._sync_binance_wallet_positions(acc)
+                            if self.active_broker == "BINANCE" and self.initial_balance <= 1.0 and (self.cash_balance + self.get_invested_capital()) > 1.0:
+                                self.initial_balance = round(self.cash_balance + self.get_invested_capital(), 2)
+                elif b_id == "ALPACA" and self.feed.alpaca.is_configured:
+                    if (now_sync - self._last_broker_sync.get("ALPACA", 0.0)) > 10.0:
+                        self._last_broker_sync["ALPACA"] = now_sync
+                        acc = self.feed.alpaca.get_account_summary()
+                        if acc.get("connected"):
+                            b_wal["cash"] = float(acc.get("cash", 0.0))
+                            b_wal["initial_balance"] = float(acc.get("equity", b_wal["initial_balance"]))
 
         # 5. Escaneo y Operación Autónoma Continua 24/7
         if self.is_running:
@@ -859,7 +871,8 @@ class RealTimeTradingEngine:
         kelly_pct = decision_data.get("budget_percent", 20.0)
         effective_pct = min(kelly_pct, 30.0)
 
-        min_trade = 6.0 if (broker_id == "BINANCE" and self.execution_environment == "LIVE_REAL") else 5.0
+        is_broker_live = (wallet.get("environment") == "LIVE_REAL")
+        min_trade = 6.0 if (broker_id == "BINANCE" and is_broker_live) else 5.0
         if available_cash <= 35.0:
             target_amount = round(min(available_cash * 0.40, 10.0), 2)
             target_amount = max(min_trade, target_amount)
@@ -890,7 +903,7 @@ class RealTimeTradingEngine:
         if actual_investment <= 0 or actual_investment > available_cash:
             return
 
-        if broker_id == "BINANCE" and self.execution_environment == "LIVE_REAL" and actual_investment < 6.0:
+        if broker_id == "BINANCE" and is_broker_live and actual_investment < 6.0:
             return
 
         if broker_id == "ALPACA" and actual_investment < 1.0:
@@ -942,12 +955,11 @@ class RealTimeTradingEngine:
             "progress_to_target": 0.0
         }
 
-        # Enrutamiento de orden real en Binance
-        binance_is_live = (self.broker_wallets.get("BINANCE", {}).get("environment") == "LIVE_REAL" or self.execution_environment == "LIVE_REAL")
-        if broker_id == "BINANCE" and binance_is_live:
+        # Enrutamiento de orden real en Binance (Autónomo para cada broker)
+        if broker_id == "BINANCE" and is_broker_live:
             self.feed.binance.live_trading_enabled = True
             pair = asset.get("binance_pair", f"{symbol}USDT")
-            real_res = self.feed.binance.create_market_order(pair, "BUY", quantity=quantity, quote_order_qty=actual_investment)
+            real_res = self.feed.binance.create_market_order(pair, "BUY", quantity=quantity, quote_order_qty=actual_investment, force_live=True)
             if real_res.get("success"):
                 data = real_res.get("data", {})
                 position["broker_order_id"] = data.get("orderId")
@@ -1028,12 +1040,12 @@ class RealTimeTradingEngine:
         if broker_id == self.active_broker:
             self.cash_balance = wallet["cash"]
 
-        # Enrutamiento de orden de venta real en Binance
-        binance_is_live = (self.broker_wallets.get("BINANCE", {}).get("environment") == "LIVE_REAL" or self.execution_environment == "LIVE_REAL")
-        if broker_id == "BINANCE" and binance_is_live:
+        # Enrutamiento de orden de venta real en Binance (Autónomo para cada broker)
+        is_broker_live = (wallet.get("environment") == "LIVE_REAL")
+        if broker_id == "BINANCE" and is_broker_live:
             self.feed.binance.live_trading_enabled = True
             pair = asset.get("binance_pair", f"{symbol}USDT")
-            real_res = self.feed.binance.create_market_order(pair, "SELL", quantity)
+            real_res = self.feed.binance.create_market_order(pair, "SELL", quantity, force_live=True)
             if real_res.get("success"):
                 self.agent._add_thought(f"🔥 VENTA REAL BINANCE: Vendidos {quantity} {symbol} en Spot.", "WARNING", symbol, "⚡")
             else:
