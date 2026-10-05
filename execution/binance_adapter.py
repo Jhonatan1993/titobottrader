@@ -98,9 +98,72 @@ class BinanceAdapter:
             pass
         return []
 
+    def _convert_asset_to_usdt(self, asset_name: str, quantity: float, ticker_prices: Dict[str, float]) -> float:
+        if quantity <= 0:
+            return 0.0
+        clean_sym = asset_name[2:] if (asset_name.startswith("LD") and len(asset_name) > 2) else asset_name
+        clean_sym = clean_sym.upper().strip()
+        if clean_sym in ["USDT", "USDC", "FDUSD", "BUSD", "DAI", "TUSD"]:
+            return quantity
+        # 1. Par directo con USDT
+        pair_usdt = f"{clean_sym}USDT"
+        price = ticker_prices.get(pair_usdt, 0.0)
+        if price > 0:
+            return quantity * price
+        # 2. Pares alternativos con stablecoins
+        for alt_quote in ["USDC", "FDUSD"]:
+            alt_p = ticker_prices.get(f"{clean_sym}{alt_quote}", 0.0)
+            if alt_p > 0:
+                return quantity * alt_p
+        # 3. Par cruzado con BTC
+        btc_p = ticker_prices.get(f"{clean_sym}BTC", 0.0)
+        btc_usdt = ticker_prices.get("BTCUSDT", 0.0)
+        if btc_p > 0 and btc_usdt > 0:
+            return quantity * btc_p * btc_usdt
+        # 4. Par cruzado con ETH
+        eth_p = ticker_prices.get(f"{clean_sym}ETH", 0.0)
+        eth_usdt = ticker_prices.get("ETHUSDT", 0.0)
+        if eth_p > 0 and eth_usdt > 0:
+            return quantity * eth_p * eth_usdt
+        # 5. Par cruzado con BNB
+        bnb_p = ticker_prices.get(f"{clean_sym}BNB", 0.0)
+        bnb_usdt = ticker_prices.get("BNBUSDT", 0.0)
+        if bnb_p > 0 and bnb_usdt > 0:
+            return quantity * bnb_p * bnb_usdt
+        return 0.0
+
+    def get_funding_balances(self) -> List[Dict[str, Any]]:
+        if not self.is_configured:
+            return []
+        try:
+            headers = {"X-MBX-APIKEY": self.api_key}
+            signed_query = self._sign_query({})
+            url = f"https://api.binance.com/sapi/v1/asset/get-funding-asset?{signed_query}"
+            resp = requests.post(url, headers=headers, timeout=4)
+            if resp.status_code == 200:
+                return resp.json()
+        except Exception:
+            pass
+        return []
+
+    def get_simple_earn_flexible_positions(self) -> List[Dict[str, Any]]:
+        if not self.is_configured:
+            return []
+        try:
+            headers = {"X-MBX-APIKEY": self.api_key}
+            signed_query = self._sign_query({})
+            url = f"https://api.binance.com/sapi/v1/simple-earn/flexible/position?{signed_query}"
+            resp = requests.get(url, headers=headers, timeout=4)
+            if resp.status_code == 200:
+                data = resp.json()
+                return data.get("rows", []) if isinstance(data, dict) else []
+        except Exception:
+            pass
+        return []
+
     def get_account_balances(self) -> Dict[str, Any]:
         """
-        Consulta los saldos REALES de la billetera Spot de Binance.
+        Consulta los saldos REALES de la billetera Spot y fondos de Binance.
         """
         if not self.is_configured:
             return {"authenticated": False, "balances": {}, "usdt_free": 0.0, "error": "Llaves no configuradas"}
@@ -116,24 +179,46 @@ class BinanceAdapter:
                 total_stable_free = 0.0
                 total_spot_equity = 0.0
                 ticker_prices = self.get_all_ticker_prices()
+
+                # 1. Saldos de la Billetera Spot
                 for b in data.get("balances", []):
                     free = float(b.get("free", 0.0))
                     locked = float(b.get("locked", 0.0))
                     total = free + locked
-                    asset_name = b.get("asset")
-                    if total > 0:
+                    asset_name = b.get("asset", "").strip()
+                    if total > 0 and asset_name:
                         balances[asset_name] = {"free": free, "locked": locked, "total": total}
-                        if asset_name in ["USDT", "USDC", "FDUSD", "BUSD", "DAI", "TUSD"]:
-                            total_spot_equity += total
-                        else:
-                            pair = f"{asset_name}USDT"
-                            price = ticker_prices.get(pair, 0.0)
-                            if price > 0:
-                                total_spot_equity += (total * price)
+                        total_spot_equity += self._convert_asset_to_usdt(asset_name, total, ticker_prices)
                     if asset_name in ["USDT", "USDC", "FDUSD", "BUSD"]:
                         total_stable_free += free
                     if asset_name == "USDT":
                         usdt_free = free
+
+                # 2. Saldos de la Billetera de Fondos (Funding Wallet)
+                try:
+                    funding_items = self.get_funding_balances()
+                    for fa in funding_items:
+                        f_free = float(fa.get("free", 0.0))
+                        f_locked = float(fa.get("locked", 0.0))
+                        f_freeze = float(fa.get("freeze", 0.0))
+                        f_total = f_free + f_locked + f_freeze
+                        f_name = fa.get("asset", "").strip()
+                        if f_total > 0 and f_name:
+                            total_spot_equity += self._convert_asset_to_usdt(f_name, f_total, ticker_prices)
+                except Exception:
+                    pass
+
+                # 3. Saldos de Simple Earn Flexible
+                try:
+                    earn_items = self.get_simple_earn_flexible_positions()
+                    for ea in earn_items:
+                        e_total = float(ea.get("totalAmount", 0.0))
+                        e_name = ea.get("asset", "").strip()
+                        if e_total > 0 and e_name:
+                            total_spot_equity += self._convert_asset_to_usdt(e_name, e_total, ticker_prices)
+                except Exception:
+                    pass
+
                 return {
                     "authenticated": True,
                     "can_trade": data.get("canTrade", False),
