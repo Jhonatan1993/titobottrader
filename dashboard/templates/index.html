@@ -2422,7 +2422,7 @@
 
             <div class="form-group" style="margin-bottom:12px;">
                 <label>Broker / Exchange a Conectar</label>
-                <select id="new-broker-select" class="form-control" style="background:#0F172A; color:#F8FAFC; border:1px solid rgba(255,255,255,0.14); padding:9px 12px; border-radius:6px; width:100%; font-size:12.5px;">
+                <select id="new-broker-select" class="form-control" onchange="onBrokerSelectChange()" style="background:#0F172A; color:#F8FAFC; border:1px solid rgba(255,255,255,0.14); padding:9px 12px; border-radius:6px; width:100%; font-size:12.5px;">
                     <option value="ALPACA">🏛️ Alpaca Markets (Wall Street / Acciones & ETFs)</option>
                     <option value="BINANCE">🪙 Binance Spot (Criptomonedas 24/7)</option>
                     <option value="BYBIT">⚡ Bybit (Cripto & Derivados)</option>
@@ -2433,17 +2433,17 @@
             </div>
 
             <div class="form-group" style="margin-bottom:12px;">
-                <label>API Key / Client ID</label>
+                <label id="new-broker-key-label">API Key / Client ID</label>
                 <input type="text" id="new-broker-key" class="form-control" placeholder="Pega tu API Key pública">
             </div>
 
             <div class="form-group" style="margin-bottom:14px;">
-                <label>API Secret / Private Token</label>
+                <label id="new-broker-secret-label">API Secret / Private Token</label>
                 <input type="password" id="new-broker-secret" class="form-control" placeholder="Pega tu Secret Key privada">
             </div>
 
-            <div style="background:rgba(56,189,248,0.06); border:1px solid rgba(56,189,248,0.2); border-radius:6px; padding:10px 12px; margin-bottom:16px; font-size:11px; color:var(--text-secondary); line-height:1.4;">
-                🔒 <strong>Aislamiento Total de Capital:</strong> Las órdenes de Binance operan con tu balance en Binance (~$30.00 USD) y las de Alpaca con tu cuenta en Alpaca (~$100,000.00 USD), sin mezclar fondos ni cálculos de riesgo.
+            <div id="new-broker-hint" style="background:rgba(56,189,248,0.06); border:1px solid rgba(56,189,248,0.2); border-radius:6px; padding:10px 12px; margin-bottom:16px; font-size:11px; color:var(--text-secondary); line-height:1.4;">
+                🔒 <strong>Aislamiento Total de Capital:</strong> Cada broker opera con su propio libro contable, saldo y órdenes independientes 24/7 sin mezclar fondos.
             </div>
 
             <div style="display:flex; justify-content:flex-end; gap:8px;">
@@ -4656,8 +4656,31 @@
             }
         }
 
+        function onBrokerSelectChange() {
+            const b = document.getElementById('new-broker-select').value;
+            const keyLabel = document.getElementById('new-broker-key-label');
+            const keyInput = document.getElementById('new-broker-key');
+            const secLabel = document.getElementById('new-broker-secret-label');
+            const secInput = document.getElementById('new-broker-secret');
+            const hint = document.getElementById('new-broker-hint');
+            if (b === 'IQOPTION') {
+                if (keyLabel) keyLabel.innerText = 'Correo Electrónico (Email de tu cuenta IQ Option)';
+                if (keyInput) keyInput.placeholder = 'ej: tu_correo@gmail.com';
+                if (secLabel) secLabel.innerText = 'Contraseña de IQ Option (o SSID Token)';
+                if (secInput) secInput.placeholder = 'Tu contraseña de acceso a IQ Option';
+                if (hint) hint.innerHTML = 'ℹ️ <strong>IQ Option no maneja API Keys públicas:</strong> La conexión se autentica directamente con tu Email y Contraseña de IQ Option (o Token SSID de sesión).';
+            } else {
+                if (keyLabel) keyLabel.innerText = 'API Key / Client ID';
+                if (keyInput) keyInput.placeholder = 'Pega tu API Key pública';
+                if (secLabel) secLabel.innerText = 'API Secret / Private Token';
+                if (secInput) secInput.placeholder = 'Pega tu Secret Key privada';
+                if (hint) hint.innerHTML = '🔒 <strong>Aislamiento Total de Capital:</strong> Cada broker opera de forma completamente aislada e independiente 24/7 sin mezclar fondos.';
+            }
+        }
+
         function openAddBrokerModal() {
             document.getElementById('add-broker-modal').classList.add('active');
+            onBrokerSelectChange();
         }
 
         async function saveNewBroker() {
