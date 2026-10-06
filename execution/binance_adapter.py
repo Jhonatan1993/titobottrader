@@ -23,18 +23,23 @@ class BinanceAdapter:
         self.is_configured = bool(api_key and secret_key)
         self._cached_ticker_prices: Dict[str, float] = {}
         self._last_ticker_fetch: float = 0.0
+        self.session = requests.Session()
 
     def get_all_ticker_prices(self) -> Dict[str, float]:
         now = time.time()
-        if self._cached_ticker_prices and (now - self._last_ticker_fetch) < 10.0:
+        if self._cached_ticker_prices and (now - self._last_ticker_fetch) < 15.0:
             return self._cached_ticker_prices
         try:
             url = f"{self.public_url}/ticker/price"
-            resp = requests.get(url, timeout=3)
+            resp = self.session.get(url, timeout=8)
             if resp.status_code == 200:
-                self._cached_ticker_prices = {item["symbol"]: float(item["price"]) for item in resp.json() if "symbol" in item and "price" in item}
-                self._last_ticker_fetch = now
-                return self._cached_ticker_prices
+                data = resp.json()
+                if isinstance(data, list) and len(data) > 0:
+                    new_prices = {item["symbol"]: float(item["price"]) for item in data if "symbol" in item and "price" in item}
+                    if new_prices:
+                        self._cached_ticker_prices = new_prices
+                        self._last_ticker_fetch = now
+                        return self._cached_ticker_prices
         except Exception:
             pass
         return self._cached_ticker_prices
@@ -136,12 +141,16 @@ class BinanceAdapter:
         if not self.is_configured:
             return []
         try:
-            headers = {"X-MBX-APIKEY": self.api_key}
+            headers = {
+                "X-MBX-APIKEY": self.api_key,
+                "Content-Type": "application/x-www-form-urlencoded"
+            }
             signed_query = self._sign_query({})
             url = f"https://api.binance.com/sapi/v1/asset/get-funding-asset?{signed_query}"
-            resp = requests.post(url, headers=headers, timeout=4)
+            resp = self.session.post(url, headers=headers, timeout=6)
             if resp.status_code == 200:
-                return resp.json()
+                data = resp.json()
+                return data if isinstance(data, list) else []
         except Exception:
             pass
         return []
@@ -153,13 +162,65 @@ class BinanceAdapter:
             headers = {"X-MBX-APIKEY": self.api_key}
             signed_query = self._sign_query({})
             url = f"https://api.binance.com/sapi/v1/simple-earn/flexible/position?{signed_query}"
-            resp = requests.get(url, headers=headers, timeout=4)
+            resp = self.session.get(url, headers=headers, timeout=6)
             if resp.status_code == 200:
                 data = resp.json()
                 return data.get("rows", []) if isinstance(data, dict) else []
         except Exception:
             pass
         return []
+
+    def get_user_assets_valuation(self, ticker_prices: Dict[str, float]) -> Optional[Dict[str, Any]]:
+        """
+        Consulta oficial a /sapi/v3/asset/getUserAsset con needBtcValuation=True.
+        Proporciona la valoración oficial exacta calculada por Binance para TODOS los activos
+        de la cuenta (Spot, Fondos, Earn, etc.), eliminando cualquier discrepancia con la app.
+        """
+        if not self.is_configured or self.testnet:
+            return None
+        try:
+            headers = {
+                "X-MBX-APIKEY": self.api_key,
+                "Content-Type": "application/x-www-form-urlencoded"
+            }
+            signed_body = self._sign_query({"needBtcValuation": "true"})
+            url = "https://api.binance.com/sapi/v3/asset/getUserAsset"
+            resp = self.session.post(url, headers=headers, data=signed_body, timeout=6)
+            if resp.status_code == 200:
+                raw_items = resp.json()
+                if isinstance(raw_items, list) and len(raw_items) > 0:
+                    balances = {}
+                    usdt_free = 0.0
+                    total_stable_free = 0.0
+                    total_btc_val = 0.0
+                    for item in raw_items:
+                        asset = item.get("asset", "").strip()
+                        free = float(item.get("free", 0.0))
+                        locked = float(item.get("locked", 0.0))
+                        freeze = float(item.get("freeze", 0.0))
+                        withdrawing = float(item.get("withdrawing", 0.0))
+                        total = free + locked + freeze + withdrawing
+                        btc_val = float(item.get("btcValuation", 0.0))
+                        total_btc_val += btc_val
+                        if total > 0 and asset:
+                            balances[asset] = {"free": free, "locked": locked, "total": total}
+                        if asset in ["USDT", "USDC", "FDUSD", "BUSD", "DAI", "TUSD"]:
+                            total_stable_free += free
+                        if asset == "USDT":
+                            usdt_free = free
+                    btc_usd = ticker_prices.get("BTCUSDT", 0.0)
+                    total_equity_usd = round(total_btc_val * btc_usd, 2) if btc_usd > 0 else 0.0
+                    if total_equity_usd > 0:
+                        return {
+                            "balances": balances,
+                            "usdt_free": usdt_free,
+                            "total_stable_free": total_stable_free,
+                            "total_spot_equity": total_equity_usd,
+                            "raw_balances": raw_items
+                        }
+        except Exception:
+            pass
+        return None
 
     def get_account_balances(self) -> Dict[str, Any]:
         """
@@ -168,17 +229,21 @@ class BinanceAdapter:
         if not self.is_configured:
             return {"authenticated": False, "balances": {}, "usdt_free": 0.0, "error": "Llaves no configuradas"}
         try:
+            ticker_prices = self.get_all_ticker_prices()
+
+            # Intentar primero la valoración integral de activos de Binance vía SAPI
+            official_eval = self.get_user_assets_valuation(ticker_prices)
+
             headers = {"X-MBX-APIKEY": self.api_key}
             signed_query = self._sign_query({})
             url = f"{self.base_url}/account?{signed_query}"
-            resp = requests.get(url, headers=headers, timeout=5)
+            resp = self.session.get(url, headers=headers, timeout=6)
             if resp.status_code == 200:
                 data = resp.json()
                 balances = {}
                 usdt_free = 0.0
                 total_stable_free = 0.0
                 total_spot_equity = 0.0
-                ticker_prices = self.get_all_ticker_prices()
 
                 # 1. Saldos de la Billetera Spot
                 for b in data.get("balances", []):
@@ -189,7 +254,7 @@ class BinanceAdapter:
                     if total > 0 and asset_name:
                         balances[asset_name] = {"free": free, "locked": locked, "total": total}
                         total_spot_equity += self._convert_asset_to_usdt(asset_name, total, ticker_prices)
-                    if asset_name in ["USDT", "USDC", "FDUSD", "BUSD"]:
+                    if asset_name in ["USDT", "USDC", "FDUSD", "BUSD", "DAI", "TUSD"]:
                         total_stable_free += free
                     if asset_name == "USDT":
                         usdt_free = free
@@ -219,14 +284,33 @@ class BinanceAdapter:
                 except Exception:
                     pass
 
+                # Si la valoración oficial por SAPI estuvo disponible y es mayor, usar su equity exacto
+                final_equity = round(total_spot_equity, 2)
+                if official_eval and official_eval.get("total_spot_equity", 0.0) > 0:
+                    final_equity = max(final_equity, official_eval["total_spot_equity"])
+                    # Fusionar saldos positivos que puedan estar en fondos o earn
+                    for k, v in official_eval.get("balances", {}).items():
+                        if k not in balances:
+                            balances[k] = v
+
                 return {
                     "authenticated": True,
                     "can_trade": data.get("canTrade", False),
                     "balances": balances,
                     "usdt_free": usdt_free,
                     "total_stable_free": total_stable_free,
-                    "total_spot_equity": round(total_spot_equity, 2),
+                    "total_spot_equity": final_equity,
                     "raw_balances": data.get("balances", [])
+                }
+            elif official_eval:
+                return {
+                    "authenticated": True,
+                    "can_trade": True,
+                    "balances": official_eval.get("balances", {}),
+                    "usdt_free": official_eval.get("usdt_free", 0.0),
+                    "total_stable_free": official_eval.get("total_stable_free", 0.0),
+                    "total_spot_equity": official_eval.get("total_spot_equity", 0.0),
+                    "raw_balances": official_eval.get("raw_balances", [])
                 }
             else:
                 return {"authenticated": False, "error": f"Error Binance ({resp.status_code}): {resp.text}"}

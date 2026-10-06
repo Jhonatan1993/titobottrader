@@ -11,12 +11,12 @@ echo "=========================================================="
 # 1. Asegurar que existe la carpeta en el VPS y sincronizar archivos
 echo "📦 Transfiriendo código del bot al VPS..."
 ssh root@$VPS_IP "mkdir -p /root/titobot"
-rsync -avz --exclude='.git' --exclude='venv' --exclude='__pycache__' --exclude='.pytest_cache' --exclude='.agents' ./ root@$VPS_IP:/root/titobot/
+rsync -avz --exclude='venv' --exclude='__pycache__' --exclude='.pytest_cache' --exclude='.agents' ./ root@$VPS_IP:/root/titobot/
 
-# 2. Ejecutar el script de aprovisionamiento en el VPS
-echo "⚙️ Configurando dependencias y servicio 24/7 en el VPS..."
-ssh root@$VPS_IP "bash /root/titobot/setup_vps.sh"
+# 2. Reiniciar servicio en el VPS
+echo "🔄 Reiniciando servicio titobot en el VPS..."
+ssh root@$VPS_IP "systemctl restart titobot && sleep 2 && systemctl status titobot --no-pager"
 
 echo ""
-echo "🎉 ¡Todo listo! Tu bot está operando en la nube."
-echo "Ingresa en tu navegador a: http://$VPS_IP:5055"
+echo "🎉 ¡Todo listo! Tu bot está operando en la nube con las correcciones activas."
+echo "Ingresa en tu navegador a: https://titobottrader.tech"

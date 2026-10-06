@@ -188,7 +188,7 @@ class RealTimeTradingEngine:
             return
         usdt_val = float(acc.get("usdt_free", 0.0))
         total_stable = float(acc.get("total_stable_free", 0.0))
-        real_cash = usdt_val if usdt_val > 0 else total_stable
+        real_cash = total_stable if total_stable > 0 else usdt_val
         
         # Sincronizar efectivo real directamente a la cartera de Binance
         self.broker_wallets["BINANCE"]["cash"] = round(real_cash, 2)
@@ -266,19 +266,28 @@ class RealTimeTradingEngine:
         for sym in to_remove:
             del self.open_positions[sym]
 
-        # Recalcular capital base del broker si estamos en MODO REAL
+        # Recalcular capital base y mantener Bóveda intacta si estamos en MODO REAL
         if is_live:
             # En modo real, el capital total en custodia es cash real + valor de criptos reales (o total_spot_equity)
             spot_eq = float(acc.get("total_spot_equity", 0.0))
             total_real_equity = spot_eq if spot_eq > 0 else round(real_cash + total_crypto_invested, 2)
             if total_real_equity > 0:
                 self.broker_wallets["BINANCE"]["total_spot_equity"] = total_real_equity
-                self.broker_wallets["BINANCE"]["profit_vault"] = 0.0
-                self.broker_config["binance_profit_vault"] = 0.0
-                self.broker_wallets["BINANCE"]["initial_balance"] = total_real_equity
-                self.broker_config["binance_initial_balance"] = total_real_equity
+                
+                # PRESERVACIÓN ABSOLUTA DE LA BÓVEDA DE GANANCIAS (INTOCABLE):
+                # La bóveda NUNCA se sobreescribe con 0.0 durante sincronizaciones automáticas.
+                vault_cfg = float(self.broker_config.get("binance_profit_vault", 0.0))
+                current_vault = max(float(self.broker_wallets["BINANCE"].get("profit_vault", 0.0)), vault_cfg)
+                self.broker_wallets["BINANCE"]["profit_vault"] = current_vault
+                self.broker_config["binance_profit_vault"] = current_vault
+
+                # Conservación de Capital Canónica: Total Equity = Base Operativa + Bóveda
+                # Por ende: Base Operativa = max(0.0, Total Equity - Bóveda)
+                base_capital = max(0.0, round(total_real_equity - current_vault, 2))
+                self.broker_wallets["BINANCE"]["initial_balance"] = base_capital
+                self.broker_config["binance_initial_balance"] = base_capital
                 if self.active_broker == "BINANCE":
-                    self.initial_balance = total_real_equity
+                    self.initial_balance = base_capital
 
 
     def set_execution_environment(self, env: str, custom_balance: Optional[float] = None, broker: Optional[str] = None) -> Dict[str, Any]:
@@ -389,8 +398,8 @@ class RealTimeTradingEngine:
                 self.broker_wallets["BINANCE"]["environment"] = "LIVE_REAL"
                 self.broker_config["binance_environment"] = "LIVE_REAL"
                 self.broker_config["execution_environment"] = "LIVE_REAL"
-                self.broker_wallets["BINANCE"]["profit_vault"] = 0.0
-                self.broker_config["binance_profit_vault"] = 0.0
+                saved_vault = float(self.broker_config.get("binance_profit_vault", self.broker_wallets["BINANCE"].get("profit_vault", 0.0)))
+                self.broker_wallets["BINANCE"]["profit_vault"] = saved_vault
 
                 # LIMPIEZA DE POSICIONES CRIPTO PREVIAS DE MODO PAPER:
                 # Al conmutar a MODO REAL, eliminamos las posiciones simuladas fantasmas,
@@ -1066,7 +1075,20 @@ class RealTimeTradingEngine:
             pair = asset.get("binance_pair", f"{symbol}USDT")
             real_res = self.feed.binance.create_market_order(pair, "SELL", quantity, force_live=True)
             if real_res.get("success"):
+                order_data = real_res.get("data", {})
+                if order_data.get("cummulativeQuoteQty"):
+                    real_exit_val = round(float(order_data["cummulativeQuoteQty"]), 2)
+                    if real_exit_val > 0:
+                        diff = real_exit_val - exit_value
+                        exit_value = real_exit_val
+                        pnl = round(exit_value - invested, 2)
+                        pnl_pct = round(((exit_price - entry_p) / entry_p) * 100, 2) if entry_p > 0 else 0.0
+                        if pnl > 0 and diff != 0:
+                            wallet["profit_vault"] = round(wallet.get("profit_vault", 0.0) + diff, 2)
+                            self.broker_config["binance_profit_vault"] = wallet["profit_vault"]
+                            save_broker_config(self.broker_config)
                 self.agent._add_thought(f"🔥 VENTA REAL BINANCE: Vendidos {quantity} {symbol} en Spot.", "WARNING", symbol, "⚡")
+                self._sync_binance_wallet_positions(self.feed.binance.get_account_balances())
             else:
                 err_msg = str(real_res.get('error', ''))
                 if "-2010" in err_msg or "Sin saldo disponible" in err_msg or "insufficient balance" in err_msg.lower():
@@ -1199,12 +1221,8 @@ class RealTimeTradingEngine:
         completed_trades = self.journal.get_trades(35, broker=active_b)
         
         vault_val = round(wallet.get("profit_vault", 0.0), 2)
-        if wallet.get("environment") == "LIVE_REAL" and active_b == "BINANCE":
-            total_profit = round(unrealized_pnl, 2)
-            total_profit_pct = round((unrealized_pnl / initial_bal) * 100, 2) if initial_bal > 0 else 0.0
-        else:
-            total_profit = round(vault_val + unrealized_pnl, 2)
-            total_profit_pct = round((total_profit / initial_bal) * 100, 2) if initial_bal > 0 else 0.0
+        total_profit = round(vault_val + unrealized_pnl, 2)
+        total_profit_pct = round((total_profit / initial_bal) * 100, 2) if initial_bal > 0 else 0.0
 
         if self.is_running:
             status_text = "OPERANDO EN VIVO (24/7)"

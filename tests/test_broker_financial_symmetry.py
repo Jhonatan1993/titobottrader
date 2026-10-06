@@ -102,3 +102,61 @@ def test_new_broker_creation_and_symmetry():
         del engine.broker_config["kraken_initial_balance"]
     from config.broker_config import save_broker_config
     save_broker_config(engine.broker_config)
+
+def test_binance_live_real_vault_preservation_and_exact_sync():
+    """
+    Verifica que en MODO REAL de Binance:
+    1. Las sincronizaciones continuas de Binance NO destruyan ni reseteen la Bóveda de Ganancias a 0.0.
+    2. El Capital Base Operativo se calcule correctamente como: Total Equity - Bóveda.
+    3. Total Equity sea exactamente igual al saldo real reportado por Binance (ej. 14.87 USD).
+    4. La Bóveda de Ganancias (ej. 0.11 USD) permanezca blindada e intocable.
+    """
+    engine = RealTimeTradingEngine(execution_environment="PAPER")
+    engine.set_active_broker("BINANCE")
+    engine.broker_wallets["BINANCE"]["environment"] = "LIVE_REAL"
+    engine.broker_wallets["BINANCE"]["profit_vault"] = 0.11
+    engine.broker_config["binance_profit_vault"] = 0.11
+
+    # Simular datos reales de Binance (como los del usuario: 14.87 USD total en Binance, 13.91 USDT disponible)
+    acc_data = {
+        "authenticated": True,
+        "can_trade": True,
+        "usdt_free": 13.91,
+        "total_stable_free": 13.91,
+        "total_spot_equity": 14.87,
+        "balances": {
+            "USDT": {"free": 13.91, "locked": 0.0, "total": 13.91},
+            "BTC": {"free": 0.00001, "locked": 0.0, "total": 0.00001}
+        }
+    }
+
+    # Ejecutar sincronización (la que antes reseteaba la bóveda a 0.0 cada 3 segundos)
+    engine._sync_binance_wallet_positions(acc_data)
+
+    # 1. La Bóveda DEBE mantenerse intacta en 0.11 USD
+    assert engine.broker_wallets["BINANCE"]["profit_vault"] == 0.11
+    assert engine.broker_config["binance_profit_vault"] == 0.11
+
+    # 2. El Capital Base debe ser exactamente: 14.87 - 0.11 = 14.76 USD
+    assert engine.broker_wallets["BINANCE"]["initial_balance"] == 14.76
+    assert engine.initial_balance == 14.76
+
+    # 3. El Capital Total (NAV) debe ser 14.87 USD
+    assert engine.get_broker_equity("BINANCE") == 14.87
+
+    # 4. Estado financiero exportado a la interfaz
+    state = engine.get_state()
+    fin = state["financial_summary"]
+    assert fin["total_equity"] == 14.87
+    assert fin["operating_capital_base"] == 14.76
+    assert fin["profit_vault"] == 0.11
+    # Base + Bóveda = Total Equity
+    assert round(fin["operating_capital_base"] + fin["profit_vault"], 2) == fin["total_equity"]
+
+    # 5. Probar transferencia de la Bóveda al Capital Base
+    res = engine.transfer_vault_to_capital("BINANCE", 0.11)
+    assert res["success"] is True
+    assert res["remaining_vault"] == 0.0
+    assert res["new_initial_balance"] == 14.87
+    assert engine.get_broker_equity("BINANCE") == 14.87
+

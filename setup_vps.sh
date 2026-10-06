@@ -22,12 +22,11 @@ ufw --force enable
 # 3. Descargar o actualizar desde GitHub
 echo "📥 [3/7] Obteniendo el código desde GitHub..."
 INSTALL_DIR="/root/titobot"
-if [ ! -d "$INSTALL_DIR/.git" ]; then
-    rm -rf "$INSTALL_DIR"
+if [ ! -d "$INSTALL_DIR" ]; then
     git clone https://github.com/Jhonatan1993/titobottrader.git "$INSTALL_DIR"
-else
+elif [ -d "$INSTALL_DIR/.git" ]; then
     cd "$INSTALL_DIR"
-    git pull origin main
+    git pull origin main || true
 fi
 
 # 4. Crear entorno virtual de Python
