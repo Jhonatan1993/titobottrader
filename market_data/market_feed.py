@@ -6,6 +6,7 @@ from typing import Dict, List, Any, Optional
 from config.broker_config import load_broker_config
 from execution.alpaca_adapter import AlpacaAdapter
 from execution.binance_adapter import BinanceAdapter
+from execution.iqoption_adapter import IQOptionAdapter
 
 # Catálogo Completo: Wall Street TradFi (Acciones de EE.UU. + ETFs en Binance) + Top Criptomonedas
 AVAILABLE_ASSETS = [
@@ -263,6 +264,37 @@ AVAILABLE_ASSETS = [
         "base_price": 4.60,
         "volatility": 0.0150,
         "trend_bias": 0.0007
+    },
+    # === FOREX & DERIVADOS (IQ Option / Multi-Broker) ===
+    {
+        "symbol": "EURUSD",
+        "name": "EUR / USD",
+        "category": "FOREX",
+        "type": "Euro / Dólar Estadounidense",
+        "icon": "💶",
+        "base_price": 1.0850,
+        "volatility": 0.0035,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "GBPUSD",
+        "name": "GBP / USD",
+        "category": "FOREX",
+        "type": "Libra Esterlina / Dólar",
+        "icon": "💷",
+        "base_price": 1.2950,
+        "volatility": 0.0040,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "USDJPY",
+        "name": "USD / JPY",
+        "category": "FOREX",
+        "type": "Dólar / Yen Japonés",
+        "icon": "💴",
+        "base_price": 152.30,
+        "volatility": 0.0045,
+        "trend_bias": 0.0001
     }
 ]
 
@@ -300,6 +332,11 @@ class MultiAssetMarketFeed:
             api_key=self.broker_config.get("binance", {}).get("api_key", ""),
             secret_key=self.broker_config.get("binance", {}).get("secret_key", "")
         )
+        self.iqoption = IQOptionAdapter(
+            email=self.broker_config.get("iqoption", {}).get("email", ""),
+            password=self.broker_config.get("iqoption", {}).get("password", ""),
+            environment=self.broker_config.get("iqoption_environment", "PAPER")
+        )
         self.last_live_fetch = 0.0
         self.live_cache: Dict[str, float] = {}
         self._initialize_assets()
@@ -323,6 +360,11 @@ class MultiAssetMarketFeed:
         self.binance = BinanceAdapter(
             api_key=self.broker_config.get("binance", {}).get("api_key", ""),
             secret_key=self.broker_config.get("binance", {}).get("secret_key", "")
+        )
+        self.iqoption = IQOptionAdapter(
+            email=self.broker_config.get("iqoption", {}).get("email", ""),
+            password=self.broker_config.get("iqoption", {}).get("password", ""),
+            environment=self.broker_config.get("iqoption_environment", "PAPER")
         )
 
     def _initialize_assets(self):

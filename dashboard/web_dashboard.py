@@ -352,11 +352,14 @@ def get_broker_keys():
     cfg = ENGINE.broker_config
     alpaca = cfg.get("alpaca", {})
     binance = cfg.get("binance", {})
+    iqoption = cfg.get("iqoption", {})
     return jsonify({
         "alpaca_key": alpaca.get("api_key", ""),
         "alpaca_secret": alpaca.get("secret_key", ""),
         "binance_key": binance.get("api_key", ""),
-        "binance_secret": binance.get("secret_key", "")
+        "binance_secret": binance.get("secret_key", ""),
+        "iqoption_email": iqoption.get("email", ""),
+        "iqoption_password": iqoption.get("password", "")
     })
 
 @app.route("/api/control/set-broker-keys", methods=["POST"])
@@ -366,8 +369,10 @@ def set_broker_keys():
     alpaca_secret = data.get("alpaca_secret", "").strip()
     binance_key = data.get("binance_key", "").strip()
     binance_secret = data.get("binance_secret", "").strip()
+    iqoption_email = data.get("iqoption_email", "").strip()
+    iqoption_password = data.get("iqoption_password", "").strip()
     
-    ENGINE.update_broker_keys(alpaca_key, alpaca_secret, binance_key, binance_secret)
+    ENGINE.update_broker_keys(alpaca_key, alpaca_secret, binance_key, binance_secret, iqoption_email, iqoption_password)
     return jsonify({"success": True})
 
 @app.route("/api/control/add-broker", methods=["POST"])

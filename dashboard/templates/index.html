@@ -2342,6 +2342,27 @@
                 </div>
             </div>
 
+            <!-- Sección IQ Option (Forex / CFDs) -->
+            <div id="modal-iqoption-section" style="display:none; border-top:1px solid var(--border-subtle); padding-top:12px;">
+                <div style="background:rgba(16,185,129,0.05); border:1px solid rgba(16,185,129,0.2); border-radius:8px; padding:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <span style="font-size:12px; font-weight:700; color:var(--emerald-win); display:flex; align-items:center; gap:6px;">📈 IQ Option (Forex / Opciones)</span>
+                        <span class="mono" style="font-size:10px; color:var(--emerald-win);" id="modal-iqoption-status-badge">CONECTADO</span>
+                    </div>
+                    <p id="modal-iqoption-desc" style="font-size:11px; color:#94A3B8; margin-bottom:10px; line-height:1.4;">
+                        Configura tus credenciales para operar en <strong>Modo Práctica (Demo $10,000 USD)</strong> o en <strong>Modo Dinero Real</strong> en IQ Option.
+                    </p>
+                    <div class="form-group" style="margin-bottom:8px;">
+                        <label style="font-size:10.5px;">Correo Electrónico (Email de tu cuenta)</label>
+                        <input type="email" id="modal-iqoption-email" class="form-control" placeholder="tu_correo@gmail.com">
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label style="font-size:10.5px;">Contraseña de IQ Option</label>
+                        <input type="password" id="modal-iqoption-password" class="form-control" placeholder="Tu contraseña de IQ Option">
+                    </div>
+                </div>
+            </div>
+
             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px;">
                 <button class="btn-action btn-ghost" onclick="resetAllCooldowns()" style="font-size:10.5px;">
                     🔄 Reset Cooldowns
@@ -4032,8 +4053,10 @@
             // Mostrar/Ocultar secciones según el broker activo
             const alpacaSec = document.getElementById('modal-alpaca-section');
             const binanceSec = document.getElementById('modal-binance-section');
+            const iqoptionSec = document.getElementById('modal-iqoption-section');
             if (alpacaSec) alpacaSec.style.display = (activeBroker === 'ALPACA') ? 'block' : 'none';
             if (binanceSec) binanceSec.style.display = (activeBroker === 'BINANCE') ? 'block' : 'none';
+            if (iqoptionSec) iqoptionSec.style.display = (activeBroker === 'IQOPTION') ? 'block' : 'none';
 
             // Generar opciones del dropdown contextual
             const optionsMenu = document.getElementById('custom-env-options');
@@ -4045,6 +4068,15 @@
                         </div>
                         <div class="custom-option ${currentEnv === 'LIVE_REAL' ? 'selected' : ''}" data-value="LIVE_REAL" onclick="selectEnvOption('LIVE_REAL', '🔥 Modo Dinero Real (Alpaca Live Trading - Wall Street)')">
                             <span>🔥 Modo Dinero Real (Alpaca Live Trading - Wall Street)</span>
+                        </div>
+                    `;
+                } else if (activeBroker === 'IQOPTION') {
+                    optionsMenu.innerHTML = `
+                        <div class="custom-option ${currentEnv === 'PAPER' ? 'selected' : ''}" data-value="PAPER" onclick="selectEnvOption('PAPER', '🛡️ Modo Práctica / Demo (IQ Option - $10,000 USD)')">
+                            <span>🛡️ Modo Práctica / Demo (IQ Option - $10,000 USD)</span>
+                        </div>
+                        <div class="custom-option ${currentEnv === 'LIVE_REAL' ? 'selected' : ''}" data-value="LIVE_REAL" onclick="selectEnvOption('LIVE_REAL', '🔥 Modo Dinero Real (IQ Option Cuenta Real)')">
+                            <span>🔥 Modo Dinero Real (IQ Option Cuenta Real)</span>
                         </div>
                     `;
                 } else {
@@ -4059,9 +4091,14 @@
                 }
             }
 
-            const labelText = (activeBroker === 'ALPACA')
-                ? (currentEnv === 'LIVE_REAL' ? '🔥 Modo Dinero Real (Alpaca Live Trading - Wall Street)' : '🛡️ Modo Paper Sandbox (Alpaca Simulado - $100k)')
-                : (currentEnv === 'LIVE_REAL' ? '🔥 Modo Dinero Real (Binance Spot Real)' : '🛡️ Modo Práctica Seguro (Binance Simulado)');
+            let labelText = '🛡️ Modo Práctica Seguro';
+            if (activeBroker === 'ALPACA') {
+                labelText = (currentEnv === 'LIVE_REAL') ? '🔥 Modo Dinero Real (Alpaca Live Trading - Wall Street)' : '🛡️ Modo Paper Sandbox (Alpaca Simulado - $100k)';
+            } else if (activeBroker === 'IQOPTION') {
+                labelText = (currentEnv === 'LIVE_REAL') ? '🔥 Modo Dinero Real (IQ Option Cuenta Real)' : '🛡️ Modo Práctica / Demo (IQ Option - $10,000 USD)';
+            } else {
+                labelText = (currentEnv === 'LIVE_REAL') ? '🔥 Modo Dinero Real (Binance Spot Real)' : '🛡️ Modo Práctica Seguro (Binance Simulado)';
+            }
 
             selectEnvOption(currentEnv, labelText);
 
@@ -4086,6 +4123,12 @@
                     }
                     if (keys.binance_secret && document.getElementById('modal-binance-secret')) {
                         document.getElementById('modal-binance-secret').value = keys.binance_secret;
+                    }
+                    if (keys.iqoption_email && document.getElementById('modal-iqoption-email')) {
+                        document.getElementById('modal-iqoption-email').value = keys.iqoption_email;
+                    }
+                    if (keys.iqoption_password && document.getElementById('modal-iqoption-password')) {
+                        document.getElementById('modal-iqoption-password').value = keys.iqoption_password;
                     }
                 }
             } catch (e) {
@@ -4738,6 +4781,30 @@
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ environment: env, broker: 'ALPACA' })
+                    });
+                    const data = await res.json();
+                    if (!data.success && data.error) {
+                        alert(data.error);
+                    } else {
+                        closeModals();
+                        await fetchState();
+                    }
+                } else if (activeBroker === 'IQOPTION') {
+                    const iqoption_email = document.getElementById('modal-iqoption-email') ? document.getElementById('modal-iqoption-email').value.trim() : "";
+                    const iqoption_password = document.getElementById('modal-iqoption-password') ? document.getElementById('modal-iqoption-password').value.trim() : "";
+
+                    if (iqoption_email || iqoption_password) {
+                        await fetch('/api/control/set-broker-keys', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ iqoption_email, iqoption_password })
+                        });
+                    }
+
+                    const res = await fetch('/api/control/set-execution-environment', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ environment: env, broker: 'IQOPTION' })
                     });
                     const data = await res.json();
                     if (!data.success && data.error) {

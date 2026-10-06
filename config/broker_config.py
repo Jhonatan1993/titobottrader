@@ -30,6 +30,14 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "base_url": "https://api.binance.com/api/v3",
         "public_url": "https://api.binance.com/api/v3",
         "enabled": True
+    },
+    "iqoption_initial_balance": 10000.0,
+    "iqoption_profit_vault": 0.0,
+    "iqoption_environment": "PAPER",
+    "iqoption": {
+        "email": os.environ.get("IQOPTION_EMAIL", ""),
+        "password": os.environ.get("IQOPTION_PASSWORD", ""),
+        "enabled": False
     }
 }
 

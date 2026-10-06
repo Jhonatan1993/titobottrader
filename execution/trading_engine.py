@@ -67,6 +67,9 @@ class RealTimeTradingEngine:
         # Billeteras y Parámetros Aislados por Broker (Arquitectura Modular Simétrica)
         binance_env = self.broker_config.get("binance_environment", self.broker_config.get("execution_environment", "PAPER"))
         alpaca_env = self.broker_config.get("alpaca_environment", "PAPER")
+        iqoption_env = self.broker_config.get("iqoption_environment", "PAPER")
+        iqoption_paper_init = float(self.broker_config.get("iqoption_initial_balance", 10000.0))
+        iqoption_vault = float(self.broker_config.get("iqoption_profit_vault", 0.0))
 
         self.broker_wallets: Dict[str, Dict[str, Any]] = {
             "BINANCE": {
@@ -100,6 +103,22 @@ class RealTimeTradingEngine:
                 "target_reached": False,
                 "loss_limit_reached": False,
                 "is_running": True
+            },
+            "IQOPTION": {
+                "id": "IQOPTION",
+                "name": "IQ Option",
+                "icon": "📈",
+                "category": "FOREX_CFD",
+                "allowed_categories": ["FOREX", "CFD", "OPTIONS", "CRYPTO", "TRADFI_STOCK"],
+                "environment": iqoption_env,
+                "initial_balance": iqoption_paper_init,
+                "cash": iqoption_paper_init,
+                "profit_vault": iqoption_vault,
+                "target_amount": float(self.broker_config.get("iqoption_profit_target_amount", 5000.0)),
+                "max_loss_amount": float(self.broker_config.get("iqoption_max_loss_amount", 10.0)),
+                "target_reached": False,
+                "loss_limit_reached": False,
+                "is_running": True
             }
         }
 
@@ -124,6 +143,18 @@ class RealTimeTradingEngine:
                     self.broker_wallets["ALPACA"]["initial_balance"] = max(0.0, round(total_eq - alp_vault, 2))
         else:
             self.feed.alpaca.base_url = "https://paper-api.alpaca.markets"
+
+        # Sincronización con IQ Option según entorno (Paper vs Real)
+        if hasattr(self.feed, "iqoption"):
+            if iqoption_env == "LIVE_REAL" and self.feed.iqoption.is_configured:
+                iq_conn = self.feed.iqoption.connect()
+                if iq_conn.get("connected"):
+                    self.broker_wallets["IQOPTION"]["cash"] = float(iq_conn.get("balance", iqoption_paper_init))
+                    iq_v = float(self.broker_wallets["IQOPTION"].get("profit_vault", 0.0))
+                    total_iq_eq = float(iq_conn.get("balance", iqoption_paper_init))
+                    self.broker_wallets["IQOPTION"]["initial_balance"] = max(0.0, round(total_iq_eq - iq_v, 2))
+            else:
+                self.feed.iqoption.set_environment("PAPER")
 
         # Si se especificó un saldo inicial explícito al instanciar (ej. en tests), respetarlo en el broker activo
         if initial_balance is not None:
@@ -387,6 +418,60 @@ class RealTimeTradingEngine:
                 self.agent._add_thought(f"🛡️ MODO PAPER ACTIVADO en Alpaca Wall Street. Saldo: ${self.broker_wallets['ALPACA']['cash']:,.2f} USD.", "INFO", icon="🛡️")
                 return {"success": True, "broker": "ALPACA", "environment": "PAPER", "equity": self.get_broker_equity("ALPACA")}
 
+        elif target_b == "IQOPTION":
+            if env == "LIVE_REAL":
+                if not hasattr(self.feed, "iqoption") or not self.feed.iqoption.is_configured:
+                    return {
+                        "success": False,
+                        "error": "Credenciales de IQ Option no configuradas. Por favor ingresa tu Correo Electrónico y Contraseña de IQ Option en la configuración."
+                    }
+                conn = self.feed.iqoption.connect()
+                if not conn.get("connected"):
+                    return {
+                        "success": False,
+                        "error": f"Error conectando a IQ Option: {conn.get('error', 'Credenciales inválidas')}. Se mantiene en Modo Demo/Paper."
+                    }
+                self.broker_wallets["IQOPTION"]["environment"] = "LIVE_REAL"
+                self.broker_config["iqoption_environment"] = "LIVE_REAL"
+                self.feed.iqoption.set_environment("LIVE_REAL")
+                real_bal = float(conn.get("balance", 0.0))
+                self.broker_wallets["IQOPTION"]["cash"] = real_bal
+                self.broker_wallets["IQOPTION"]["initial_balance"] = real_bal
+
+                if self.active_broker == "IQOPTION":
+                    self.execution_environment = "LIVE_REAL"
+                    self.cash_balance = self.broker_wallets["IQOPTION"]["cash"]
+                    self.initial_balance = self.broker_wallets["IQOPTION"]["initial_balance"]
+                save_broker_config(self.broker_config)
+                self.agent._add_thought(f"🔥 MODO DINERO REAL ACTIVADO en IQ Option. Saldo real en cuenta: ${real_bal:,.2f} USD.", "WARNING", icon="📈")
+                return {"success": True, "broker": "IQOPTION", "environment": "LIVE_REAL", "equity": real_bal}
+            else:
+                self.broker_wallets["IQOPTION"]["environment"] = "PAPER"
+                self.broker_config["iqoption_environment"] = "PAPER"
+                if hasattr(self.feed, "iqoption"):
+                    self.feed.iqoption.set_environment("PAPER")
+                if custom_balance is not None and float(custom_balance) > 0:
+                    bal_val = float(custom_balance)
+                    self.broker_wallets["IQOPTION"]["cash"] = bal_val
+                    self.broker_wallets["IQOPTION"]["initial_balance"] = bal_val
+                    self.broker_config["iqoption_initial_balance"] = bal_val
+                else:
+                    if hasattr(self.feed, "iqoption") and self.feed.iqoption.connected and self.feed.iqoption.practice_balance_id:
+                        self.feed.iqoption.change_balance(self.feed.iqoption.practice_balance_id)
+                        bal_val = float(self.feed.iqoption.balance)
+                    else:
+                        bal_val = float(self.broker_config.get("iqoption_initial_balance", 10000.0))
+                    self.broker_wallets["IQOPTION"]["cash"] = bal_val
+                    self.broker_wallets["IQOPTION"]["initial_balance"] = bal_val
+
+                if self.active_broker == "IQOPTION":
+                    self.execution_environment = "PAPER"
+                    self.cash_balance = self.broker_wallets["IQOPTION"]["cash"]
+                    self.initial_balance = self.broker_wallets["IQOPTION"]["initial_balance"]
+                save_broker_config(self.broker_config)
+                self.agent._add_thought(f"🛡️ MODO DEMO / PAPER ACTIVADO en IQ Option. Saldo de práctica: ${self.broker_wallets['IQOPTION']['cash']:,.2f} USD.", "INFO", icon="🛡️")
+                return {"success": True, "broker": "IQOPTION", "environment": "PAPER", "equity": self.broker_wallets["IQOPTION"]["cash"]}
+
         else: # BINANCE o Genérico
             if env == "LIVE_REAL":
                 if not self.feed.binance.is_configured:
@@ -577,7 +662,7 @@ class RealTimeTradingEngine:
                 icon="📡"
             )
 
-    def update_broker_keys(self, alpaca_key: str = "", alpaca_secret: str = "", binance_key: str = "", binance_secret: str = ""):
+    def update_broker_keys(self, alpaca_key: str = "", alpaca_secret: str = "", binance_key: str = "", binance_secret: str = "", iqoption_email: str = "", iqoption_password: str = ""):
         if alpaca_key or alpaca_secret:
             self.broker_config["alpaca"]["api_key"] = alpaca_key
             self.broker_config["alpaca"]["secret_key"] = alpaca_secret
@@ -585,6 +670,14 @@ class RealTimeTradingEngine:
         if binance_key or binance_secret:
             self.broker_config["binance"]["api_key"] = binance_key
             self.broker_config["binance"]["secret_key"] = binance_secret
+        if iqoption_email or iqoption_password:
+            if "iqoption" not in self.broker_config:
+                self.broker_config["iqoption"] = {}
+            if iqoption_email:
+                self.broker_config["iqoption"]["email"] = iqoption_email
+            if iqoption_password:
+                self.broker_config["iqoption"]["password"] = iqoption_password
+            self.broker_config["iqoption"]["enabled"] = bool(self.broker_config["iqoption"].get("email") and self.broker_config["iqoption"].get("password"))
         save_broker_config(self.broker_config)
         self.feed.reload_credentials()
 
@@ -1026,11 +1119,27 @@ class RealTimeTradingEngine:
                         self.cash_balance = wallet["cash"]
                     return
 
+        # Enrutamiento de orden en IQ Option (Paper o Real)
+        if broker_id == "IQOPTION" and hasattr(self.feed, "iqoption"):
+            iq_res = self.feed.iqoption.submit_order(symbol, "buy", actual_investment)
+            if iq_res.get("success"):
+                oid = iq_res.get("order_id", "")
+                position["broker_order_id"] = oid
+                mode_str = "REAL" if is_broker_live else "DEMO/PRACTICE"
+                self.agent._add_thought(f"📈 ORDEN IQ OPTION ({mode_str}): Operación abierta en {symbol} (ID: {oid}).", "INFO", symbol, "⚡")
+            else:
+                self.agent._add_thought(f"⚠️ Aviso orden IQ Option: {iq_res.get('error')}", "WARNING", symbol, "🛑")
+
         self.open_positions[symbol] = position
         if hasattr(self, "risk_manager"):
             self.risk_manager.register_trade_open()
 
-        cat_badge = "🏛️ Alpaca" if broker_id == "ALPACA" else "🪙 Binance"
+        if broker_id == "ALPACA":
+            cat_badge = "🏛️ Alpaca"
+        elif broker_id == "IQOPTION":
+            cat_badge = "📈 IQ Option"
+        else:
+            cat_badge = "🪙 Binance"
         self.agent._add_thought(
             f"🛒 ¡COMPRADO [{cat_badge}]! {quantity} {symbol} ({asset['name']}) por ${actual_investment:,.2f} USD. Kelly: {kelly_pct}% | Meta: ${take_profit:,.2f} | Escudo: ${stop_loss:,.2f}.",
             "TRADE_BUY",
@@ -1134,6 +1243,12 @@ class RealTimeTradingEngine:
                     if broker_id == self.active_broker:
                         self.cash_balance = wallet["cash"]
                     return
+
+        # Enrutamiento de venta / cierre en IQ Option
+        if broker_id == "IQOPTION" and hasattr(self.feed, "iqoption"):
+            iq_res = self.feed.iqoption.submit_order(symbol, "sell", exit_value)
+            if not iq_res.get("success"):
+                self.agent._add_thought(f"ℹ️ Cierre registrado en IQ Option: {iq_res.get('error', 'Completado')}", "INFO", symbol, "📈")
 
         trade_record = {
             "symbol": symbol,
@@ -1272,6 +1387,11 @@ class RealTimeTradingEngine:
 
         alpaca_status = self.feed.alpaca.test_connection() if self.feed.alpaca.is_configured else {"connected": False, "status": "NO CONFIGURADO"}
         binance_status = self.feed.binance.test_connection()
+        iqoption_status = self.feed.iqoption.test_connection() if hasattr(self.feed, 'iqoption') and self.feed.iqoption.is_configured else {
+            "connected": True,
+            "status": "MODO SIMULACIÓN (PAPER)",
+            "mode": "PAPER_SIMULATION"
+        }
         learning_summary = self.agent.learner.get_learning_summary()
 
         brokers_dict = {}
@@ -1284,6 +1404,10 @@ class RealTimeTradingEngine:
                 is_conn = alpaca_status.get("connected", False)
                 status_lbl = "CONECTADO A IEX" if is_conn else "NO CONFIGURADO"
                 cat_tag = "Wall Street TradFi"
+            elif b_id == "IQOPTION":
+                is_conn = iqoption_status.get("connected", True)
+                status_lbl = iqoption_status.get("status", "MODO SIMULACIÓN (PAPER)")
+                cat_tag = "Forex / CFDs"
             else:
                 is_conn = True
                 status_lbl = "CONECTADO"
@@ -1322,7 +1446,8 @@ class RealTimeTradingEngine:
                 "brokers": brokers_dict,
                 "broker_connections": {
                     "alpaca": alpaca_status,
-                    "binance": binance_status
+                    "binance": binance_status,
+                    "iqoption": iqoption_status
                 }
             },
             "financial_summary": {
@@ -1566,7 +1691,15 @@ class RealTimeTradingEngine:
         self.broker_config["custom_brokers"][b] = wallet_entry
         self.broker_config[f"{b.lower()}_initial_balance"] = init_bal
         self.broker_config[f"{b.lower()}_profit_vault"] = 0.0
+        if b == "IQOPTION":
+            self.broker_config["iqoption"] = {
+                "email": api_key,
+                "password": secret_key,
+                "enabled": bool(api_key and secret_key)
+            }
         save_broker_config(self.broker_config)
+        if b == "IQOPTION":
+            self.feed.reload_credentials()
 
         self.agent._add_thought(
             f"🚀 ¡NUEVO BROKER CONECTADO EN VIVO! [{preset['icon']} {preset['name']}]: "

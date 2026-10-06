@@ -56,3 +56,60 @@ def test_trading_engine_forces_paper_mode_on_invalid_credentials():
     assert engine.execution_environment == "PAPER"
     assert engine.feed.binance.live_trading_enabled is False
 
+def test_iqoption_adapter_demo_and_real_modes():
+    from execution.iqoption_adapter import IQOptionAdapter
+    # 1. Modo Simulación / Práctica sin credenciales
+    adapter = IQOptionAdapter(email="", password="", environment="PAPER")
+    conn = adapter.test_connection()
+    assert conn["connected"] is True
+    assert conn["environment"] == "PAPER"
+    assert conn["balance"] == 10000.0
+
+    # 2. Conmutación a PAPER con saldo personalizado
+    res_paper = adapter.set_environment("PAPER")
+    assert res_paper["success"] is True
+    assert adapter.environment == "PAPER"
+
+    # 3. Simulación de orden PAPER
+    order = adapter.submit_order("EURUSD", "buy", 50.0)
+    assert order["success"] is True
+    assert order["environment"] == "PAPER"
+    assert "IQ_PAPER_" in order["order_id"]
+
+def test_iqoption_trading_engine_environment_symmetry(monkeypatch):
+    from execution.trading_engine import RealTimeTradingEngine
+    engine = RealTimeTradingEngine(initial_balance=1000.0, execution_environment="PAPER")
+    
+    # 1. Verificar presencia de wallet IQ Option aislada
+    assert "IQOPTION" in engine.broker_wallets
+    iq_wallet = engine.broker_wallets["IQOPTION"]
+    assert iq_wallet["environment"] == "PAPER"
+    assert iq_wallet["cash"] >= 1000.0
+
+    # 2. Intentar conmutar a LIVE_REAL sin credenciales debe fallar de forma segura
+    res_fail = engine.set_execution_environment("LIVE_REAL", broker="IQOPTION")
+    assert res_fail["success"] is False
+    assert "credenciales" in res_fail["error"].lower()
+
+    # 3. Conectar mock exitoso en IQ Option y conmutar a LIVE_REAL
+    monkeypatch.setattr(engine.feed.iqoption, "is_configured", True)
+    monkeypatch.setattr(engine.feed.iqoption, "connect", lambda: {
+        "connected": True,
+        "authenticated": True,
+        "environment": "LIVE_REAL",
+        "balance": 1542.50,
+        "currency": "USD"
+    })
+    
+    res_real = engine.set_execution_environment("LIVE_REAL", broker="IQOPTION")
+    assert res_real["success"] is True
+    assert res_real["environment"] == "LIVE_REAL"
+    assert engine.broker_wallets["IQOPTION"]["environment"] == "LIVE_REAL"
+    assert engine.broker_wallets["IQOPTION"]["cash"] == 1542.50
+
+    # 4. Conmutar de vuelta a MODO DEMO / PAPER
+    res_paper = engine.set_execution_environment("PAPER", broker="IQOPTION")
+    assert res_paper["success"] is True
+    assert res_paper["environment"] == "PAPER"
+    assert engine.broker_wallets["IQOPTION"]["environment"] == "PAPER"
+
