@@ -359,7 +359,8 @@ def get_broker_keys():
         "binance_key": binance.get("api_key", ""),
         "binance_secret": binance.get("secret_key", ""),
         "iqoption_email": iqoption.get("email", ""),
-        "iqoption_password": iqoption.get("password", "")
+        "iqoption_password": iqoption.get("password", ""),
+        "iqoption_ssid": iqoption.get("ssid", "")
     })
 
 @app.route("/api/control/set-broker-keys", methods=["POST"])
@@ -371,8 +372,9 @@ def set_broker_keys():
     binance_secret = data.get("binance_secret", "").strip()
     iqoption_email = data.get("iqoption_email", "").strip()
     iqoption_password = data.get("iqoption_password", "").strip()
+    iqoption_ssid = data.get("iqoption_ssid", "").strip()
     
-    ENGINE.update_broker_keys(alpaca_key, alpaca_secret, binance_key, binance_secret, iqoption_email, iqoption_password)
+    ENGINE.update_broker_keys(alpaca_key, alpaca_secret, binance_key, binance_secret, iqoption_email, iqoption_password, iqoption_ssid)
     return jsonify({"success": True})
 
 @app.route("/api/control/add-broker", methods=["POST"])

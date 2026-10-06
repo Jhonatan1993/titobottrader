@@ -37,6 +37,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "iqoption": {
         "email": os.environ.get("IQOPTION_EMAIL", ""),
         "password": os.environ.get("IQOPTION_PASSWORD", ""),
+        "ssid": os.environ.get("IQOPTION_SSID", ""),
         "enabled": False
     }
 }

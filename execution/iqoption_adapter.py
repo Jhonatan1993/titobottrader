@@ -9,9 +9,10 @@ class IQOptionAdapter:
     - Modo Dinero Real (LIVE_REAL): Autentica con email y contraseña en los servidores de IQ Option para operar con saldo real.
     - Soporte para consulta de saldos en tiempo real y cambio dinámico entre DEMO y REAL.
     """
-    def __init__(self, email: str = "", password: str = "", environment: str = "PAPER"):
+    def __init__(self, email: str = "", password: str = "", ssid: str = "", environment: str = "PAPER"):
         self.email = email.strip()
         self.password = password.strip()
+        self.ssid: Optional[str] = ssid.strip() or None
         self.environment = environment.upper() # "PAPER" o "LIVE_REAL"
         self.base_url = "https://iqoption.com/api"
         self.session = requests.Session()
@@ -19,9 +20,8 @@ class IQOptionAdapter:
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept": "application/json"
         })
-        self.is_configured = bool(self.email and self.password)
+        self.is_configured = bool(self.ssid or (self.email and self.password))
         self.connected = False
-        self.ssid: Optional[str] = None
         self.practice_balance_id: Optional[int] = None
         self.real_balance_id: Optional[int] = None
         self.active_balance_id: Optional[int] = None
@@ -32,73 +32,36 @@ class IQOptionAdapter:
         self.profile_data: Dict[str, Any] = {}
         self._last_auth_attempt: float = 0.0
 
-    def connect(self) -> Dict[str, Any]:
-        """
-        Inicia sesión en IQ Option vía API oficial (auth.iqoption.com/api/v2/login).
-        """
-        if not self.is_configured:
-            self.connected = False
-            return {
-                "connected": False,
-                "authenticated": False,
-                "error": "Credenciales de IQ Option no configuradas (Ingresa tu email y contraseña en Ajustes)."
-            }
-
+    def _fetch_profile(self) -> Dict[str, Any]:
+        """Consulta perfil y balances vía API oficial usando la sesión de cookies/SSID activa."""
+        if not self.ssid:
+            return {"success": False, "error": "No hay SSID de sesión"}
         try:
-            auth_url = "https://auth.iqoption.com/api/v2/login"
-            payload = {
-                "identifier": self.email,
-                "password": self.password
-            }
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "application/json",
-                "Content-Type": "application/json"
-            }
-            resp = self.session.post(auth_url, json=payload, headers=headers, timeout=10)
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                self.ssid = resp.cookies.get("ssid") or self.session.cookies.get("ssid")
-                if isinstance(data, dict):
-                    if not self.ssid and data.get("ssid"):
-                        self.ssid = data.get("ssid")
-                    elif not self.ssid and isinstance(data.get("data"), dict) and data["data"].get("ssid"):
-                        self.ssid = data["data"].get("ssid")
-
-                if self.ssid:
-                    self.session.cookies.set("ssid", self.ssid, domain=".iqoption.com")
-                    self.session.cookies.set("ssid", self.ssid, domain="iqoption.com")
-
-                self.connected = True
+            self.session.cookies.set("ssid", self.ssid, domain=".iqoption.com")
+            self.session.cookies.set("ssid", self.ssid, domain="iqoption.com")
+            prof_url = f"{self.base_url}/getprofile"
+            prof_resp = self.session.get(prof_url, timeout=12)
+            if prof_resp.status_code == 200:
+                p_data = prof_resp.json()
+                profile = p_data.get("result", {}) if isinstance(p_data, dict) else {}
+                if not profile and isinstance(p_data, dict) and "profile" in p_data:
+                    profile = p_data.get("profile", {})
                 
-                # Fetch user profile and balances
-                prof_url = f"{self.base_url}/getprofile"
-                try:
-                    prof_resp = self.session.get(prof_url, timeout=8)
-                    if prof_resp.status_code == 200:
-                        p_data = prof_resp.json()
-                        profile = p_data.get("result", {}) if isinstance(p_data, dict) else {}
-                        if not profile and isinstance(p_data, dict) and "profile" in p_data:
-                            profile = p_data.get("profile", {})
-                        
-                        self.profile_data = profile
-                        self.currency = profile.get("currency", "USD")
-                        
-                        balances = profile.get("balances", [])
-                        for b in balances:
-                            b_type = b.get("type")
-                            b_id = b.get("id")
-                            amt = float(b.get("amount", 0.0))
-                            # type 1 = Real, type 4 = Practice (Demo)
-                            if b_type == 1:
-                                self.real_balance_id = b_id
-                                self.real_amount = amt
-                            elif b_type == 4:
-                                self.practice_balance_id = b_id
-                                self.practice_amount = amt
-                except Exception:
-                    pass
+                self.profile_data = profile
+                self.currency = profile.get("currency", "USD")
+                
+                balances = profile.get("balances", [])
+                for b in balances:
+                    b_type = b.get("type")
+                    b_id = b.get("id")
+                    amt = float(b.get("amount", 0.0))
+                    # type 1 = Real, type 4 = Practice (Demo)
+                    if b_type == 1:
+                        self.real_balance_id = b_id
+                        self.real_amount = amt
+                    elif b_type == 4:
+                        self.practice_balance_id = b_id
+                        self.practice_amount = amt
 
                 if self.environment == "LIVE_REAL":
                     self.balance = self.real_amount
@@ -111,6 +74,32 @@ class IQOptionAdapter:
                     if self.practice_balance_id:
                         self.change_balance(self.practice_balance_id)
 
+                return {"success": True, "profile": profile}
+            elif prof_resp.status_code == 401:
+                return {"success": False, "error": "Token SSID inválido o expirado. Inicia sesión en iqoption.com y actualiza tu SSID en Ajustes."}
+            else:
+                return {"success": False, "error": f"Error servidor IQ Option ({prof_resp.status_code})"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def connect(self) -> Dict[str, Any]:
+        """
+        Inicia sesión en IQ Option vía Token SSID directo o API oficial (auth.iqoption.com/api/v2/login).
+        """
+        if not self.is_configured:
+            self.connected = False
+            return {
+                "connected": False,
+                "authenticated": False,
+                "error": "Credenciales de IQ Option no configuradas (Ingresa tu Token SSID o email y contraseña en Ajustes)."
+            }
+
+        # 1. Autenticación directa por SSID (Bypassea cualquier bloqueo de IP de centros de datos VPS)
+        if self.ssid:
+            prof_res = self._fetch_profile()
+            if prof_res.get("success"):
+                self.connected = True
+                user_label = self.profile_data.get("name") or self.profile_data.get("email") or self.email or "Usuario Conectado"
                 return {
                     "connected": True,
                     "authenticated": True,
@@ -119,30 +108,107 @@ class IQOptionAdapter:
                     "practice_balance": self.practice_amount,
                     "real_balance": self.real_amount,
                     "currency": self.currency,
-                    "name": self.profile_data.get("name", self.email)
+                    "name": user_label,
+                    "method": "SSID_DIRECT"
                 }
-            elif resp.status_code == 401:
-                try:
-                    err_json = resp.json()
-                    msg = err_json.get("message", "")
-                    code = err_json.get("code", "")
-                    if code == "invalid_credentials" or "wrong credentials" in msg.lower():
-                        err_msg = "Credenciales incorrectas: Verifica tu email y contraseña de IQ Option en Ajustes."
-                    elif "verify" in code.lower() or "2step" in code.lower() or "verify" in msg.lower():
-                        err_msg = "Se requiere verificación 2FA. Desactiva temporalmente el 2FA en IQ Option para conectar trading automatizado."
-                    else:
-                        err_msg = f"Autenticación rechazada por IQ Option: {msg or code}"
-                except Exception:
-                    err_msg = "Credenciales de IQ Option incorrectas (HTTP 401). Verifica tu correo y contraseña."
-                return {"connected": False, "authenticated": False, "error": err_msg}
-            else:
+            elif not (self.email and self.password):
                 return {
-                    "connected": False, 
-                    "authenticated": False, 
-                    "error": f"Error servidor IQ Option ({resp.status_code}): {resp.text[:100]}"
+                    "connected": False,
+                    "authenticated": False,
+                    "error": prof_res.get("error", "Error autenticando con SSID")
                 }
-        except Exception as e:
-            return {"connected": False, "authenticated": False, "error": f"Error de conexión con IQ Option: {str(e)}"}
+
+        # 2. Autenticación estándar por Email y Contraseña
+        if self.email and self.password:
+            try:
+                auth_url = "https://auth.iqoption.com/api/v2/login"
+                payload = {
+                    "identifier": self.email,
+                    "password": self.password
+                }
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept": "application/json",
+                    "Content-Type": "application/json"
+                }
+                resp = self.session.post(auth_url, json=payload, headers=headers, timeout=(15, 25))
+                
+                if resp.status_code == 200:
+                    data = resp.json()
+                    self.ssid = resp.cookies.get("ssid") or self.session.cookies.get("ssid")
+                    if isinstance(data, dict):
+                        if not self.ssid and data.get("ssid"):
+                            self.ssid = data.get("ssid")
+                        elif not self.ssid and isinstance(data.get("data"), dict) and data["data"].get("ssid"):
+                            self.ssid = data["data"].get("ssid")
+
+                    if self.ssid:
+                        prof_res = self._fetch_profile()
+                        if prof_res.get("success"):
+                            self.connected = True
+                            user_label = self.profile_data.get("name") or self.profile_data.get("email") or self.email or "Usuario Conectado"
+                            return {
+                                "connected": True,
+                                "authenticated": True,
+                                "environment": self.environment,
+                                "balance": self.balance,
+                                "practice_balance": self.practice_amount,
+                                "real_balance": self.real_amount,
+                                "currency": self.currency,
+                                "name": user_label,
+                                "method": "LOGIN_API"
+                            }
+
+                    self.connected = True
+                    return {
+                        "connected": True,
+                        "authenticated": True,
+                        "environment": self.environment,
+                        "balance": self.balance,
+                        "practice_balance": self.practice_amount,
+                        "real_balance": self.real_amount,
+                        "currency": self.currency,
+                        "name": self.email
+                    }
+                elif resp.status_code == 401:
+                    try:
+                        err_json = resp.json()
+                        msg = err_json.get("message", "")
+                        code = err_json.get("code", "")
+                        if code == "invalid_credentials" or "wrong credentials" in msg.lower():
+                            err_msg = "Credenciales incorrectas: Verifica tu email y contraseña de IQ Option en Ajustes."
+                        elif "verify" in code.lower() or "2step" in code.lower() or "verify" in msg.lower():
+                            err_msg = "Se requiere verificación 2FA. Conéctate ingresando tu Token SSID de sesión en Ajustes."
+                        else:
+                            err_msg = f"Autenticación rechazada por IQ Option: {msg or code}"
+                    except Exception:
+                        err_msg = "Credenciales de IQ Option incorrectas (HTTP 401). Verifica tu correo y contraseña."
+                    return {"connected": False, "authenticated": False, "error": err_msg}
+                else:
+                    return {
+                        "connected": False, 
+                        "authenticated": False, 
+                        "error": f"Error servidor IQ Option ({resp.status_code}): {resp.text[:100]}"
+                    }
+            except requests.exceptions.Timeout:
+                return {
+                    "connected": False,
+                    "authenticated": False,
+                    "error": "El servidor de IQ Option bloquea conexiones de centros de datos VPS (Timeout en auth.iqoption.com). Para conectar de inmediato sin bloqueos de firewall, ingresa tu Token SSID en Ajustes."
+                }
+            except Exception as e:
+                err_str = str(e)
+                if "timed out" in err_str.lower() or "timeout" in err_str.lower():
+                    err_msg = "Tiempo de espera agotado con auth.iqoption.com (Firewall de centro de datos). Ingresa tu Token SSID en Ajustes para conectar al instante."
+                else:
+                    err_msg = f"Error de conexión con IQ Option: {err_str}"
+                return {"connected": False, "authenticated": False, "error": err_msg}
+
+        return {
+            "connected": False,
+            "authenticated": False,
+            "error": "Por favor ingresa tu Token SSID o tus credenciales de IQ Option en Ajustes."
+        }
 
     def change_balance(self, balance_id: int) -> bool:
         """Cambia el balance activo en IQ Option entre cuenta REAL y cuenta PRACTICE (Demo)."""

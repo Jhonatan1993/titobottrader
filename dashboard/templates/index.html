@@ -2357,9 +2357,16 @@
                         <label style="font-size:10.5px;">Correo Electrónico (Email de tu cuenta)</label>
                         <input type="email" id="modal-iqoption-email" class="form-control" placeholder="tu_correo@gmail.com">
                     </div>
-                    <div class="form-group" style="margin-bottom:0;">
+                    <div class="form-group" style="margin-bottom:8px;">
                         <label style="font-size:10.5px;">Contraseña de IQ Option</label>
                         <input type="password" id="modal-iqoption-password" class="form-control" placeholder="Tu contraseña de IQ Option">
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label style="font-size:10.5px; display:flex; justify-content:space-between; align-items:center;">
+                            <span>Token SSID de Sesión <strong style="color:var(--cyber-cyan-bright);">(Recomendado para VPS)</strong></span>
+                            <span onclick="alert('🔑 Cómo obtener tu Token SSID en 10 segundos:\n\n1. Inicia sesión en iqoption.com desde tu navegador en tu PC.\n2. Presiona F12 (o Clic derecho > Inspeccionar) e ingresa a la pestaña \'Consola\'.\n3. Escribe o pega:\n   copy(document.cookie.match(/ssid=([^;]+)/)[1])\n   y presiona Enter.\n4. ¡Listo! Ya quedó copiado en tu portapapeles. Pégalo aquí en este campo.')" style="color:var(--cyber-cyan-bright); cursor:pointer; text-decoration:underline;">¿Cómo obtenerlo?</span>
+                        </label>
+                        <input type="password" id="modal-iqoption-ssid" class="form-control" placeholder="Pega tu Token SSID (Bypassea cualquier firewall del VPS)">
                     </div>
                 </div>
             </div>
@@ -4165,6 +4172,9 @@
                     if (keys.iqoption_password && document.getElementById('modal-iqoption-password')) {
                         document.getElementById('modal-iqoption-password').value = keys.iqoption_password;
                     }
+                    if (keys.iqoption_ssid && document.getElementById('modal-iqoption-ssid')) {
+                        document.getElementById('modal-iqoption-ssid').value = keys.iqoption_ssid;
+                    }
                 }
             } catch (e) {
                 console.error("Error precargando llaves:", e);
@@ -4828,12 +4838,13 @@
                 } else if (activeBroker === 'IQOPTION') {
                     const iqoption_email = document.getElementById('modal-iqoption-email') ? document.getElementById('modal-iqoption-email').value.trim() : "";
                     const iqoption_password = document.getElementById('modal-iqoption-password') ? document.getElementById('modal-iqoption-password').value.trim() : "";
+                    const iqoption_ssid = document.getElementById('modal-iqoption-ssid') ? document.getElementById('modal-iqoption-ssid').value.trim() : "";
 
-                    if (iqoption_email || iqoption_password) {
+                    if (iqoption_email || iqoption_password || iqoption_ssid) {
                         await fetch('/api/control/set-broker-keys', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ iqoption_email, iqoption_password })
+                            body: JSON.stringify({ iqoption_email, iqoption_password, iqoption_ssid })
                         });
                     }
 

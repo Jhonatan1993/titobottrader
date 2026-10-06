@@ -337,6 +337,7 @@ class MultiAssetMarketFeed:
         self.iqoption = IQOptionAdapter(
             email=self.broker_config.get("iqoption", {}).get("email", ""),
             password=self.broker_config.get("iqoption", {}).get("password", ""),
+            ssid=self.broker_config.get("iqoption", {}).get("ssid", ""),
             environment=self.broker_config.get("iqoption_environment", "PAPER")
         )
         self.last_live_fetch = 0.0
@@ -366,6 +367,7 @@ class MultiAssetMarketFeed:
         self.iqoption = IQOptionAdapter(
             email=self.broker_config.get("iqoption", {}).get("email", ""),
             password=self.broker_config.get("iqoption", {}).get("password", ""),
+            ssid=self.broker_config.get("iqoption", {}).get("ssid", ""),
             environment=self.broker_config.get("iqoption_environment", "PAPER")
         )
 

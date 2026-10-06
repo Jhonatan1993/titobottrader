@@ -701,7 +701,7 @@ class RealTimeTradingEngine:
                 icon="📡"
             )
 
-    def update_broker_keys(self, alpaca_key: str = "", alpaca_secret: str = "", binance_key: str = "", binance_secret: str = "", iqoption_email: str = "", iqoption_password: str = ""):
+    def update_broker_keys(self, alpaca_key: str = "", alpaca_secret: str = "", binance_key: str = "", binance_secret: str = "", iqoption_email: str = "", iqoption_password: str = "", iqoption_ssid: str = ""):
         if alpaca_key or alpaca_secret:
             self.broker_config["alpaca"]["api_key"] = alpaca_key
             self.broker_config["alpaca"]["secret_key"] = alpaca_secret
@@ -709,14 +709,19 @@ class RealTimeTradingEngine:
         if binance_key or binance_secret:
             self.broker_config["binance"]["api_key"] = binance_key
             self.broker_config["binance"]["secret_key"] = binance_secret
-        if iqoption_email or iqoption_password:
+        if iqoption_email or iqoption_password or iqoption_ssid:
             if "iqoption" not in self.broker_config:
                 self.broker_config["iqoption"] = {}
             if iqoption_email:
                 self.broker_config["iqoption"]["email"] = iqoption_email
             if iqoption_password:
                 self.broker_config["iqoption"]["password"] = iqoption_password
-            self.broker_config["iqoption"]["enabled"] = bool(self.broker_config["iqoption"].get("email") and self.broker_config["iqoption"].get("password"))
+            if iqoption_ssid is not None:
+                self.broker_config["iqoption"]["ssid"] = iqoption_ssid
+            self.broker_config["iqoption"]["enabled"] = bool(
+                self.broker_config["iqoption"].get("ssid") or 
+                (self.broker_config["iqoption"].get("email") and self.broker_config["iqoption"].get("password"))
+            )
         save_broker_config(self.broker_config)
         self.feed.reload_credentials()
 

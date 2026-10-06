@@ -167,4 +167,33 @@ def test_iqoption_auth_v2_handling(monkeypatch):
     assert res_ok["balance"] == 850.50
     assert adapter.ssid == "mock_ssid_abc123"
 
+def test_iqoption_direct_ssid_authentication(monkeypatch):
+    from execution.iqoption_adapter import IQOptionAdapter
+    # Prueba de autenticación directa con Token SSID sin requerir auth.iqoption.com
+    adapter = IQOptionAdapter(ssid="valid_user_session_token_12345", environment="LIVE_REAL")
+    assert adapter.is_configured is True
+    
+    class MockProfileResp:
+        status_code = 200
+        def json(self):
+            return {
+                "result": {
+                    "name": "Trader VIP",
+                    "currency": "USD",
+                    "balances": [
+                        {"id": 2001, "type": 1, "amount": 350.00},
+                        {"id": 2002, "type": 4, "amount": 10000.0}
+                    ]
+                }
+            }
+
+    monkeypatch.setattr(adapter.session, "get", lambda url, timeout: MockProfileResp())
+    res = adapter.connect()
+    assert res["connected"] is True
+    assert res["authenticated"] is True
+    assert res["method"] == "SSID_DIRECT"
+    assert res["real_balance"] == 350.00
+    assert res["balance"] == 350.00
+
+
 
