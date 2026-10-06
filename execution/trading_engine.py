@@ -205,6 +205,17 @@ class RealTimeTradingEngine:
                     self.initial_balance = self.paper_initial_balance
                 save_broker_config(self.broker_config)
 
+        # Si el entorno guardado en IQ Option es LIVE_REAL, verificar que esté configurado
+        iq_env = self.broker_wallets.get("IQOPTION", {}).get("environment", "PAPER")
+        if iq_env == "LIVE_REAL":
+            if not hasattr(self.feed, "iqoption") or not self.feed.iqoption.is_configured:
+                if "IQOPTION" in self.broker_wallets:
+                    self.broker_wallets["IQOPTION"]["environment"] = "PAPER"
+                self.broker_config["iqoption_environment"] = "PAPER"
+                if self.active_broker == "IQOPTION":
+                    self.execution_environment = "PAPER"
+                save_broker_config(self.broker_config)
+
         self.agent.update_learning_from_disk()
         self._record_equity_snapshot()
 
@@ -425,6 +436,7 @@ class RealTimeTradingEngine:
                         "success": False,
                         "error": "Credenciales de IQ Option no configuradas. Por favor ingresa tu Correo Electrónico y Contraseña de IQ Option en la configuración."
                     }
+                self.feed.iqoption.set_environment("LIVE_REAL")
                 conn = self.feed.iqoption.connect()
                 if not conn.get("connected"):
                     return {
@@ -433,18 +445,19 @@ class RealTimeTradingEngine:
                     }
                 self.broker_wallets["IQOPTION"]["environment"] = "LIVE_REAL"
                 self.broker_config["iqoption_environment"] = "LIVE_REAL"
-                self.feed.iqoption.set_environment("LIVE_REAL")
-                real_bal = float(conn.get("balance", 0.0))
+                real_bal = float(conn.get("real_balance") if conn.get("real_balance") is not None else conn.get("balance", 0.0))
                 self.broker_wallets["IQOPTION"]["cash"] = real_bal
                 self.broker_wallets["IQOPTION"]["initial_balance"] = real_bal
+                self.broker_config["iqoption_initial_balance"] = real_bal
 
                 if self.active_broker == "IQOPTION":
                     self.execution_environment = "LIVE_REAL"
                     self.cash_balance = self.broker_wallets["IQOPTION"]["cash"]
                     self.initial_balance = self.broker_wallets["IQOPTION"]["initial_balance"]
                 save_broker_config(self.broker_config)
-                self.agent._add_thought(f"🔥 MODO DINERO REAL ACTIVADO en IQ Option. Saldo real en cuenta: ${real_bal:,.2f} USD.", "WARNING", icon="📈")
-                return {"success": True, "broker": "IQOPTION", "environment": "LIVE_REAL", "equity": real_bal}
+                user_label = conn.get("name") or self.feed.iqoption.email or "Usuario Conectado"
+                self.agent._add_thought(f"🔥 MODO DINERO REAL ACTIVADO en IQ Option ({user_label}). Saldo real en cuenta: ${real_bal:,.2f} USD.", "WARNING", icon="📈")
+                return {"success": True, "broker": "IQOPTION", "environment": "LIVE_REAL", "equity": real_bal, "user": user_label}
             else:
                 self.broker_wallets["IQOPTION"]["environment"] = "PAPER"
                 self.broker_config["iqoption_environment"] = "PAPER"
@@ -563,6 +576,11 @@ class RealTimeTradingEngine:
             crypto_val = sum(p.get("current_value", p.get("invested_amount", 0.0)) for p in open_pos)
             cash = wallet.get("cash", 0.0)
             return round(cash + crypto_val, 2)
+        if wallet.get("environment") == "LIVE_REAL" and b == "IQOPTION":
+            open_pos = self.get_broker_positions(b)
+            pos_val = sum(p.get("current_value", p.get("invested_amount", 0.0)) for p in open_pos)
+            cash = wallet.get("cash", 0.0)
+            return round(cash + pos_val, 2)
         base = wallet.get("initial_balance", 0.0)
         vault = wallet.get("profit_vault", 0.0)
         unrealized = sum(p.get("current_pnl", 0.0) for p in self.get_broker_positions(b))
@@ -612,7 +630,14 @@ class RealTimeTradingEngine:
             elif b == "IQOPTION" and hasattr(self.feed, 'iqoption') and self.feed.iqoption.is_configured:
                 acc = self.feed.iqoption.connect()
                 if acc.get("connected"):
-                    wallet["cash"] = float(acc.get("balance", wallet["cash"]))
+                    if wallet.get("environment") == "LIVE_REAL":
+                        r_bal = float(acc.get("real_balance") if acc.get("real_balance") is not None else acc.get("balance", 0.0))
+                        wallet["cash"] = r_bal
+                        wallet["initial_balance"] = r_bal
+                    else:
+                        p_bal = float(acc.get("practice_balance") if acc.get("practice_balance") is not None else acc.get("balance", 10000.0))
+                        wallet["cash"] = p_bal
+                        wallet["initial_balance"] = p_bal
 
         # Mantener consistencia del flag live_trading_enabled para Binance en operaciones concurrentes
         binance_is_live = (self.broker_wallets.get("BINANCE", {}).get("environment") == "LIVE_REAL")
@@ -1429,6 +1454,9 @@ class RealTimeTradingEngine:
                 is_conn = iqoption_status.get("connected", True)
                 status_lbl = iqoption_status.get("status", "MODO SIMULACIÓN (PAPER)")
                 cat_tag = "Forex / CFDs"
+                iq_user = (self.feed.iqoption.profile_data.get("name") or self.feed.iqoption.email) if hasattr(self.feed, 'iqoption') and self.feed.iqoption.is_configured else ""
+                iq_real = round(self.feed.iqoption.real_amount, 2) if hasattr(self.feed, 'iqoption') else 0.0
+                iq_demo = round(self.feed.iqoption.practice_amount, 2) if hasattr(self.feed, 'iqoption') else 10000.0
             else:
                 is_conn = True
                 status_lbl = "CONECTADO"
@@ -1446,7 +1474,11 @@ class RealTimeTradingEngine:
                 "cash": self.get_broker_cash(b_id),
                 "profit_vault": round(b_wal.get("profit_vault", 0.0), 2),
                 "initial_balance": round(b_wal.get("initial_balance", 0.0), 2),
-                "positions_count": len(self.get_broker_positions(b_id))
+                "positions_count": len(self.get_broker_positions(b_id)),
+                "logged_user": iq_user if b_id == "IQOPTION" else "",
+                "user_email": self.feed.iqoption.email if (b_id == "IQOPTION" and hasattr(self.feed, 'iqoption')) else "",
+                "real_balance": iq_real if b_id == "IQOPTION" else None,
+                "practice_balance": iq_demo if b_id == "IQOPTION" else None
             }
 
         return {
