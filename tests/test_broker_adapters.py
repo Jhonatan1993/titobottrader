@@ -113,3 +113,58 @@ def test_iqoption_trading_engine_environment_symmetry(monkeypatch):
     assert res_paper["environment"] == "PAPER"
     assert engine.broker_wallets["IQOPTION"]["environment"] == "PAPER"
 
+def test_iqoption_auth_v2_handling(monkeypatch):
+    from execution.iqoption_adapter import IQOptionAdapter
+    adapter = IQOptionAdapter(email="trader@test.com", password="password123", environment="LIVE_REAL")
+    
+    # 1. Simular respuesta 401 de credenciales inválidas de auth.iqoption.com
+    class MockResp401:
+        status_code = 401
+        text = '{"code":"invalid_credentials","message":"Wrong credentials"}'
+        def json(self):
+            return {"code": "invalid_credentials", "message": "Wrong credentials"}
+    
+    monkeypatch.setattr(adapter.session, "post", lambda url, json, headers, timeout: MockResp401())
+    res_fail = adapter.connect()
+    assert res_fail["connected"] is False
+    assert "Credenciales incorrectas" in res_fail["error"]
+
+    # 2. Simular respuesta 200 exitosa de auth.iqoption.com con perfil
+    class MockResp200Auth:
+        status_code = 200
+        cookies = {"ssid": "mock_ssid_abc123"}
+        def json(self):
+            return {"code": "success", "ssid": "mock_ssid_abc123"}
+
+    class MockResp200Profile:
+        status_code = 200
+        def json(self):
+            return {
+                "result": {
+                    "name": "Trader Test",
+                    "currency": "USD",
+                    "balances": [
+                        {"id": 1001, "type": 1, "amount": 850.50},
+                        {"id": 1002, "type": 4, "amount": 10000.0}
+                    ]
+                }
+            }
+
+    def mock_post(url, *args, **kwargs):
+        return MockResp200Auth()
+
+    def mock_get(url, *args, **kwargs):
+        return MockResp200Profile()
+
+    monkeypatch.setattr(adapter.session, "post", mock_post)
+    monkeypatch.setattr(adapter.session, "get", mock_get)
+
+    res_ok = adapter.connect()
+    assert res_ok["connected"] is True
+    assert res_ok["authenticated"] is True
+    assert res_ok["real_balance"] == 850.50
+    assert res_ok["practice_balance"] == 10000.0
+    assert res_ok["balance"] == 850.50
+    assert adapter.ssid == "mock_ssid_abc123"
+
+
