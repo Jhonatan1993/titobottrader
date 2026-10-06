@@ -310,6 +310,8 @@ class MultiAssetMarketFeed:
         "UNIFIED_TRADFI_CRYPTO", 
         "TRADFI_WALLSTREET", 
         "BINANCE_CRYPTO", 
+        "IQOPTION_FOREX",
+        "FOREX",
         "HYBRID", 
         "ALPACA_PAPER", 
         "SIMULATION"

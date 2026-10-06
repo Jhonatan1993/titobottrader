@@ -580,7 +580,9 @@ class RealTimeTradingEngine:
         if b == "BINANCE":
             self.operating_mode = "BINANCE_CRYPTO"
         elif b == "ALPACA":
-            self.operating_mode = "ALPACA_PAPER"
+            self.operating_mode = "TRADFI_WALLSTREET"
+        elif b == "IQOPTION":
+            self.operating_mode = "IQOPTION_FOREX"
         else:
             self.operating_mode = f"{b}_TRADING"
 
@@ -607,11 +609,23 @@ class RealTimeTradingEngine:
                 acc = self.feed.binance.get_account_balances()
                 if acc.get("authenticated"):
                     self._sync_binance_wallet_positions(acc)
+            elif b == "IQOPTION" and hasattr(self.feed, 'iqoption') and self.feed.iqoption.is_configured:
+                acc = self.feed.iqoption.connect()
+                if acc.get("connected"):
+                    wallet["cash"] = float(acc.get("balance", wallet["cash"]))
 
         # Mantener consistencia del flag live_trading_enabled para Binance en operaciones concurrentes
         binance_is_live = (self.broker_wallets.get("BINANCE", {}).get("environment") == "LIVE_REAL")
         if self.feed.binance.is_configured:
             self.feed.binance.live_trading_enabled = binance_is_live
+
+        # Aislamiento Estricto: Limpiar cualquier posición que no pertenezca a las categorías permitidas de este broker
+        allowed_cats = set(wallet.get("allowed_categories", []))
+        if allowed_cats:
+            for s in list(self.open_positions.keys()):
+                pos = self.open_positions[s]
+                if pos.get("broker") == b and pos.get("category") not in allowed_cats:
+                    del self.open_positions[s]
 
         self.cash_balance = wallet["cash"]
         self.initial_balance = wallet["initial_balance"]
@@ -1350,7 +1364,14 @@ class RealTimeTradingEngine:
 
         # Filtrado estricto por broker: SOLO activos permitidos para este broker (Cero mezcla)
         market_radar = []
-        target_cat = ["CRYPTO"] if active_b == "BINANCE" else ["TRADFI_STOCK", "ETF"]
+        target_cat = wallet.get("allowed_categories")
+        if not target_cat:
+            if active_b == "BINANCE":
+                target_cat = ["CRYPTO"]
+            elif active_b == "IQOPTION":
+                target_cat = ["FOREX", "CFD", "OPTIONS"]
+            else:
+                target_cat = ["TRADFI_STOCK", "ETF"]
         broker_assets = [a for a in self.feed.get_all_assets() if a.get("category") in target_cat]
 
         for asset in broker_assets:
@@ -1651,7 +1672,7 @@ class RealTimeTradingEngine:
             "BYBIT": {"name": "Bybit Exchange", "icon": "⚡", "category": "CRYPTO", "allowed": ["CRYPTO"], "target": 2000.0, "max_loss": 0.0},
             "IBKR": {"name": "Interactive Brokers", "icon": "🌐", "category": "TRADFI", "allowed": ["TRADFI_STOCK", "ETF"], "target": 5000.0, "max_loss": 0.0},
             "OKX": {"name": "OKX Exchange", "icon": "💎", "category": "CRYPTO", "allowed": ["CRYPTO"], "target": 2000.0, "max_loss": 0.0},
-            "IQOPTION": {"name": "IQ Option", "icon": "📊", "category": "TRADFI", "allowed": ["TRADFI_STOCK", "ETF"], "target": 1500.0, "max_loss": 0.0},
+            "IQOPTION": {"name": "IQ Option", "icon": "📈", "category": "FOREX_CFD", "allowed": ["FOREX", "CFD", "OPTIONS"], "target": 1500.0, "max_loss": 0.0},
             "COINBASE": {"name": "Coinbase Pro", "icon": "🔵", "category": "CRYPTO", "allowed": ["CRYPTO"], "target": 2500.0, "max_loss": 0.0},
             "KRAKEN": {"name": "Kraken Spot", "icon": "🐙", "category": "CRYPTO", "allowed": ["CRYPTO"], "target": 2000.0, "max_loss": 0.0}
         }
@@ -1685,6 +1706,13 @@ class RealTimeTradingEngine:
         }
 
         self.broker_wallets[b] = wallet_entry
+
+        # Limpiar cualquier posición residual que no pertenezca a las categorías permitidas
+        allowed_set = set(preset["allowed"])
+        for s in list(self.open_positions.keys()):
+            pos = self.open_positions[s]
+            if pos.get("broker") == b and pos.get("category") not in allowed_set:
+                del self.open_positions[s]
 
         if "custom_brokers" not in self.broker_config:
             self.broker_config["custom_brokers"] = {}

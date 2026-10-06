@@ -3309,12 +3309,13 @@
             const envBadge = document.getElementById('env-badge');
             const brokerInfo = (sys.brokers && sys.brokers[activeBroker]) ? sys.brokers[activeBroker] : {};
             const brokerEnv = brokerInfo.environment || sys.execution_environment || 'PAPER';
+            const bNameTag = (brokerInfo.name || activeBroker).toUpperCase();
             if (brokerEnv === 'LIVE_REAL') {
                 envBadge.className = 'env-pill real';
-                envBadge.innerText = activeBroker === 'ALPACA' ? '🔥 MODO REAL (ALPACA)' : '🔥 MODO REAL (BINANCE)';
+                envBadge.innerText = `🔥 MODO REAL (${bNameTag})`;
             } else {
                 envBadge.className = 'env-pill';
-                envBadge.innerText = activeBroker === 'ALPACA' ? '🛡️ MODO PAPER (ALPACA)' : '🛡️ MODO PAPER (BINANCE)';
+                envBadge.innerText = `🛡️ MODO PAPER (${bNameTag})`;
             }
 
             // Status Text
@@ -3763,6 +3764,10 @@
         }
 
         function renderPositions(positions, unrealizedPnl) {
+            const activeBroker = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'BINANCE';
+            // Filtrado estricto por broker activo: Ningún broker muestra posiciones de otro broker
+            positions = (positions || []).filter(p => (p.broker || '').toUpperCase() === activeBroker.toUpperCase());
+
             const list = document.getElementById('positions-list');
             const totalMaxSlots = 5;
             const openCount = positions.length;
@@ -4001,9 +4006,13 @@
             if (latestSystemData && latestSystemData.system_status) {
                 const sys = latestSystemData.system_status;
                 const activeBroker = sys.active_broker || 'BINANCE';
+                const brokerInfo = (sys.brokers && sys.brokers[activeBroker]) || {};
+                const brokerIcon = brokerInfo.icon || (activeBroker === 'ALPACA' ? '🏛️' : (activeBroker === 'IQOPTION' ? '📈' : '🪙'));
+                const brokerName = brokerInfo.name || activeBroker;
+                
                 const titleEl = document.getElementById('settings-modal-title');
                 if (titleEl) {
-                    titleEl.innerText = `⚙️ Circuit Breakers & Riesgo (${activeBroker === 'ALPACA' ? '🏛️ Alpaca Wall Street' : '🪙 Binance Spot'})`;
+                    titleEl.innerText = `⚙️ Circuit Breakers & Riesgo (${brokerIcon} ${brokerName})`;
                 }
                 if (sys.profit_target_amount !== undefined) {
                     document.getElementById('modal-profit-target').value = sys.profit_target_amount;
@@ -4016,17 +4025,28 @@
                         'UNIFIED_TRADFI_CRYPTO': '🌐 Multiactivo Unificado (Wall Street + Cripto)',
                         'TRADFI_WALLSTREET': '🏛️ Wall Street TradFi (Acciones & ETFs)',
                         'BINANCE_CRYPTO': '🪙 Criptomonedas 24/7 (Binance Spot)',
+                        'IQOPTION_FOREX': '📈 Forex & Derivados (IQ Option)',
                         'SIMULATION': '🔵 Simulador Cuantitativo 24/7'
                     };
-                    const lbl = modeLabels[sys.operating_mode] || '🌐 Multiactivo Unificado (Wall Street + Cripto)';
+                    const lbl = modeLabels[sys.operating_mode] || `${brokerIcon} Operaciones de ${brokerName}`;
                     selectCustomOption('custom-mode-dropdown', sys.operating_mode, lbl);
                 }
-                if (sys.execution_environment) {
-                    const envLabels = {
-                        'PAPER': '🛡️ Modo Práctica Seguro (Paper Trading)',
-                        'LIVE_REAL': '🔥 Modo Dinero Real'
-                    };
-                    selectSettingsEnvOption(sys.execution_environment, envLabels[sys.execution_environment] || '🛡️ Modo Práctica Seguro (Paper Trading)');
+
+                // Generar dinámicamente las opciones del selector de Entorno para este broker
+                const currentEnv = brokerInfo.environment || sys.execution_environment || 'PAPER';
+                const envMenu = document.querySelector('#settings-env-dropdown .custom-select-menu');
+                if (envMenu) {
+                    const realLbl = `🔥 Modo Dinero Real (${brokerName})`;
+                    const paperLbl = (activeBroker === 'IQOPTION') ? `🛡️ Modo Práctica / Demo (${brokerName} $10,000 USD)` : `🛡️ Modo Práctica Seguro (${brokerName} Simulado)`;
+                    envMenu.innerHTML = `
+                        <div class="custom-option ${currentEnv === 'LIVE_REAL' ? 'selected' : ''}" data-value="LIVE_REAL" onclick="selectSettingsEnvOption('LIVE_REAL', '${realLbl}')">
+                            <span>${realLbl}</span>
+                        </div>
+                        <div class="custom-option ${currentEnv === 'PAPER' ? 'selected' : ''}" data-value="PAPER" onclick="selectSettingsEnvOption('PAPER', '${paperLbl}')">
+                            <span>${paperLbl}</span>
+                        </div>
+                    `;
+                    selectSettingsEnvOption(currentEnv, currentEnv === 'LIVE_REAL' ? realLbl : paperLbl);
                 }
             }
             document.getElementById('settings-modal').classList.add('active');
@@ -4624,7 +4644,7 @@
             // 2. RESPUESTA TÁCTIL INSTANTÁNEA (0ms de latencia, cero congelamiento, cero rebotes)
             candleCatalogInitialized = false;
             lastCatalogBroker = null;
-            currentCandleSymbol = (bKey === 'ALPACA') ? 'NVDA' : (bKey === 'BINANCE' ? 'BTC' : (bKey === 'BYBIT' ? 'SOL' : 'AAPL'));
+            currentCandleSymbol = (bKey === 'ALPACA') ? 'NVDA' : (bKey === 'BINANCE' ? 'BTC' : (bKey === 'IQOPTION' ? 'EURUSD' : (bKey === 'BYBIT' ? 'SOL' : 'EURUSD')));
 
             // Actualizar pestañas superiores de inmediato
             document.querySelectorAll('.broker-pill-btn').forEach(btn => {
@@ -4652,12 +4672,13 @@
             if (envBadge && latestSystemData && latestSystemData.system_status) {
                 const bInfo = (latestSystemData.system_status.brokers && latestSystemData.system_status.brokers[bKey]) || {};
                 const bEnv = bInfo.environment || latestSystemData.system_status.execution_environment || 'PAPER';
+                const bNameTag = (bInfo.name || bKey).toUpperCase();
                 if (bEnv === 'LIVE_REAL') {
                     envBadge.className = 'env-pill real';
-                    envBadge.innerText = bKey === 'ALPACA' ? '🔥 MODO REAL (ALPACA)' : '🔥 MODO REAL (BINANCE)';
+                    envBadge.innerText = `🔥 MODO REAL (${bNameTag})`;
                 } else {
                     envBadge.className = 'env-pill';
-                    envBadge.innerText = bKey === 'ALPACA' ? '🛡️ MODO PAPER (ALPACA)' : '🛡️ MODO PAPER (BINANCE)';
+                    envBadge.innerText = `🛡️ MODO PAPER (${bNameTag})`;
                 }
             }
 
