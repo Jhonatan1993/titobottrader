@@ -61,15 +61,16 @@ class RealTimeTradingEngine:
         self.active_broker = self.broker_config.get("active_broker", "BINANCE").upper()
         alpaca_paper_init = float(self.broker_config.get("alpaca_initial_balance", 252.65))
         binance_paper_init = float(self.broker_config.get("paper_initial_balance", 30.0))
-        binance_vault = float(self.broker_config.get("binance_profit_vault", 0.0))
-        alpaca_vault = float(self.broker_config.get("alpaca_profit_vault", 0.0))
 
         # Billeteras y Parámetros Aislados por Broker (Arquitectura Modular Simétrica)
         binance_env = self.broker_config.get("binance_environment", self.broker_config.get("execution_environment", "PAPER"))
         alpaca_env = self.broker_config.get("alpaca_environment", "PAPER")
         iqoption_env = self.broker_config.get("iqoption_environment", "PAPER")
         iqoption_paper_init = float(self.broker_config.get("iqoption_initial_balance", 10000.0))
-        iqoption_vault = float(self.broker_config.get("iqoption_profit_vault", 0.0))
+
+        binance_vault = self.get_broker_vault("BINANCE", binance_env)
+        alpaca_vault = self.get_broker_vault("ALPACA", alpaca_env)
+        iqoption_vault = self.get_broker_vault("IQOPTION", iqoption_env)
 
         self.broker_wallets: Dict[str, Dict[str, Any]] = {
             "BINANCE": {
@@ -357,6 +358,7 @@ class RealTimeTradingEngine:
                 self.broker_config["alpaca"]["base_url"] = "https://api.alpaca.markets"
                 self.broker_wallets["ALPACA"]["cash"] = float(conn.get("cash", 0.0))
                 self.broker_wallets["ALPACA"]["initial_balance"] = float(conn.get("equity", 0.0))
+                self.broker_wallets["ALPACA"]["profit_vault"] = self.get_broker_vault("ALPACA", "LIVE_REAL")
 
                 # LIMPIEZA DE POSICIONES SIMULADAS PREVIAS DE MODO PAPER:
                 tradfi_symbols_set = {"AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AMD", "INTC", "SPY", "QQQ", "DIA"}
@@ -421,6 +423,7 @@ class RealTimeTradingEngine:
                     self.broker_wallets["ALPACA"]["cash"] = bal_val
                     self.broker_wallets["ALPACA"]["initial_balance"] = bal_val
                     self.broker_config["alpaca_initial_balance"] = bal_val
+                self.broker_wallets["ALPACA"]["profit_vault"] = self.get_broker_vault("ALPACA", "PAPER")
                 if self.active_broker == "ALPACA":
                     self.execution_environment = "PAPER"
                     self.cash_balance = self.broker_wallets["ALPACA"]["cash"]
@@ -449,6 +452,13 @@ class RealTimeTradingEngine:
                 self.broker_wallets["IQOPTION"]["cash"] = real_bal
                 self.broker_wallets["IQOPTION"]["initial_balance"] = real_bal
                 self.broker_config["iqoption_initial_balance"] = real_bal
+                self.broker_wallets["IQOPTION"]["profit_vault"] = self.get_broker_vault("IQOPTION", "LIVE_REAL")
+
+                # LIMPIEZA DE POSICIONES SIMULADAS PREVIAS DE MODO PAPER:
+                for s in list(self.open_positions.keys()):
+                    pos = self.open_positions[s]
+                    if pos.get("broker") == "IQOPTION":
+                        del self.open_positions[s]
 
                 if self.active_broker == "IQOPTION":
                     self.execution_environment = "LIVE_REAL"
@@ -477,6 +487,8 @@ class RealTimeTradingEngine:
                     self.broker_wallets["IQOPTION"]["cash"] = bal_val
                     self.broker_wallets["IQOPTION"]["initial_balance"] = bal_val
 
+                self.broker_wallets["IQOPTION"]["profit_vault"] = self.get_broker_vault("IQOPTION", "PAPER")
+
                 if self.active_broker == "IQOPTION":
                     self.execution_environment = "PAPER"
                     self.cash_balance = self.broker_wallets["IQOPTION"]["cash"]
@@ -496,7 +508,7 @@ class RealTimeTradingEngine:
                 self.broker_wallets["BINANCE"]["environment"] = "LIVE_REAL"
                 self.broker_config["binance_environment"] = "LIVE_REAL"
                 self.broker_config["execution_environment"] = "LIVE_REAL"
-                saved_vault = float(self.broker_config.get("binance_profit_vault", self.broker_wallets["BINANCE"].get("profit_vault", 0.0)))
+                saved_vault = self.get_broker_vault("BINANCE", "LIVE_REAL")
                 self.broker_wallets["BINANCE"]["profit_vault"] = saved_vault
 
                 # LIMPIEZA DE POSICIONES CRIPTO PREVIAS DE MODO PAPER:
@@ -531,6 +543,7 @@ class RealTimeTradingEngine:
                 self.feed.binance.live_trading_enabled = False
                 target_wallet = self.broker_wallets.get(target_b, self.broker_wallets["BINANCE"])
                 target_wallet["environment"] = "PAPER"
+                target_wallet["profit_vault"] = self.get_broker_vault(target_b, "PAPER")
                 self.broker_config[f"{target_b.lower()}_environment"] = "PAPER"
                 if target_b == "BINANCE":
                     self.broker_config["execution_environment"] = "PAPER"
@@ -549,6 +562,42 @@ class RealTimeTradingEngine:
                 b_name = target_wallet.get("name", target_b)
                 self.agent._add_thought(f"🛡️ MODO PRÁCTICA ACTIVADO en {b_name}. Saldo de simulación: ${target_wallet['cash']:,.2f} USD.", "INFO", icon="🛡️")
                 return {"success": True, "broker": target_b, "environment": "PAPER", "equity": self.get_broker_equity(target_b)}
+
+    def get_broker_vault(self, broker: str, env: Optional[str] = None) -> float:
+        """
+        Retorna el saldo de la bóveda estrictamente aislado por entorno (LIVE_REAL vs PAPER).
+        Previene fugas de ganancias simuladas a la cuenta real y viceversa.
+        """
+        b = broker.upper()
+        wallet = self.broker_wallets.get(b, {}) if hasattr(self, "broker_wallets") else {}
+        current_env = env or wallet.get("environment", "PAPER")
+        if current_env == "LIVE_REAL":
+            if b == "BINANCE":
+                real_v = self.broker_config.get("binance_real_profit_vault")
+                if real_v is not None and float(real_v) > 0:
+                    return float(real_v)
+                return float(self.broker_config.get("binance_profit_vault", wallet.get("profit_vault", 0.0)))
+            return float(self.broker_config.get(f"{b.lower()}_real_profit_vault", 0.0))
+        else:
+            return float(self.broker_config.get(f"{b.lower()}_paper_profit_vault", self.broker_config.get(f"{b.lower()}_profit_vault", wallet.get("profit_vault", 0.0))))
+
+    def save_broker_vault(self, broker: str, amount: float, env: Optional[str] = None):
+        """
+        Guarda el saldo de la bóveda en memoria y disco en su clave aislada por entorno.
+        """
+        b = broker.upper()
+        amt = round(float(amount), 2)
+        if hasattr(self, "broker_wallets") and b in self.broker_wallets:
+            self.broker_wallets[b]["profit_vault"] = amt
+        current_env = env or (self.broker_wallets.get(b, {}).get("environment", "PAPER") if hasattr(self, "broker_wallets") else "PAPER")
+        if current_env == "LIVE_REAL":
+            self.broker_config[f"{b.lower()}_real_profit_vault"] = amt
+            if b == "BINANCE":
+                self.broker_config["binance_profit_vault"] = amt
+        else:
+            self.broker_config[f"{b.lower()}_paper_profit_vault"] = amt
+            self.broker_config[f"{b.lower()}_profit_vault"] = amt
+        save_broker_config(self.broker_config)
 
     def get_broker_positions(self, broker: str) -> List[Dict[str, Any]]:
         b = broker.upper()
@@ -606,9 +655,8 @@ class RealTimeTradingEngine:
 
         self.execution_environment = wallet.get("environment", "PAPER")
         
-        vault_key = f"{b.lower()}_profit_vault"
         init_key = f"{b.lower()}_initial_balance"
-        wallet["profit_vault"] = float(self.broker_config.get(vault_key, wallet.get("profit_vault", 0.0)))
+        wallet["profit_vault"] = self.get_broker_vault(b, self.execution_environment)
         if init_key in self.broker_config:
             wallet["initial_balance"] = float(self.broker_config[init_key])
         elif b == "BINANCE" and "paper_initial_balance" in self.broker_config:
@@ -1212,9 +1260,8 @@ class RealTimeTradingEngine:
         # El principal retorna al efectivo operativo; la ganancia neta se asegura en la Bóveda y NO se toca.
         if pnl > 0:
             wallet["cash"] = round(wallet["cash"] + invested, 2)
-            wallet["profit_vault"] = round(wallet.get("profit_vault", 0.0) + pnl, 2)
-            self.broker_config[f"{broker_id.lower()}_profit_vault"] = wallet["profit_vault"]
-            save_broker_config(self.broker_config)
+            new_vault = round(wallet.get("profit_vault", 0.0) + pnl, 2)
+            self.save_broker_vault(broker_id, new_vault, wallet.get("environment"))
         else:
             wallet["cash"] = round(wallet["cash"] + exit_value, 2)
 
@@ -1237,9 +1284,8 @@ class RealTimeTradingEngine:
                         pnl = round(exit_value - invested, 2)
                         pnl_pct = round(((exit_price - entry_p) / entry_p) * 100, 2) if entry_p > 0 else 0.0
                         if pnl > 0 and diff != 0:
-                            wallet["profit_vault"] = round(wallet.get("profit_vault", 0.0) + diff, 2)
-                            self.broker_config["binance_profit_vault"] = wallet["profit_vault"]
-                            save_broker_config(self.broker_config)
+                            new_vault = round(wallet.get("profit_vault", 0.0) + diff, 2)
+                            self.save_broker_vault("BINANCE", new_vault, "LIVE_REAL")
                 self.agent._add_thought(f"🔥 VENTA REAL BINANCE: Vendidos {quantity} {symbol} en Spot.", "WARNING", symbol, "⚡")
                 self._sync_binance_wallet_positions(self.feed.binance.get_account_balances())
             else:
@@ -1260,7 +1306,8 @@ class RealTimeTradingEngine:
                     self.open_positions[symbol] = pos
                     if pnl > 0:
                         wallet["cash"] = round(wallet["cash"] - invested, 2)
-                        wallet["profit_vault"] = round(wallet.get("profit_vault", 0.0) - pnl, 2)
+                        new_vault = round(wallet.get("profit_vault", 0.0) - pnl, 2)
+                        self.save_broker_vault(broker_id, new_vault, wallet.get("environment"))
                     else:
                         wallet["cash"] = round(wallet["cash"] - exit_value, 2)
                     if broker_id == self.active_broker:
@@ -1281,7 +1328,8 @@ class RealTimeTradingEngine:
                     self.open_positions[symbol] = pos
                     if pnl > 0:
                         wallet["cash"] = round(wallet["cash"] - invested, 2)
-                        wallet["profit_vault"] = round(wallet.get("profit_vault", 0.0) - pnl, 2)
+                        new_vault = round(wallet.get("profit_vault", 0.0) - pnl, 2)
+                        self.save_broker_vault(broker_id, new_vault, wallet.get("environment"))
                     else:
                         wallet["cash"] = round(wallet["cash"] - exit_value, 2)
                     if broker_id == self.active_broker:
@@ -1298,6 +1346,7 @@ class RealTimeTradingEngine:
             "symbol": symbol,
             "name": pos["name"],
             "broker": broker_id,
+            "environment": wallet.get("environment", "PAPER"),
             "category": pos.get("category", "TRADFI_STOCK"),
             "side": "BUY_LONG",
             "quantity": quantity,
@@ -1375,11 +1424,11 @@ class RealTimeTradingEngine:
         cash_avail = wallet["cash"]
         total_equity = self.get_broker_equity(active_b)
         initial_bal = wallet["initial_balance"]
+        active_env = wallet.get("environment", self.execution_environment)
+        realized_stats = self.journal.get_statistics(broker=active_b, environment=active_env)
+        completed_trades = self.journal.get_trades(35, broker=active_b, environment=active_env)
         
-        realized_stats = self.journal.get_statistics(broker=active_b)
-        completed_trades = self.journal.get_trades(35, broker=active_b)
-        
-        vault_val = round(wallet.get("profit_vault", 0.0), 2)
+        vault_val = round(self.get_broker_vault(active_b, active_env), 2)
         total_profit = round(vault_val + unrealized_pnl, 2)
         total_profit_pct = round((total_profit / initial_bal) * 100, 2) if initial_bal > 0 else 0.0
 
@@ -1477,7 +1526,7 @@ class RealTimeTradingEngine:
                 "status_text": status_lbl,
                 "equity": self.get_broker_equity(b_id),
                 "cash": self.get_broker_cash(b_id),
-                "profit_vault": round(b_wal.get("profit_vault", 0.0), 2),
+                "profit_vault": round(self.get_broker_vault(b_id, b_wal.get("environment", "PAPER")), 2),
                 "initial_balance": round(b_wal.get("initial_balance", 0.0), 2),
                 "positions_count": len(self.get_broker_positions(b_id)),
                 "logged_user": iq_user if b_id == "IQOPTION" else "",
@@ -1514,7 +1563,7 @@ class RealTimeTradingEngine:
                 "invested_capital": round(invested, 2),
                 "initial_balance": initial_bal,
                 "operating_capital_base": initial_bal,
-                "profit_vault": round(wallet.get("profit_vault", 0.0), 2),
+                "profit_vault": vault_val,
                 "total_profit_usd": total_profit,
                 "total_profit_percent": total_profit_pct,
                 "unrealized_pnl": round(unrealized_pnl, 2),
@@ -1576,15 +1625,13 @@ class RealTimeTradingEngine:
         wallet["initial_balance"] = round(wallet["initial_balance"] + transfer_amount, 2)
         wallet["cash"] = round(wallet["cash"] + transfer_amount, 2)
         
-        # Persistencia unificada para cualquier broker
-        self.broker_config[f"{b.lower()}_profit_vault"] = wallet["profit_vault"]
+        # Persistencia aislada y unificada
+        self.save_broker_vault(b, wallet["profit_vault"], wallet.get("environment"))
         self.broker_config[f"{b.lower()}_initial_balance"] = wallet["initial_balance"]
         if b == "BINANCE":
             self.broker_config["paper_initial_balance"] = wallet["initial_balance"]
-            self.broker_config["binance_profit_vault"] = wallet["profit_vault"]
         elif b == "ALPACA":
             self.broker_config["alpaca_initial_balance"] = wallet["initial_balance"]
-            self.broker_config["alpaca_profit_vault"] = wallet["profit_vault"]
             
         save_broker_config(self.broker_config)
         

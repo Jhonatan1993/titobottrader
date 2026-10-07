@@ -37,7 +37,7 @@ class TradeJournal:
             
             # 2. Guardar en CSV para abrir en Excel o Google Sheets
             if self.trades:
-                keys = ["id", "broker", "category", "symbol", "name", "type", "quantity", "entry_price", "exit_price", 
+                keys = ["id", "broker", "category", "environment", "symbol", "name", "type", "quantity", "entry_price", "exit_price", 
                         "invested_amount", "pnl", "pnl_percent", "result", "reason", "opened_at", "closed_at", "duration"]
                 with open(self.csv_file, "w", newline="", encoding="utf-8") as f:
                     writer = csv.DictWriter(f, fieldnames=keys, extrasaction='ignore')
@@ -78,6 +78,7 @@ class TradeJournal:
             "reason": trade_data.get("reason", "Cierre por estrategia de IA"),
             "broker": trade_data.get("broker") or ("BINANCE" if trade_data.get("category") == "CRYPTO" else "ALPACA"),
             "category": trade_data.get("category", "CRYPTO"),
+            "environment": trade_data.get("environment", "PAPER"),
             "opened_at": trade_data.get("opened_at", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
             "closed_at": trade_data.get("closed_at", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
             "duration": trade_data.get("duration", "2 min")
@@ -90,21 +91,29 @@ class TradeJournal:
         self._save_to_disk()
         return trade
 
-    def get_trades(self, limit: int = 50, broker: Optional[str] = None) -> List[Dict[str, Any]]:
-        if not broker or broker == "ALL":
-            return self.trades[:limit]
-        filtered = []
-        for t in self.trades:
-            if self.resolve_trade_broker(t) == broker.upper():
-                filtered.append(t)
+    def get_trades(self, limit: int = 50, broker: Optional[str] = None, environment: Optional[str] = None) -> List[Dict[str, Any]]:
+        filtered = self.trades
+        if broker and broker != "ALL":
+            b_norm = broker.upper()
+            filtered = [t for t in filtered if self.resolve_trade_broker(t) == b_norm]
+        if environment:
+            env_norm = environment.upper()
+            filtered = [t for t in filtered if t.get("environment", "PAPER").upper() == env_norm]
         return filtered[:limit]
 
-    def get_statistics(self, broker: Optional[str] = None) -> Dict[str, Any]:
+    def get_statistics(self, broker: Optional[str] = None, environment: Optional[str] = None) -> Dict[str, Any]:
         trades_pool = self.trades
         if broker and broker != "ALL":
+            b_norm = broker.upper()
             trades_pool = [
-                t for t in self.trades
-                if self.resolve_trade_broker(t) == broker.upper()
+                t for t in trades_pool
+                if self.resolve_trade_broker(t) == b_norm
+            ]
+        if environment:
+            env_norm = environment.upper()
+            trades_pool = [
+                t for t in trades_pool
+                if t.get("environment", "PAPER").upper() == env_norm
             ]
 
         if not trades_pool:
@@ -146,7 +155,7 @@ class TradeJournal:
             "profit_factor": profit_factor
         }
 
-    def get_daily_summary(self, broker: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_daily_summary(self, broker: Optional[str] = None, environment: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Agrupa todas las operaciones históricas por día (YYYY-MM-DD) y calcula
         las métricas cuantitativas consolidadas para cada jornada.
@@ -156,8 +165,14 @@ class TradeJournal:
         if broker and broker != "ALL":
             b_norm = broker.upper()
             trades_pool = [
-                t for t in self.trades
+                t for t in trades_pool
                 if self.resolve_trade_broker(t) == b_norm
+            ]
+        if environment:
+            env_norm = environment.upper()
+            trades_pool = [
+                t for t in trades_pool
+                if t.get("environment", "PAPER").upper() == env_norm
             ]
 
         # Agrupar operaciones por día
@@ -227,7 +242,7 @@ class TradeJournal:
 
         return summaries
 
-    def export_trades_csv(self, broker: Optional[str] = None, mode: str = "complete") -> str:
+    def export_trades_csv(self, broker: Optional[str] = None, mode: str = "complete", environment: Optional[str] = None) -> str:
         """
         Exporta el histórico estructurado con todas sus métricas en formato CSV (compatible Excel con BOM UTF-8).
         Modos soportados:
@@ -240,7 +255,7 @@ class TradeJournal:
         # Escribir UTF-8 BOM para compatibilidad inmediata con Microsoft Excel
         output.write('\ufeff')
         
-        summaries = self.get_daily_summary(broker=broker)
+        summaries = self.get_daily_summary(broker=broker, environment=environment)
 
         if mode in ["daily_summary", "complete"]:
             if mode == "complete":

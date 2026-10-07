@@ -47,6 +47,10 @@ def test_new_broker_creation_and_symmetry():
     """
     engine = RealTimeTradingEngine(execution_environment="PAPER")
     
+    # Limpiar cualquier clave residual de pruebas anteriores
+    for k in ["kraken_profit_vault", "kraken_paper_profit_vault", "kraken_initial_balance"]:
+        engine.broker_config.pop(k, None)
+    
     # Registrar nuevo broker dinámicamente
     engine.broker_wallets["KRAKEN"] = {
         "id": "KRAKEN",
@@ -96,10 +100,8 @@ def test_new_broker_creation_and_symmetry():
 
     # Limpieza: restaurar BINANCE como broker activo
     engine.set_active_broker("BINANCE")
-    if "kraken_profit_vault" in engine.broker_config:
-        del engine.broker_config["kraken_profit_vault"]
-    if "kraken_initial_balance" in engine.broker_config:
-        del engine.broker_config["kraken_initial_balance"]
+    for k in ["kraken_profit_vault", "kraken_paper_profit_vault", "kraken_initial_balance"]:
+        engine.broker_config.pop(k, None)
     from config.broker_config import save_broker_config
     save_broker_config(engine.broker_config)
 
@@ -159,4 +161,63 @@ def test_binance_live_real_vault_preservation_and_exact_sync():
     assert res["remaining_vault"] == 0.0
     assert res["new_initial_balance"] == 14.87
     assert engine.get_broker_equity("BINANCE") == 14.87
+
+
+def test_iqoption_vault_and_trade_isolation_between_paper_and_real():
+    """
+    Verifica que la Bóveda de Ganancias y las estadísticas de operaciones estén
+    estrictamente aisladas entre MODO PAPER y MODO REAL para IQ Option.
+    Las ganancias y operaciones del modo simulación jamás deben contaminar la cuenta real.
+    """
+    engine = RealTimeTradingEngine(execution_environment="PAPER")
+    engine.set_active_broker("IQOPTION")
+    
+    # 1. En Modo Paper: Simular ganancia en bóveda y registrar operaciones de prueba
+    engine.save_broker_vault("IQOPTION", 12.14, env="PAPER")
+    engine.journal.record_trade({
+        "symbol": "EURUSD",
+        "broker": "IQOPTION",
+        "environment": "PAPER",
+        "pnl": 12.14,
+        "invested_amount": 50.0,
+        "exit_price": 1.0950,
+        "entry_price": 1.0900
+    })
+
+    # Verificar estado en PAPER
+    paper_state = engine.get_state()
+    assert paper_state["system_status"]["execution_environment"] == "PAPER"
+    assert paper_state["financial_summary"]["profit_vault"] == 12.14
+    assert paper_state["financial_summary"]["winning_trades_count"] >= 1
+
+    # 2. Conmutar a MODO REAL
+    # Simular que IQ Option se activa en LIVE_REAL con saldo real de 0.00 USD
+    engine.broker_wallets["IQOPTION"]["environment"] = "LIVE_REAL"
+    engine.broker_wallets["IQOPTION"]["cash"] = 0.0
+    engine.broker_wallets["IQOPTION"]["initial_balance"] = 0.0
+    engine.broker_wallets["IQOPTION"]["profit_vault"] = engine.get_broker_vault("IQOPTION", "LIVE_REAL")
+    engine.execution_environment = "LIVE_REAL"
+
+    # Verificar estado en LIVE_REAL
+    real_state = engine.get_state()
+    assert real_state["system_status"]["execution_environment"] == "LIVE_REAL"
+    
+    # La Bóveda REAL DEBE estar en 0.00 USD (no contaminada con los 12.14 de paper)
+    assert real_state["financial_summary"]["profit_vault"] == 0.0
+    assert real_state["financial_summary"]["total_profit_usd"] == 0.0
+    assert real_state["system_status"]["brokers"]["IQOPTION"]["profit_vault"] == 0.0
+
+    # Las estadísticas de trades en LIVE_REAL deben mostrar 0 trades reales
+    assert real_state["financial_summary"]["total_trades_count"] == 0
+    assert real_state["financial_summary"]["win_rate"] == 0.0
+    assert len(real_state["completed_trades"]) == 0
+
+    # 3. Conmutar de vuelta a PAPER
+    engine.broker_wallets["IQOPTION"]["environment"] = "PAPER"
+    engine.broker_wallets["IQOPTION"]["profit_vault"] = engine.get_broker_vault("IQOPTION", "PAPER")
+    engine.execution_environment = "PAPER"
+
+    restored_state = engine.get_state()
+    assert restored_state["financial_summary"]["profit_vault"] == 12.14
+    assert restored_state["financial_summary"]["total_trades_count"] >= 1
 

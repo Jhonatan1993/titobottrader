@@ -450,9 +450,10 @@ def get_symbol_candles(symbol: str):
 def export_trades_csv():
     broker = request.args.get("broker")
     mode = request.args.get("mode", "complete")
+    env = request.args.get("environment")
     clean_broker = re.sub(r'[^a-zA-Z0-9_-]', '', broker or "TODOS").lower()
     clean_mode = re.sub(r'[^a-zA-Z0-9_-]', '', mode or "complete").lower()
-    csv_data = ENGINE.journal.export_trades_csv(broker=broker, mode=clean_mode)
+    csv_data = ENGINE.journal.export_trades_csv(broker=broker, mode=clean_mode, environment=env)
     
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"historico_transacciones_{clean_broker}_{clean_mode}_{timestamp}.csv"
@@ -466,8 +467,9 @@ def export_trades_csv():
 @app.route("/api/export/daily-summary", methods=["GET"])
 def export_daily_summary():
     broker = request.args.get("broker")
+    env = request.args.get("environment")
     clean_broker = re.sub(r'[^a-zA-Z0-9_-]', '', broker or "ALL").upper()
-    summary = ENGINE.journal.get_daily_summary(broker=broker)
+    summary = ENGINE.journal.get_daily_summary(broker=broker, environment=env)
     return jsonify({
         "success": True,
         "broker": clean_broker,
@@ -480,8 +482,9 @@ def export_daily_summary():
 def export_trades_json():
     import json
     broker = request.args.get("broker")
+    env = request.args.get("environment")
     clean_broker = re.sub(r'[^a-zA-Z0-9_-]', '', broker or "TODOS").lower()
-    summary = ENGINE.journal.get_daily_summary(broker=broker)
+    summary = ENGINE.journal.get_daily_summary(broker=broker, environment=env)
     payload = {
         "metadata": {
             "title": "Histórico de Transacciones por Día",

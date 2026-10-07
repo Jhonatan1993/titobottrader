@@ -33,6 +33,12 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     },
     "iqoption_initial_balance": 10000.0,
     "iqoption_profit_vault": 0.0,
+    "iqoption_real_profit_vault": 0.0,
+    "iqoption_paper_profit_vault": 0.0,
+    "alpaca_real_profit_vault": 0.0,
+    "alpaca_paper_profit_vault": 0.0,
+    "binance_real_profit_vault": 0.0,
+    "binance_paper_profit_vault": 0.0,
     "iqoption_environment": "PAPER",
     "iqoption": {
         "email": os.environ.get("IQOPTION_EMAIL", ""),
