@@ -918,6 +918,11 @@
             color: #C084FC;
             border: 1px solid rgba(168, 85, 247, 0.25);
         }
+        .cat-forex {
+            background: rgba(16, 185, 129, 0.12);
+            color: #34D399;
+            border: 1px solid rgba(16, 185, 129, 0.25);
+        }
 
         .price-text { font-size: 13px; font-weight: 600; }
         .change-pill {
@@ -2809,6 +2814,9 @@
                     } else if (data.category === 'ETF') {
                         badgeEl.className = 'cat-chip cat-etf';
                         badgeEl.innerText = '📊 ETF';
+                    } else if (data.category === 'FOREX') {
+                        badgeEl.className = 'cat-chip cat-forex';
+                        badgeEl.innerText = '💱 Forex';
                     } else {
                         badgeEl.className = 'cat-chip cat-crypto';
                         badgeEl.innerText = '🪙 Cripto';
@@ -3691,6 +3699,8 @@
                     catBadge = `<span class="cat-chip cat-tradfi" title="Operable vía Alpaca Markets">🏛️ Wall Street</span>`;
                 } else if (item.category === 'ETF') {
                     catBadge = `<span class="cat-chip cat-etf" title="ETF vía Alpaca Markets">📊 ETF Wall St.</span>`;
+                } else if (item.category === 'FOREX') {
+                    catBadge = `<span class="cat-chip cat-forex" title="Forex & Derivados vía IQ Option">💱 Forex IQ Option</span>`;
                 } else {
                     catBadge = `<span class="cat-chip cat-crypto" title="Cripto vía Binance Spot">🪙 Cripto Binance</span>`;
                 }
@@ -4503,7 +4513,7 @@
                 const wrColor = (d.win_rate >= 50) ? 'var(--emerald-win)' : ((d.win_rate >= 40) ? 'var(--binance-gold)' : 'var(--neon-rose)');
                 const brokerChip = d.broker === 'BINANCE' 
                     ? '<span class="cat-chip cat-crypto" style="font-size:10px;">🪙 Binance</span>' 
-                    : (d.broker === 'ALPACA' ? '<span class="cat-chip cat-tradfi" style="font-size:10px;">🏛️ Alpaca</span>' : '<span class="cat-chip" style="font-size:10px; background:rgba(255,255,255,0.06); color:#94A3B8;">🌐 Multibroker</span>');
+                    : (d.broker === 'ALPACA' ? '<span class="cat-chip cat-tradfi" style="font-size:10px;">🏛️ Alpaca</span>' : (d.broker === 'IQOPTION' ? '<span class="cat-chip cat-forex" style="font-size:10px;">💱 IQ Option</span>' : '<span class="cat-chip" style="font-size:10px; background:rgba(255,255,255,0.06); color:#94A3B8;">🌐 Multibroker</span>'));
 
                 html += `
                 <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-radius:8px; overflow:hidden;">

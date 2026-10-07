@@ -35,10 +35,17 @@ ASSET_RISK_PROFILES = {
     "AVAX": {"sl_pct": 0.012, "tp_pct": 0.032, "vol_type": "DeFi / Escalabilidad"},
     "NEAR": {"sl_pct": 0.012, "tp_pct": 0.030, "vol_type": "IA & Sharding Cripto"},
 
-    # === FOREX MAYORES (Ratio Asimétrico Institucional 2.0:1) ===
+    # === FOREX MAYORES Y CRUCES (Ratio Asimétrico Institucional 2.0:1) ===
     "EURUSD": {"sl_pct": 0.0035, "tp_pct": 0.0070, "vol_type": "Forex Mayor - Alta Liquidez"},
     "GBPUSD": {"sl_pct": 0.0040, "tp_pct": 0.0080, "vol_type": "Forex Mayor - Volatilidad Media"},
-    "USDJPY": {"sl_pct": 0.0035, "tp_pct": 0.0070, "vol_type": "Forex Mayor - Dinámica Asiática"}
+    "USDJPY": {"sl_pct": 0.0035, "tp_pct": 0.0070, "vol_type": "Forex Mayor - Dinámica Asiática"},
+    "AUDUSD": {"sl_pct": 0.0038, "tp_pct": 0.0076, "vol_type": "Forex Mayor - Commodities"},
+    "USDCAD": {"sl_pct": 0.0035, "tp_pct": 0.0070, "vol_type": "Forex Mayor - Petróleo / CAD"},
+    "USDCHF": {"sl_pct": 0.0034, "tp_pct": 0.0068, "vol_type": "Forex Mayor - Refugio Seguro"},
+    "NZDUSD": {"sl_pct": 0.0040, "tp_pct": 0.0080, "vol_type": "Forex Mayor - Oceanía"},
+    "EURGBP": {"sl_pct": 0.0030, "tp_pct": 0.0060, "vol_type": "Cruce Forex - Europeo"},
+    "EURJPY": {"sl_pct": 0.0045, "tp_pct": 0.0090, "vol_type": "Cruce Forex - Volatilidad Media"},
+    "GBPJPY": {"sl_pct": 0.0055, "tp_pct": 0.0110, "vol_type": "Cruce Forex - Alta Volatilidad"}
 }
 
 class IntelligentTradingAgent:

@@ -295,6 +295,76 @@ AVAILABLE_ASSETS = [
         "base_price": 152.30,
         "volatility": 0.0045,
         "trend_bias": 0.0001
+    },
+    {
+        "symbol": "AUDUSD",
+        "name": "AUD / USD",
+        "category": "FOREX",
+        "type": "Dólar Australiano / USD",
+        "icon": "🇦🇺",
+        "base_price": 0.6550,
+        "volatility": 0.0038,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "USDCAD",
+        "name": "USD / CAD",
+        "category": "FOREX",
+        "type": "Dólar / Dólar Canadiense",
+        "icon": "🇨🇦",
+        "base_price": 1.3850,
+        "volatility": 0.0035,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "USDCHF",
+        "name": "USD / CHF",
+        "category": "FOREX",
+        "type": "Dólar / Franco Suizo",
+        "icon": "🇨🇭",
+        "base_price": 0.8650,
+        "volatility": 0.0034,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "NZDUSD",
+        "name": "NZD / USD",
+        "category": "FOREX",
+        "type": "Dólar Neozelandés / USD",
+        "icon": "🇳🇿",
+        "base_price": 0.6050,
+        "volatility": 0.0040,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "EURGBP",
+        "name": "EUR / GBP",
+        "category": "FOREX",
+        "type": "Euro / Libra Esterlina",
+        "icon": "🇪🇺",
+        "base_price": 0.8350,
+        "volatility": 0.0028,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "EURJPY",
+        "name": "EUR / JPY",
+        "category": "FOREX",
+        "type": "Euro / Yen Japonés",
+        "icon": "🇯🇵",
+        "base_price": 165.20,
+        "volatility": 0.0050,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "GBPJPY",
+        "name": "GBP / JPY",
+        "category": "FOREX",
+        "type": "Libra / Yen Japonés",
+        "icon": "🇬🇧",
+        "base_price": 197.80,
+        "volatility": 0.0065,
+        "trend_bias": 0.0001
     }
 ]
 
