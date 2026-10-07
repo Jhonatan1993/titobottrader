@@ -1085,12 +1085,21 @@ class RealTimeTradingEngine:
         effective_pct = min(kelly_pct, 30.0)
 
         is_broker_live = (wallet.get("environment") == "LIVE_REAL")
-        min_trade = 6.0 if (broker_id == "BINANCE" and is_broker_live) else 5.0
+        if broker_id == "BINANCE":
+            min_trade = 6.0 if is_broker_live else 5.0
+        elif broker_id in ["ALPACA", "IQOPTION"]:
+            min_trade = 1.0
+        else:
+            min_trade = 5.0
+
         if available_cash <= 35.0:
-            target_amount = round(min(available_cash * 0.40, 10.0), 2)
-            target_amount = max(min_trade, target_amount)
-            if target_amount > available_cash:
-                target_amount = round(available_cash * 0.90, 2)
+            if broker_id == "IQOPTION":
+                target_amount = 1.0
+            else:
+                target_amount = round(min(available_cash * 0.40, 10.0), 2)
+                target_amount = max(min_trade, target_amount)
+                if target_amount > available_cash:
+                    target_amount = round(available_cash * 0.90, 2)
         elif available_cash <= 500.0:
             target_amount = max(min_trade, available_cash * (effective_pct / 100.0))
             target_amount = round(min(target_amount, available_cash * 0.35), 2)
@@ -1106,7 +1115,7 @@ class RealTimeTradingEngine:
         elif price < 100.0:
             quantity = round(target_amount / price, 4)
         else:
-            quantity = round(target_amount / price, 4 if broker_id == "ALPACA" else 5)
+            quantity = round(target_amount / price, 4 if broker_id in ["ALPACA", "IQOPTION"] else 5)
 
         actual_investment = round(quantity * price, 2)
         if actual_investment > available_cash:
@@ -1119,7 +1128,7 @@ class RealTimeTradingEngine:
         if broker_id == "BINANCE" and is_broker_live and actual_investment < 6.0:
             return
 
-        if broker_id == "ALPACA" and actual_investment < 1.0:
+        if broker_id in ["ALPACA", "IQOPTION"] and actual_investment < 1.0:
             return
 
         # Verificación con RiskManager: Cupos, Drawdown Diario y Blindaje FINRA 4210 (PDT)

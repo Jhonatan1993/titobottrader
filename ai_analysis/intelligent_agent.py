@@ -33,8 +33,12 @@ ASSET_RISK_PROFILES = {
     "DOGE": {"sl_pct": 0.014, "tp_pct": 0.035, "vol_type": "Alta Volatilidad / Momentum"},
     "ADA": {"sl_pct": 0.012, "tp_pct": 0.030, "vol_type": "Smart Contracts / PoS"},
     "AVAX": {"sl_pct": 0.012, "tp_pct": 0.032, "vol_type": "DeFi / Escalabilidad"},
-    "LINK": {"sl_pct": 0.011, "tp_pct": 0.028, "vol_type": "Oráculos & TradFi RWA"},
-    "NEAR": {"sl_pct": 0.012, "tp_pct": 0.030, "vol_type": "IA & Sharding Cripto"}
+    "NEAR": {"sl_pct": 0.012, "tp_pct": 0.030, "vol_type": "IA & Sharding Cripto"},
+
+    # === FOREX MAYORES (Ratio Asimétrico Institucional 2.0:1) ===
+    "EURUSD": {"sl_pct": 0.0035, "tp_pct": 0.0070, "vol_type": "Forex Mayor - Alta Liquidez"},
+    "GBPUSD": {"sl_pct": 0.0040, "tp_pct": 0.0080, "vol_type": "Forex Mayor - Volatilidad Media"},
+    "USDJPY": {"sl_pct": 0.0035, "tp_pct": 0.0070, "vol_type": "Forex Mayor - Dinámica Asiática"}
 }
 
 class IntelligentTradingAgent:
