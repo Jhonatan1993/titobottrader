@@ -2296,6 +2296,17 @@
                 </div>
             </div>
 
+            <!-- Configuración de Saldo Simulado (Paper) para Brokers aplicables -->
+            <div id="paper-balance-container" style="display:none; margin-top:12px; margin-bottom:12px; background:rgba(16,185,129,0.05); border:1px solid rgba(16,185,129,0.2); border-radius:8px; padding:12px;">
+                <p id="modal-paper-desc" style="font-size:11px; color:var(--emerald-win); margin-bottom:8px;">
+                    🛡️ Modo Simulación / Práctica: Configura el capital de prueba para operar sin riesgo.
+                </p>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label style="font-size:10.5px;">Capital Inicial para Modo Simulación (USD)</label>
+                    <input type="number" id="modal-paper-balance" class="form-control" placeholder="10.00" step="0.01" value="10.00">
+                </div>
+            </div>
+
             <!-- Sección Alpaca (Wall Street) -->
             <div id="modal-alpaca-section" style="display:none; border-top:1px solid var(--border-subtle); padding-top:12px;">
                 <div style="background:rgba(56,189,248,0.05); border:1px solid rgba(56,189,248,0.2); border-radius:8px; padding:12px; margin-bottom:12px;">
@@ -2319,15 +2330,6 @@
 
             <!-- Sección Binance (Cripto 24/7) -->
             <div id="modal-binance-section" style="display:none; border-top:1px solid var(--border-subtle); padding-top:12px;">
-                <div id="paper-balance-container" style="display:none; margin-bottom:12px;">
-                    <p style="font-size:11px; color:var(--emerald-win); margin-bottom:8px;">
-                        🛡️ Modo Simulación Seguro: Configura el capital inicial para pruebas (ej. $10.00 o $30.00 USD).
-                    </p>
-                    <div class="form-group">
-                        <label>Capital Inicial para Modo Simulación (USD)</label>
-                        <input type="number" id="modal-paper-balance" class="form-control" placeholder="10.00" step="0.01" value="10.00">
-                    </div>
-                </div>
 
                 <div id="binance-keys-container" style="background:rgba(240,185,11,0.05); border:1px solid rgba(240,185,11,0.2); border-radius:8px; padding:12px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
@@ -3950,6 +3952,25 @@
 
             const activeBroker = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'BINANCE';
 
+            const paperContainer = document.getElementById('paper-balance-container');
+            const paperDesc = document.getElementById('modal-paper-desc');
+            const paperInput = document.getElementById('modal-paper-balance');
+
+            if (paperContainer) {
+                if (value === 'PAPER' && activeBroker !== 'ALPACA') {
+                    paperContainer.style.display = 'block';
+                    if (activeBroker === 'IQOPTION') {
+                        if (paperDesc) paperDesc.innerHTML = `🛡️ <strong style="color:var(--emerald-win);">Modo Práctica / Demo:</strong> Configura el capital virtual de prueba para ensayar en IQ Option (por defecto $10,000.00 USD).`;
+                        if (paperInput && (!paperInput.value || parseFloat(paperInput.value) <= 100)) paperInput.value = '10000.00';
+                    } else {
+                        if (paperDesc) paperDesc.innerHTML = `🛡️ <strong style="color:var(--emerald-win);">Modo Simulación Seguro:</strong> Configura el capital inicial para pruebas (ej. $10.00 o $30.00 USD).`;
+                        if (paperInput && parseFloat(paperInput.value) > 1000) paperInput.value = '10.00';
+                    }
+                } else {
+                    paperContainer.style.display = 'none';
+                }
+            }
+
             if (activeBroker === 'ALPACA') {
                 const desc = document.getElementById('modal-alpaca-desc');
                 if (desc) {
@@ -3959,11 +3980,16 @@
                         desc.innerHTML = `🛡️ <strong style="color:var(--cyber-cyan-bright);">MODO PAPER SANDBOX:</strong> Conexión a <code>https://paper-api.alpaca.markets</code>. Órdenes simuladas en tiempo real sin riesgo con el balance virtual oficial ($100,000 USD). Utiliza tus llaves de Paper Trading (comienzan con 'PK').`;
                     }
                 }
-            } else {
-                const paperContainer = document.getElementById('paper-balance-container');
-                if (paperContainer) {
-                    paperContainer.style.display = (value === 'PAPER') ? 'block' : 'none';
+            } else if (activeBroker === 'IQOPTION') {
+                const desc = document.getElementById('modal-iqoption-desc');
+                if (desc) {
+                    if (value === 'LIVE_REAL') {
+                        desc.innerHTML = `⚠️ <strong style="color:var(--neon-rose);">MODO DINERO REAL:</strong> Operaciones reales con tu saldo depositado en IQ Option. Las ganancias van a tu Bóveda Real.`;
+                    } else {
+                        desc.innerHTML = `🛡️ <strong style="color:var(--emerald-win);">MODO PRÁCTICA / DEMO:</strong> Operaciones simuladas sin riesgo en IQ Option con saldo demo. Tu dinero real está 100% blindado.`;
+                    }
                 }
+            } else {
                 const desc = document.getElementById('modal-binance-desc');
                 if (desc) {
                     if (value === 'LIVE_REAL') {
@@ -4858,10 +4884,13 @@
                         });
                     }
 
+                    const paper_balance_raw = document.getElementById('modal-paper-balance') ? document.getElementById('modal-paper-balance').value : null;
+                    const paper_balance = paper_balance_raw !== "" && !isNaN(parseFloat(paper_balance_raw)) ? parseFloat(paper_balance_raw) : 10000.0;
+
                     const res = await fetch('/api/control/set-execution-environment', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ environment: env, broker: 'IQOPTION' })
+                        body: JSON.stringify({ environment: env, broker: 'IQOPTION', paper_balance: paper_balance })
                     });
                     const data = await res.json();
                     if (!data.success && data.error) {

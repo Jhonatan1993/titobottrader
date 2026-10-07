@@ -66,7 +66,9 @@ class RealTimeTradingEngine:
         binance_env = self.broker_config.get("binance_environment", self.broker_config.get("execution_environment", "PAPER"))
         alpaca_env = self.broker_config.get("alpaca_environment", "PAPER")
         iqoption_env = self.broker_config.get("iqoption_environment", "PAPER")
-        iqoption_paper_init = float(self.broker_config.get("iqoption_initial_balance", 10000.0))
+        iqoption_paper_init = float(self.broker_config.get("iqoption_paper_initial_balance", self.broker_config.get("iqoption_initial_balance", 10000.0)))
+        if iqoption_paper_init <= 0.0:
+            iqoption_paper_init = 10000.0
 
         binance_vault = self.get_broker_vault("BINANCE", binance_env)
         alpaca_vault = self.get_broker_vault("ALPACA", alpaca_env)
@@ -156,6 +158,9 @@ class RealTimeTradingEngine:
                     self.broker_wallets["IQOPTION"]["initial_balance"] = max(0.0, round(total_iq_eq - iq_v, 2))
             else:
                 self.feed.iqoption.set_environment("PAPER")
+                if self.broker_wallets["IQOPTION"]["cash"] <= 0.0:
+                    self.broker_wallets["IQOPTION"]["cash"] = iqoption_paper_init
+                    self.broker_wallets["IQOPTION"]["initial_balance"] = iqoption_paper_init
 
         # Si se especificó un saldo inicial explícito al instanciar (ej. en tests), respetarlo en el broker activo
         if initial_balance is not None:
@@ -451,7 +456,7 @@ class RealTimeTradingEngine:
                 real_bal = float(conn.get("real_balance") if conn.get("real_balance") is not None else conn.get("balance", 0.0))
                 self.broker_wallets["IQOPTION"]["cash"] = real_bal
                 self.broker_wallets["IQOPTION"]["initial_balance"] = real_bal
-                self.broker_config["iqoption_initial_balance"] = real_bal
+                self.broker_config["iqoption_real_initial_balance"] = real_bal
                 self.broker_wallets["IQOPTION"]["profit_vault"] = self.get_broker_vault("IQOPTION", "LIVE_REAL")
 
                 # LIMPIEZA DE POSICIONES SIMULADAS PREVIAS DE MODO PAPER:
@@ -477,15 +482,22 @@ class RealTimeTradingEngine:
                     bal_val = float(custom_balance)
                     self.broker_wallets["IQOPTION"]["cash"] = bal_val
                     self.broker_wallets["IQOPTION"]["initial_balance"] = bal_val
-                    self.broker_config["iqoption_initial_balance"] = bal_val
+                    self.broker_config["iqoption_paper_initial_balance"] = bal_val
                 else:
+                    bal_val = 0.0
                     if hasattr(self.feed, "iqoption") and self.feed.iqoption.connected and self.feed.iqoption.practice_balance_id:
                         self.feed.iqoption.change_balance(self.feed.iqoption.practice_balance_id)
                         bal_val = float(self.feed.iqoption.balance)
-                    else:
-                        bal_val = float(self.broker_config.get("iqoption_initial_balance", 10000.0))
+                    
+                    # Si el broker reporta $0.0 en cuenta de práctica o no está conectado, asignar saldo demo saludable ($10,000 USD)
+                    if bal_val <= 0.0:
+                        bal_val = float(self.broker_config.get("iqoption_paper_initial_balance", 10000.0))
+                        if bal_val <= 0.0:
+                            bal_val = 10000.0
+
                     self.broker_wallets["IQOPTION"]["cash"] = bal_val
                     self.broker_wallets["IQOPTION"]["initial_balance"] = bal_val
+                    self.broker_config["iqoption_paper_initial_balance"] = bal_val
 
                 self.broker_wallets["IQOPTION"]["profit_vault"] = self.get_broker_vault("IQOPTION", "PAPER")
 
