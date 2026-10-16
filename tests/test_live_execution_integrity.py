@@ -361,6 +361,59 @@ def test_finra_4210_pdt_shield():
     assert rm.is_pdt_restricted(current_equity=5000.0, is_margin_account=False) is False
     assert rm.can_open_trade(50.0, current_equity=5000.0, is_margin_account=False, is_tradfi=True) is True
 
+def test_emergency_close_all_pauses_engine_and_wallets():
+    """Verifica que Parada de Emergencia no solo cierre posiciones sino que congele el motor y todas las billeteras en PAUSA"""
+    from execution.trading_engine import RealTimeTradingEngine
+    engine = RealTimeTradingEngine(initial_balance=100.0, execution_environment="PAPER")
+    assert engine.is_running is True
+    for b_id, b_wal in engine.broker_wallets.items():
+        assert b_wal.get("is_running") is True
 
+    engine.emergency_close_all()
 
+    assert engine.is_running is False
+    for b_id, b_wal in engine.broker_wallets.items():
+        assert b_wal.get("is_running") is False
+
+def test_toggle_pause_synchronizes_all_wallets():
+    """Verifica que Pausar y Reanudar sincronice tanto el motor como las billeteras de cada broker"""
+    from execution.trading_engine import RealTimeTradingEngine
+    engine = RealTimeTradingEngine(initial_balance=100.0, execution_environment="PAPER")
+    
+    # Pausar
+    is_run = engine.toggle_pause()
+    assert is_run is False
+    assert engine.is_running is False
+    for b_id, b_wal in engine.broker_wallets.items():
+        assert b_wal.get("is_running") is False
+
+    # Reanudar
+    is_run_again = engine.toggle_pause()
+    assert is_run_again is True
+    assert engine.is_running is True
+    for b_id, b_wal in engine.broker_wallets.items():
+        assert b_wal.get("is_running") is True
+
+def test_binance_dust_balance_under_5_usd_ignored_in_positions():
+    """Verifica que saldos residuales (< $5.00 USD) en Binance Spot no se importen como posiciones operables fantasma"""
+    from execution.trading_engine import RealTimeTradingEngine
+    engine = RealTimeTradingEngine(initial_balance=30.0, execution_environment="LIVE_REAL")
+    engine.active_broker = "BINANCE"
+
+    # Simular balances donde BNB vale $1.80 (< $5.00) y SOL vale $15.00 (>= $5.00)
+    mock_balances = {
+        "authenticated": True,
+        "usdt_free": 10.0,
+        "total_stable_free": 10.0,
+        "balances": {
+            "BNB": {"free": "0.0025", "locked": "0.0"},  # 0.0025 * ~720 = ~$1.80
+            "SOL": {"free": "0.10", "locked": "0.0"}     # 0.10 * ~150 = ~$15.00
+        }
+    }
+    engine._sync_binance_wallet_positions(mock_balances)
+
+    # BNB no debe estar en open_positions porque vale menos de $5.00 USD
+    assert "BNB" not in engine.open_positions
+    # SOL sí debe estar porque supera el mínimo nocional de $5.00 USD
+    assert "SOL" in engine.open_positions
 

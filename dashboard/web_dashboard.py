@@ -274,18 +274,8 @@ def get_state():
 
 @app.route("/api/control/toggle", methods=["POST"])
 def toggle_state():
-    ENGINE.is_running = not ENGINE.is_running
-    if ENGINE.is_running:
-        if ENGINE.target_reached or ENGINE.loss_limit_reached:
-            ENGINE.initial_balance = ENGINE.get_total_equity()
-            ENGINE.target_reached = False
-            ENGINE.loss_limit_reached = False
-            ENGINE.agent._add_thought(f"🚀 Iniciando nueva sesión con capital base de ${ENGINE.initial_balance:,.2f} USD.", "INFO", icon="🎯")
-        else:
-            ENGINE.agent._add_thought("Estado del Agente cambiado a: OPERANDO EN VIVO", "INFO", icon="⚙️")
-    else:
-        ENGINE.agent._add_thought("Estado del Agente cambiado a: EN PAUSA", "INFO", icon="⏸️")
-    return jsonify({"success": True, "is_running": ENGINE.is_running, "target_reached": ENGINE.target_reached})
+    is_run = ENGINE.toggle_pause()
+    return jsonify({"success": True, "is_running": is_run, "target_reached": ENGINE.target_reached})
 
 @app.route("/api/control/emergency-close", methods=["POST"])
 def emergency_close():

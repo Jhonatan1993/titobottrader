@@ -255,11 +255,11 @@ class RealTimeTradingEngine:
                 if cur_asset and qty > 0:
                     cur_p = cur_asset["price"]
                     val_usd = qty * cur_p
-                    # Considerar posiciones reales operables en Binance Spot (evitando descartar caídas leves de precio)
-                    if val_usd >= 0.50:
+                    # Considerar únicamente posiciones reales operables en Binance Spot (mínimo nocional exigido por Binance: $5.00 USD)
+                    if val_usd >= 5.00:
                         qty_safe = round(qty, 5) if c_sym == "BTC" else round(qty, 4)
                         invested_est = round(qty_safe * cur_p, 2)
-                        if qty_safe > 0 and invested_est >= 0.50:
+                        if qty_safe > 0 and invested_est >= 5.00:
                             active_synced_symbols.add(c_sym)
                             total_crypto_invested += invested_est
                             if c_sym not in self.open_positions:
@@ -309,7 +309,7 @@ class RealTimeTradingEngine:
                 pos_val = round(pos.get("quantity", 0.0) * pos.get("current_price", 0.0), 2)
                 if sym not in active_synced_symbols or pos.get("quantity", 0) <= 0:
                     to_remove.append(sym)
-                elif is_live and (pos_val < 0.50 or pos.get("invested_amount", 0.0) < 0.50):
+                elif is_live and (pos_val < 5.00 or pos.get("invested_amount", 0.0) < 5.00):
                     to_remove.append(sym)
         for sym in to_remove:
             del self.open_positions[sym]
@@ -1320,6 +1320,8 @@ class RealTimeTradingEngine:
                         f"ℹ️ Posición de {symbol} archivada: El valor remanente (${exit_value:.2f} USD) es inferior al mínimo de $5.00 USD exigido por Binance Spot. Los tokens permanecen seguros en tu billetera de Binance.",
                         "INFO", symbol, "🪙"
                     )
+                    if symbol in self.open_positions:
+                        del self.open_positions[symbol]
                     self._sync_binance_wallet_positions(self.feed.binance.get_account_balances())
                     return
                 else:
@@ -1406,12 +1408,19 @@ class RealTimeTradingEngine:
             )
 
     def emergency_close_all(self):
+        # 1. Poner inmediatamente el motor y todas las billeteras en PAUSA TOTAL
+        self.is_running = False
+        for b_id, b_wal in self.broker_wallets.items():
+            b_wal["is_running"] = False
+        self.agent._add_thought("🛑 PARADA DE EMERGENCIA: Operaciones detenidas. Motor puesto en PAUSA por completo.", "WARNING", icon="🛑")
+
+        # 2. Cerrar todas las posiciones abiertas
         for sym in list(self.open_positions.keys()):
             asset = self.feed.get_asset(sym)
             if asset:
                 decision = {
                     "decision": "EMERGENCY_SELL",
-                    "reason_simple": "Cierre Inmediato de Seguridad / Meta o Límite alcanzado"
+                    "reason_simple": "Cierre Inmediato de Seguridad / Parada solicitada por el usuario"
                 }
                 self._execute_sell(sym, asset, decision)
 
@@ -1421,6 +1430,10 @@ class RealTimeTradingEngine:
             self.target_reached = False
             self.loss_limit_reached = False
             self.is_running = True
+            for b_id, b_wal in self.broker_wallets.items():
+                b_wal["is_running"] = True
+                b_wal["target_reached"] = False
+                b_wal["loss_limit_reached"] = False
             self.agent._add_thought(
                 f"▶️ Nueva Sesión Cuantitativa: Capital base en ${self.initial_balance:,.2f} USD. Buscando meta de +${self.profit_target_amount:,.2f} USD.",
                 "INFO",
@@ -1429,9 +1442,12 @@ class RealTimeTradingEngine:
             return self.is_running
 
         self.is_running = not self.is_running
+        for b_id, b_wal in self.broker_wallets.items():
+            b_wal["is_running"] = self.is_running
         status = "REANUDADO" if self.is_running else "PAUSADO"
         icon = "▶️" if self.is_running else "⏸️"
-        self.agent._add_thought(f"{icon} Agente {status} por el usuario.", "INFO", icon=icon)
+        msg = f"{icon} Motor {status}: Operaciones automáticas activas." if self.is_running else f"{icon} Motor {status}: Todas las compras y ventas automáticas quedan CONGELADAS."
+        self.agent._add_thought(msg, "INFO", icon=icon)
         return self.is_running
 
     def get_state(self) -> Dict[str, Any]:
