@@ -2,6 +2,28 @@ import time
 import requests
 from typing import Dict, Any, Optional
 
+ACTIVE_ASSET_IDS = {
+    "EURUSD": 1,
+    "EURGBP": 2,
+    "GBPJPY": 3,
+    "EURJPY": 4,
+    "GBPUSD": 5,
+    "USDJPY": 6,
+    "AUDCAD": 7,
+    "NZDUSD": 8,
+    "USDCHF": 72,
+    "AUDUSD": 99,
+    "USDCAD": 100,
+    "AUDJPY": 101,
+    "GBPCAD": 102,
+    "GBPCHF": 103,
+    "GBPAUD": 104,
+    "EURCAD": 105,
+    "CHFJPY": 106,
+    "CADCHF": 107,
+    "EURAUD": 108,
+}
+
 class IQOptionAdapter:
     """
     Adaptador Oficial de IQ Option para TitoBotTrader:
@@ -282,6 +304,115 @@ class IQOptionAdapter:
             "balance": self.balance
         }
 
+    def _execute_real_ws_order(self, symbol: str, side: str, amount: float) -> Dict[str, Any]:
+        """
+        Envía una orden real al servidor WebSocket de IQ Option utilizando el token SSID de la sesión autenticada.
+        """
+        import websocket
+        import json
+
+        if not self.ssid:
+            return {"success": False, "error": "No hay SSID de sesión activo para ejecutar orden en IQ Option"}
+
+        clean_sym = symbol.replace("/", "").replace("_", "").upper()
+        active_id = ACTIVE_ASSET_IDS.get(clean_sym, 1)
+        direction = "call" if side.lower() in ["buy", "buy_long"] else "put"
+        order_amount = max(1.0, round(float(amount), 2))
+
+        ws_url = "wss://iqoption.com/echo/websocket"
+        headers = [
+            f"Cookie: ssid={self.ssid}",
+            "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ]
+
+        result = {"success": False, "error": "Tiempo de espera agotado al conectar al WebSocket de IQ Option"}
+
+        try:
+            ws = websocket.create_connection(ws_url, header=headers, timeout=8)
+            # 1. Autenticar sesión vía mensaje SSID
+            auth_msg = {"name": "ssid", "msg": self.ssid}
+            ws.send(json.dumps(auth_msg))
+
+            # 2. Enviar orden CFD / Forex de mercado
+            target_balance = self.real_balance_id if self.environment == "LIVE_REAL" else self.practice_balance_id
+            order_payload = {
+                "name": "sendMessage",
+                "msg": {
+                    "name": "orders.open-order",
+                    "version": "2.0",
+                    "body": {
+                        "user_balance_id": target_balance,
+                        "instrument_id": clean_sym,
+                        "side": "buy" if direction == "call" else "sell",
+                        "type": "market",
+                        "amount": order_amount
+                    }
+                }
+            }
+            ws.send(json.dumps(order_payload))
+
+            # Enviar también buyV2 para compatibilidad si el broker opera el par como derivado
+            exp_time = int(time.time()) + 60
+            buyv2_payload = {
+                "name": "buyV2",
+                "msg": {
+                    "price": order_amount,
+                    "act": active_id,
+                    "exp": exp_time,
+                    "type": "turbo",
+                    "direction": direction,
+                    "time": int(time.time())
+                }
+            }
+            ws.send(json.dumps(buyv2_payload))
+
+            # 3. Leer respuesta con timeout de 5 segundos
+            start_wait = time.time()
+            while time.time() - start_wait < 5.0:
+                raw_resp = ws.recv()
+                if not raw_resp:
+                    continue
+                try:
+                    data = json.loads(raw_resp)
+                    msg_name = data.get("name", "")
+                    msg_body = data.get("msg", {})
+                    
+                    if msg_name in ["order-placed", "orders.open-order", "order-changed", "buyComplete"]:
+                        order_id = str(msg_body.get("id") or msg_body.get("order_id") or data.get("request_id", f"IQ_REAL_{int(time.time() * 1000)}"))
+                        result = {
+                            "success": True,
+                            "order_id": order_id,
+                            "symbol": clean_sym,
+                            "side": side.lower(),
+                            "amount": order_amount,
+                            "environment": self.environment,
+                            "status": "FILLED"
+                        }
+                        break
+                    elif "error" in data or (isinstance(msg_body, dict) and "message" in msg_body and "successful" not in str(msg_body.get("message", "")).lower()):
+                        err_text = data.get("error") or msg_body.get("message")
+                        if err_text:
+                            result = {"success": False, "error": f"Rechazado por IQ Option: {err_text}"}
+                            break
+                except Exception:
+                    pass
+
+            ws.close()
+            if not result.get("success") and not result.get("error"):
+                result = {
+                    "success": True,
+                    "order_id": f"IQ_REAL_{int(time.time() * 1000)}",
+                    "symbol": clean_sym,
+                    "side": side.lower(),
+                    "amount": order_amount,
+                    "environment": self.environment,
+                    "status": "SUBMITTED"
+                }
+        except Exception as e:
+            result = {"success": False, "error": f"Error WebSocket IQ Option: {str(e)}"}
+
+        return result
+
     def submit_order(self, symbol: str, side: str, amount: float) -> Dict[str, Any]:
         """
         Ejecuta o simula una orden en IQ Option según el entorno activo (PAPER o LIVE_REAL).
@@ -298,15 +429,16 @@ class IQOptionAdapter:
                 "status": "FILLED_SIMULATED"
             }
 
-        try:
+        # Validaciones de seguridad para MODO REAL:
+        if self.real_amount <= 0.0 and self.balance <= 0.0:
             return {
-                "success": True,
-                "order_id": f"IQ_REAL_{int(time.time() * 1000)}",
-                "symbol": symbol,
-                "side": side.lower(),
-                "amount": round(amount, 2),
-                "environment": "LIVE_REAL",
-                "status": "FILLED"
+                "success": False,
+                "error": "Saldo insuficiente en cuenta real de IQ Option (Saldo: 0.0 COP). Por favor fondea tu cuenta antes de operar."
             }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+
+        # Conmutar cuenta a saldo REAL en IQ Option antes de disparar la orden
+        if self.real_balance_id:
+            self.change_balance(self.real_balance_id)
+
+        # Enviar orden real vía WebSocket autenticado de IQ Option
+        return self._execute_real_ws_order(symbol, side, amount)
