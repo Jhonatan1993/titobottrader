@@ -1020,6 +1020,10 @@ class RealTimeTradingEngine:
     def _evaluate_and_trade(self, market_state: Dict[str, Any]):
         # A. Evaluar salidas de posiciones abiertas para TODOS los brokers
         for sym, pos in list(self.open_positions.items()):
+            pos_b = pos.get("broker") or ("BINANCE" if pos.get("category") == "CRYPTO" else ("IQOPTION" if pos.get("category") == "FOREX" else "ALPACA"))
+            pos_wal = self.broker_wallets.get(pos_b, {})
+            if not pos_wal.get("is_running", True):
+                continue
             asset = market_state.get(sym)
             if not asset:
                 continue
@@ -1407,48 +1411,81 @@ class RealTimeTradingEngine:
                 icon="🛑"
             )
 
-    def emergency_close_all(self):
-        # 1. Poner inmediatamente el motor y todas las billeteras en PAUSA TOTAL
-        self.is_running = False
-        for b_id, b_wal in self.broker_wallets.items():
+    def emergency_close_all(self, broker: Optional[str] = None):
+        target_b = broker.upper() if broker else None
+
+        if target_b and target_b in self.broker_wallets:
+            # Pausar y cerrar EXCLUSIVAMENTE el broker indicado (aislamiento estricto)
+            b_wal = self.broker_wallets[target_b]
             b_wal["is_running"] = False
-        self.agent._add_thought("🛑 PARADA DE EMERGENCIA: Operaciones detenidas. Motor puesto en PAUSA por completo.", "WARNING", icon="🛑")
-
-        # 2. Cerrar todas las posiciones abiertas
-        for sym in list(self.open_positions.keys()):
-            asset = self.feed.get_asset(sym)
-            if asset:
-                decision = {
-                    "decision": "EMERGENCY_SELL",
-                    "reason_simple": "Cierre Inmediato de Seguridad / Parada solicitada por el usuario"
-                }
-                self._execute_sell(sym, asset, decision)
-
-    def toggle_pause(self) -> bool:
-        if self.target_reached or self.loss_limit_reached:
-            self.initial_balance = self.get_total_equity()
-            self.target_reached = False
-            self.loss_limit_reached = False
-            self.is_running = True
-            for b_id, b_wal in self.broker_wallets.items():
-                b_wal["is_running"] = True
-                b_wal["target_reached"] = False
-                b_wal["loss_limit_reached"] = False
+            b_name = b_wal.get("name", target_b)
             self.agent._add_thought(
-                f"▶️ Nueva Sesión Cuantitativa: Capital base en ${self.initial_balance:,.2f} USD. Buscando meta de +${self.profit_target_amount:,.2f} USD.",
-                "INFO",
-                icon="🚀"
+                f"🛑 PARADA DE EMERGENCIA [{b_name}]: Operaciones de este broker DETENIDAS por completo. Los demás brokers continúan operando normalmente.",
+                "WARNING",
+                icon="🛑"
             )
-            return self.is_running
+            for sym in list(self.open_positions.keys()):
+                pos = self.open_positions[sym]
+                pos_b = pos.get("broker") or ("BINANCE" if pos.get("category") == "CRYPTO" else ("IQOPTION" if pos.get("category") == "FOREX" else "ALPACA"))
+                if pos_b == target_b:
+                    asset = self.feed.get_asset(sym)
+                    if asset:
+                        decision = {
+                            "decision": "EMERGENCY_SELL",
+                            "reason_simple": f"Parada de Seguridad solicitada exclusivamente para {b_name}"
+                        }
+                        self._execute_sell(sym, asset, decision)
+        else:
+            # Si no se especificó broker, detener todos
+            self.is_running = False
+            for b_id, b_wal in self.broker_wallets.items():
+                b_wal["is_running"] = False
+            self.agent._add_thought("🛑 PARADA DE EMERGENCIA GLOBAL: Operaciones detenidas en todos los brokers.", "WARNING", icon="🛑")
+            for sym in list(self.open_positions.keys()):
+                asset = self.feed.get_asset(sym)
+                if asset:
+                    decision = {
+                        "decision": "EMERGENCY_SELL",
+                        "reason_simple": "Cierre Inmediato de Seguridad / Parada solicitada por el usuario"
+                    }
+                    self._execute_sell(sym, asset, decision)
 
-        self.is_running = not self.is_running
-        for b_id, b_wal in self.broker_wallets.items():
-            b_wal["is_running"] = self.is_running
-        status = "REANUDADO" if self.is_running else "PAUSADO"
-        icon = "▶️" if self.is_running else "⏸️"
-        msg = f"{icon} Motor {status}: Operaciones automáticas activas." if self.is_running else f"{icon} Motor {status}: Todas las compras y ventas automáticas quedan CONGELADAS."
-        self.agent._add_thought(msg, "INFO", icon=icon)
-        return self.is_running
+        # El motor general sigue activo si al menos un broker continúa operando
+        self.is_running = any(w.get("is_running", True) for w in self.broker_wallets.values())
+
+    def toggle_pause(self, broker: Optional[str] = None) -> bool:
+        target_b = (broker or self.active_broker).upper()
+        if target_b not in self.broker_wallets:
+            target_b = self.active_broker
+
+        b_wal = self.broker_wallets.get(target_b, self.broker_wallets["BINANCE"])
+        b_name = b_wal.get("name", target_b)
+
+        currently_running = b_wal.get("is_running", True)
+        new_running_state = not currently_running
+        b_wal["is_running"] = new_running_state
+
+        if new_running_state:
+            b_wal["target_reached"] = False
+            b_wal["loss_limit_reached"] = False
+            if target_b == self.active_broker:
+                self.target_reached = False
+                self.loss_limit_reached = False
+            self.agent._add_thought(
+                f"▶️ [{b_name}] Operaciones REANUDADAS para este broker. Escáner y ejecuciones activas.",
+                "INFO",
+                icon="▶️"
+            )
+        else:
+            self.agent._add_thought(
+                f"⏸️ [{b_name}] Operaciones PAUSADAS exclusivamente para este broker. No se realizarán nuevas compras ni ventas en {b_name}. Los demás brokers continúan operando normalmente.",
+                "INFO",
+                icon="⏸️"
+            )
+
+        # El motor general sigue activo si al menos un broker continúa operando
+        self.is_running = any(w.get("is_running", True) for w in self.broker_wallets.values())
+        return new_running_state
 
     def get_state(self) -> Dict[str, Any]:
         active_b = self.active_broker
@@ -1469,11 +1506,12 @@ class RealTimeTradingEngine:
         total_profit = round(vault_val + unrealized_pnl, 2)
         total_profit_pct = round((total_profit / initial_bal) * 100, 2) if initial_bal > 0 else 0.0
 
-        if self.is_running:
+        broker_running = wallet.get("is_running", True)
+        if broker_running:
             status_text = "OPERANDO EN VIVO (24/7)"
-        elif self.target_reached:
+        elif wallet.get("target_reached"):
             status_text = "🏆 META DE GANANCIA LOGRADA (DETENIDO)"
-        elif self.loss_limit_reached:
+        elif wallet.get("loss_limit_reached"):
             status_text = "🛑 LÍMITE PÉRDIDA ALCANZADO (DETENIDO)"
         else:
             status_text = "EN PAUSA"
@@ -1569,12 +1607,14 @@ class RealTimeTradingEngine:
                 "logged_user": iq_user if b_id == "IQOPTION" else "",
                 "user_email": self.feed.iqoption.email if (b_id == "IQOPTION" and hasattr(self.feed, 'iqoption')) else "",
                 "real_balance": iq_real if b_id == "IQOPTION" else None,
-                "practice_balance": iq_demo if b_id == "IQOPTION" else None
+                "practice_balance": iq_demo if b_id == "IQOPTION" else None,
+                "is_running": b_wal.get("is_running", True)
             }
 
         return {
             "system_status": {
-                "is_running": self.is_running,
+                "is_running": broker_running,
+                "global_is_running": self.is_running,
                 "status_text": status_text,
                 "active_broker": active_b,
                 "operating_mode": self.operating_mode,

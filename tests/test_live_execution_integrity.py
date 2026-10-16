@@ -361,38 +361,42 @@ def test_finra_4210_pdt_shield():
     assert rm.is_pdt_restricted(current_equity=5000.0, is_margin_account=False) is False
     assert rm.can_open_trade(50.0, current_equity=5000.0, is_margin_account=False, is_tradfi=True) is True
 
-def test_emergency_close_all_pauses_engine_and_wallets():
-    """Verifica que Parada de Emergencia no solo cierre posiciones sino que congele el motor y todas las billeteras en PAUSA"""
+def test_emergency_close_isolated_per_broker():
+    """Verifica que Parada de Emergencia sobre un broker específico NO afecte ni pause a los demás brokers"""
     from execution.trading_engine import RealTimeTradingEngine
     engine = RealTimeTradingEngine(initial_balance=100.0, execution_environment="PAPER")
     assert engine.is_running is True
     for b_id, b_wal in engine.broker_wallets.items():
         assert b_wal.get("is_running") is True
 
-    engine.emergency_close_all()
+    # Parada exclusiva para BINANCE
+    engine.emergency_close_all(broker="BINANCE")
 
-    assert engine.is_running is False
-    for b_id, b_wal in engine.broker_wallets.items():
-        assert b_wal.get("is_running") is False
+    # BINANCE queda detenido/pausado
+    assert engine.broker_wallets["BINANCE"]["is_running"] is False
+    # ALPACA e IQOPTION deben seguir operando normalmente
+    assert engine.broker_wallets["ALPACA"]["is_running"] is True
+    assert engine.broker_wallets["IQOPTION"]["is_running"] is True
+    # El motor sigue vivo porque hay otros brokers activos
+    assert engine.is_running is True
 
-def test_toggle_pause_synchronizes_all_wallets():
-    """Verifica que Pausar y Reanudar sincronice tanto el motor como las billeteras de cada broker"""
+def test_toggle_pause_isolated_per_broker():
+    """Verifica que Pausar un broker pause únicamente ese broker y no todos"""
     from execution.trading_engine import RealTimeTradingEngine
     engine = RealTimeTradingEngine(initial_balance=100.0, execution_environment="PAPER")
     
-    # Pausar
-    is_run = engine.toggle_pause()
+    # Pausar únicamente BINANCE
+    is_run = engine.toggle_pause(broker="BINANCE")
     assert is_run is False
-    assert engine.is_running is False
-    for b_id, b_wal in engine.broker_wallets.items():
-        assert b_wal.get("is_running") is False
+    assert engine.broker_wallets["BINANCE"]["is_running"] is False
+    # ALPACA e IQOPTION siguen activos
+    assert engine.broker_wallets["ALPACA"]["is_running"] is True
+    assert engine.broker_wallets["IQOPTION"]["is_running"] is True
 
-    # Reanudar
-    is_run_again = engine.toggle_pause()
+    # Reanudar BINANCE
+    is_run_again = engine.toggle_pause(broker="BINANCE")
     assert is_run_again is True
-    assert engine.is_running is True
-    for b_id, b_wal in engine.broker_wallets.items():
-        assert b_wal.get("is_running") is True
+    assert engine.broker_wallets["BINANCE"]["is_running"] is True
 
 def test_binance_dust_balance_under_5_usd_ignored_in_positions():
     """Verifica que saldos residuales (< $5.00 USD) en Binance Spot no se importen como posiciones operables fantasma"""

@@ -4010,13 +4010,24 @@
 
         // Acciones del Motor
         async function toggleEngine() {
-            await fetch('/api/control/toggle', { method: 'POST' });
+            const activeBroker = currentActiveBroker || (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'BINANCE';
+            await fetch('/api/control/toggle', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ broker: activeBroker })
+            });
             fetchState();
         }
 
         async function emergencyClose() {
-            if (confirm("¿Confirmas el cierre inmediato de todas las posiciones abiertas por seguridad?")) {
-                await fetch('/api/control/emergency-close', { method: 'POST' });
+            const activeBroker = currentActiveBroker || (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'BINANCE';
+            const bName = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.brokers && latestSystemData.system_status.brokers[activeBroker] && latestSystemData.system_status.brokers[activeBroker].name) || activeBroker;
+            if (confirm(`¿Confirmas la PARADA DE EMERGENCIA para ${bName}? Se cerrarán las posiciones y se detendrán las operaciones de este broker (los demás brokers continuarán funcionando normalmente).`)) {
+                await fetch('/api/control/emergency-close', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ broker: activeBroker })
+                });
                 fetchState();
             }
         }

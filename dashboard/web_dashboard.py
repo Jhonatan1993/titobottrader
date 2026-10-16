@@ -274,13 +274,17 @@ def get_state():
 
 @app.route("/api/control/toggle", methods=["POST"])
 def toggle_state():
-    is_run = ENGINE.toggle_pause()
-    return jsonify({"success": True, "is_running": is_run, "target_reached": ENGINE.target_reached})
+    data = request.get_json(silent=True) or {}
+    broker = data.get("broker") or ENGINE.active_broker
+    is_run = ENGINE.toggle_pause(broker=broker)
+    return jsonify({"success": True, "is_running": is_run, "broker": broker, "target_reached": ENGINE.target_reached})
 
 @app.route("/api/control/emergency-close", methods=["POST"])
 def emergency_close():
-    ENGINE.emergency_close_all()
-    return jsonify({"success": True})
+    data = request.get_json(silent=True) or {}
+    broker = data.get("broker") or ENGINE.active_broker
+    ENGINE.emergency_close_all(broker=broker)
+    return jsonify({"success": True, "broker": broker})
 
 @app.route("/api/control/reset", methods=["POST"])
 def reset_account():
