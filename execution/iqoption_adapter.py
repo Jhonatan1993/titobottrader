@@ -24,7 +24,7 @@ ACTIVE_ASSET_IDS = {
     "CHFJPY": 106,
     "CADCHF": 107,
     "EURAUD": 108,
-    # Forex OTC (Fines de semana y 24/7)
+    # Forex OTC (Operación 24/7 Permanente: Días de semana y Fines de semana)
     "EURUSD-OTC": 76,
     "EURUSDOTC": 76,
     "EURGBP-OTC": 77,
@@ -43,6 +43,20 @@ ACTIVE_ASSET_IDS = {
     "USDJPYOTC": 87,
     "AUDCAD-OTC": 88,
     "AUDCADOTC": 88,
+    "USDCAD-OTC": 89,
+    "USDCADOTC": 89,
+    "AUDUSD-OTC": 90,
+    "AUDUSDOTC": 90,
+    "GBPAUD-OTC": 91,
+    "GBPAUDOTC": 91,
+    "EURCAD-OTC": 92,
+    "EURCADOTC": 92,
+    "CHFJPY-OTC": 93,
+    "CHFJPYOTC": 93,
+    "CADCHF-OTC": 94,
+    "CADCHFOTC": 94,
+    "EURAUD-OTC": 95,
+    "EURAUDOTC": 95,
 }
 
 class IQOptionAdapter:
@@ -399,13 +413,21 @@ class IQOptionAdapter:
         if not self.ssid:
             return {"success": False, "error": "No hay SSID de sesión activo para ejecutar orden en IQ Option"}
 
+        # Normalizar símbolo eliminando caracteres especiales
+        raw_sym = symbol.replace("/", "").replace(" ", "").replace("(", "").replace(")", "").replace("_", "").upper()
         clean_sym = symbol.replace("/", "").replace("_", "").upper()
-        # Detección inteligente de activo OTC para fines de semana (Sábado y Domingo mercado estándar cerrado)
+        
+        # Resolución universal de activo: OTC opera 24/7 (días de semana y fines de semana)
         is_weekend = datetime.datetime.now(datetime.timezone.utc).weekday() >= 5
-        if is_weekend or "OTC" in clean_sym:
-            active_id = ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC", ACTIVE_ASSET_IDS.get(f"{clean_sym}OTC", ACTIVE_ASSET_IDS.get(clean_sym, 76)))
+        if "OTC" in raw_sym:
+            # Si se solicita explícitamente OTC (ej: EURUSD-OTC o EURUSDOTC), opera OTC en cualquier día (Lunes a Domingo)
+            active_id = ACTIVE_ASSET_IDS.get(symbol.upper(), ACTIVE_ASSET_IDS.get(raw_sym, ACTIVE_ASSET_IDS.get(clean_sym, 76)))
+        elif is_weekend:
+            # En fin de semana, Forex estándar cerrado -> fallback automático a OTC
+            active_id = ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC", ACTIVE_ASSET_IDS.get(f"{clean_sym}OTC", 76))
         else:
-            active_id = ACTIVE_ASSET_IDS.get(clean_sym, 1)
+            # En días de semana, permite operar tanto el par estándar como el par OTC si está seleccionado
+            active_id = ACTIVE_ASSET_IDS.get(clean_sym, ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC", 1))
 
         direction = "call" if side.lower() in ["buy", "buy_long"] else "put"
         

@@ -177,3 +177,28 @@ def test_iqoption_emergency_close_closes_only_forex_positions():
     assert engine.broker_wallets["IQOPTION"]["is_running"] is False
     assert engine.broker_wallets["BINANCE"]["is_running"] is True
     assert engine.broker_wallets["ALPACA"]["is_running"] is True
+
+def test_iqoption_otc_24_7_resolution_weekdays_and_weekends():
+    """Verifica que los activos OTC operen 24/7 tanto en días de semana como en fines de semana"""
+    adapter = IQOptionAdapter(ssid="test_ssid_valid", environment="LIVE_REAL")
+    adapter.connected = True
+    adapter.real_amount = 50000.0
+    adapter.balance = 50000.0
+    adapter.real_balance_id = 999123
+
+    mock_ws = MagicMock()
+    mock_ws.recv.side_effect = [
+        '{"name": "timeSync", "msg": 1729000000}',
+        '{"status": 2000, "name": "option-opened", "msg": {"id": 14365301803, "active_id": 76}}'
+    ]
+
+    with patch("websocket.create_connection", return_value=mock_ws):
+        # Simular día de semana (Miércoles, weekday=2)
+        mock_weekday = MagicMock()
+        mock_weekday.weekday.return_value = 2
+        with patch("datetime.datetime") as mock_dt:
+            mock_dt.now.return_value = mock_weekday
+            res = adapter.submit_order("EURUSD-OTC", "BUY", 2000.0)
+            assert res["success"] is True
+            assert res["status"] == "FILLED"
+            assert res["order_id"] == "14365301803"

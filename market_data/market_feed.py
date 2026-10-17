@@ -277,6 +277,16 @@ AVAILABLE_ASSETS = [
         "trend_bias": 0.0001
     },
     {
+        "symbol": "EURUSD-OTC",
+        "name": "EUR / USD (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Euro / Dólar OTC (24/7)",
+        "icon": "💶",
+        "base_price": 1.0850,
+        "volatility": 0.0035,
+        "trend_bias": 0.0001
+    },
+    {
         "symbol": "GBPUSD",
         "name": "GBP / USD",
         "category": "FOREX",

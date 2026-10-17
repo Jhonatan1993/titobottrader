@@ -37,6 +37,7 @@ ASSET_RISK_PROFILES = {
 
     # === FOREX MAYORES Y CRUCES (Ratio Asimétrico Institucional 2.0:1) ===
     "EURUSD": {"sl_pct": 0.0035, "tp_pct": 0.0070, "vol_type": "Forex Mayor - Alta Liquidez"},
+    "EURUSD-OTC": {"sl_pct": 0.0035, "tp_pct": 0.0070, "vol_type": "Forex OTC 24/7 - Alta Liquidez"},
     "GBPUSD": {"sl_pct": 0.0040, "tp_pct": 0.0080, "vol_type": "Forex Mayor - Volatilidad Media"},
     "USDJPY": {"sl_pct": 0.0035, "tp_pct": 0.0070, "vol_type": "Forex Mayor - Dinámica Asiática"},
     "AUDUSD": {"sl_pct": 0.0038, "tp_pct": 0.0076, "vol_type": "Forex Mayor - Commodities"},
