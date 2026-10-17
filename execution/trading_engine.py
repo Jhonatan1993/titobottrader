@@ -1297,12 +1297,28 @@ class RealTimeTradingEngine:
         pos = self.open_positions.pop(symbol)
         exit_price = asset["price"]
         quantity = pos["quantity"]
-        exit_value = round(quantity * exit_price, 2)
         invested = pos["invested_amount"]
-        pnl = round(exit_value - invested, 2)
         entry_p = pos.get("entry_price", exit_price)
-        pnl_pct = round(((exit_price - entry_p) / entry_p) * 100, 2) if entry_p > 0 else 0.0
         broker_id = pos.get("broker", self.active_broker)
+
+        if broker_id == "IQOPTION":
+            # Lógica Exclusiva para Opciones Binarias / Turbo de IQ Option:
+            # Payout fijo (+88% en victoria, -100% en pérdida)
+            payout_rate = 0.88
+            pos_side = pos.get("side", "BUY_LONG").upper()
+            is_win = (exit_price > entry_p) if pos_side in ["BUY", "BUY_LONG", "CALL"] else (exit_price < entry_p)
+            if is_win:
+                pnl = round(invested * payout_rate, 2)
+                exit_value = round(invested + pnl, 2)
+                pnl_pct = round(payout_rate * 100, 2)
+            else:
+                pnl = round(-invested, 2)
+                exit_value = 0.0
+                pnl_pct = -100.0
+        else:
+            exit_value = round(quantity * exit_price, 2)
+            pnl = round(exit_value - invested, 2)
+            pnl_pct = round(((exit_price - entry_p) / entry_p) * 100, 2) if entry_p > 0 else 0.0
         wallet = self.broker_wallets.get(broker_id, self.broker_wallets["BINANCE"])
         b_icon = wallet.get("icon", "🪙" if broker_id == "BINANCE" else "🏛️")
         broker_badge = f"{b_icon} {wallet.get('name', broker_id)}"
