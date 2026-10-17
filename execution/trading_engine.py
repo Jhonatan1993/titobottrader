@@ -1080,6 +1080,11 @@ class RealTimeTradingEngine:
             for sym, asset in market_state.items():
                 if sym in self.open_positions:
                     continue
+                # Blindaje contra duplicados de activo subyacente (ej: evitar abrir EURUSD y EURUSD-OTC a la vez)
+                clean_underlying = sym.replace("-OTC", "").replace("OTC", "")
+                existing_underlyings = [p_sym.replace("-OTC", "").replace("OTC", "") for p_sym in self.open_positions.keys()]
+                if clean_underlying in existing_underlyings:
+                    continue
                 if allowed_categories and asset.get("category") not in allowed_categories:
                     continue
                 
@@ -1384,9 +1389,10 @@ class RealTimeTradingEngine:
                         self.cash_balance = wallet["cash"]
                     return
 
-        # Enrutamiento de venta / cierre en IQ Option
+        # Enrutamiento de venta / cierre en IQ Option (Venta anticipada o liquidación en expiración)
         if broker_id == "IQOPTION" and hasattr(self.feed, "iqoption"):
-            iq_res = self.feed.iqoption.submit_order(symbol, "sell", exit_value)
+            opt_id = pos.get("broker_order_id")
+            iq_res = self.feed.iqoption.submit_order(symbol, "sell", exit_value, option_id=opt_id)
             if not iq_res.get("success"):
                 self.agent._add_thought(f"ℹ️ Cierre registrado en IQ Option: {iq_res.get('error', 'Completado')}", "INFO", symbol, "📈")
 

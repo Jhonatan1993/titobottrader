@@ -549,10 +549,50 @@ class IQOptionAdapter:
 
         return result
 
-    def submit_order(self, symbol: str, side: str, amount: float) -> Dict[str, Any]:
+    def close_option(self, option_id: str) -> Dict[str, Any]:
+        """Cierra o vende anticipadamente una opción binaria activa en IQ Option."""
+        if not self.ssid or not option_id or str(option_id).startswith("IQ_PAPER"):
+            return {"success": True, "status": "CLOSED_SIMULATED"}
+        import websocket
+        import json
+        import ssl
+        try:
+            ws_url = "wss://iqoption.com/echo/websocket"
+            headers = [
+                f"Cookie: ssid={self.ssid}",
+                "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+            ]
+            ws = websocket.create_connection(ws_url, header=headers, timeout=5, sslopt={"cert_reqs": ssl.CERT_NONE})
+            ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
+            
+            req_id = f"sell_{int(time.time() * 1000)}"
+            opt_val = int(option_id) if str(option_id).isdigit() else option_id
+            sell_msg = {
+                "name": "sendMessage",
+                "request_id": req_id,
+                "msg": {
+                    "name": "binary-options.sell-option",
+                    "version": "1.0",
+                    "body": {"options_ids": [opt_val]}
+                }
+            }
+            ws.send(json.dumps(sell_msg))
+            ws.close()
+            return {"success": True, "status": "SOLD_EARLY"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def submit_order(self, symbol: str, side: str, amount: float, option_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Ejecuta o simula una orden en IQ Option según el entorno activo (PAPER o LIVE_REAL).
         """
+        # En opciones binarias / turbo, 'sell' o 'close' es el CIERRE de la posición existente,
+        # NUNCA debe abrir una orden opuesta (PUT/Baja).
+        if side.lower() in ["sell", "close", "sell_exit"]:
+            if option_id:
+                return self.close_option(option_id)
+            return {"success": True, "status": "CLOSED_AT_EXPIRATION"}
+
         if not self.connected or self.environment != "LIVE_REAL":
             order_id = f"IQ_PAPER_{int(time.time() * 1000)}"
             return {
