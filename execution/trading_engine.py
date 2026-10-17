@@ -1259,7 +1259,12 @@ class RealTimeTradingEngine:
                 mode_str = "REAL" if is_broker_live else "DEMO/PRACTICE"
                 self.agent._add_thought(f"📈 ORDEN IQ OPTION ({mode_str}): Operación abierta en {symbol} (ID: {oid}).", "INFO", symbol, "⚡")
             else:
-                self.agent._add_thought(f"⚠️ Aviso orden IQ Option: {iq_res.get('error')}", "WARNING", symbol, "🛑")
+                self.agent._add_thought(f"🛑 Error en broker IQ Option: {iq_res.get('error')}. Operación abortada.", "WARNING", symbol, "🛑")
+                if is_broker_live:
+                    wallet["cash"] = round(wallet["cash"] + actual_investment, 2)
+                    if broker_id == self.active_broker:
+                        self.cash_balance = wallet["cash"]
+                    return
 
         self.open_positions[symbol] = position
         if hasattr(self, "risk_manager"):
@@ -1271,11 +1276,13 @@ class RealTimeTradingEngine:
             cat_badge = "📈 IQ Option"
         else:
             cat_badge = "🪙 Binance"
+
+        b_curr = "COP" if (broker_id == "IQOPTION" and getattr(self.feed.iqoption, "currency", "USD") == "COP") else "USD"
         self.agent._add_thought(
-            f"🛒 ¡COMPRADO [{cat_badge}]! {quantity} {symbol} ({asset['name']}) por ${actual_investment:,.2f} USD. Kelly: {kelly_pct}% | Meta: ${take_profit:,.2f} | Escudo: ${stop_loss:,.2f}.",
+            f"🛒 ¡COMPRADO [{cat_badge}]! {quantity} {symbol} ({asset['name']}) por {b_curr} {actual_investment:,.2f}. Kelly: {kelly_pct}% | Meta: ${take_profit:,.2f} | Escudo: ${stop_loss:,.2f}.",
             "TRADE_BUY",
             symbol,
-            icon="🟢"
+            icon="⚡"
         )
 
     def _execute_sell(self, symbol: str, asset: Dict[str, Any], decision_data: Dict[str, Any]):
@@ -1409,17 +1416,18 @@ class RealTimeTradingEngine:
         if hasattr(self, "risk_manager"):
             self.risk_manager.register_trade_close(pnl, symbol=symbol, is_intraday=True)
 
+        b_curr = "COP" if (broker_id == "IQOPTION" and getattr(self.feed.iqoption, "currency", "USD") == "COP") else "USD"
         if pnl > 0:
             self.agent._add_thought(
-                f"💰 ¡VENDIDO CON GANANCIA [{broker_badge}]! {symbol} cerrado a ${exit_price:,.2f}. Retorno: +${pnl:,.2f} USD (+{pnl_pct:.2f}%). "
-                f"🔒 Ganancia depositada en la Bóveda (Total protegido: ${wallet['profit_vault']:,.2f} USD). Capital operativo base intacto.",
+                f"💰 ¡VENDIDO CON GANANCIA [{broker_badge}]! {symbol} cerrado a ${exit_price:,.2f}. Retorno: +{b_curr} {pnl:,.2f} (+{pnl_pct:.2f}%). "
+                f"🔒 Ganancia depositada en la Bóveda (Total protegido: {b_curr} {wallet['profit_vault']:,.2f}). Capital operativo base intacto.",
                 "TRADE_WIN",
                 symbol,
                 icon="💵"
             )
         else:
             self.agent._add_thought(
-                f"🛡️ STOP-LOSS EJECUTADO [{broker_badge}]: {symbol} cerrado a ${exit_price:,.2f}. Pérdida mínima controlada: -${abs(pnl):,.2f} USD ({pnl_pct:.2f}%). Bóveda de ganancias protegida.",
+                f"🛡️ STOP-LOSS EJECUTADO [{broker_badge}]: {symbol} cerrado a ${exit_price:,.2f}. Pérdida mínima controlada: -{b_curr} {abs(pnl):,.2f} ({pnl_pct:.2f}%). Bóveda de ganancias protegida.",
                 "TRADE_LOSS",
                 symbol,
                 icon="🛑"

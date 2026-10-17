@@ -434,38 +434,44 @@ class IQOptionAdapter:
             auth_msg = {"name": "ssid", "msg": self.ssid}
             ws.send(json.dumps(auth_msg))
 
-            # 2. Enviar orden CFD / Forex de mercado
+            # Esperar confirmación de handshake (profile) antes de enviar la orden
+            auth_start = time.time()
+            while time.time() - auth_start < 2.0:
+                raw = ws.recv()
+                if not raw:
+                    continue
+                try:
+                    d = json.loads(raw)
+                    if d.get("name") in ["profile", "timeSync", "front"]:
+                        break
+                except Exception:
+                    pass
+
+            # 2. Calcular expiración Turbo exacta
+            now = int(time.time())
+            rem = now % 60
+            exp_time = (now // 60 + (2 if rem > 30 else 1)) * 60
+            req_id = f"tito_{int(time.time() * 1000)}"
             target_balance = self.real_balance_id if self.environment == "LIVE_REAL" else self.practice_balance_id
-            order_payload = {
+
+            # Enviar binary-options.open-option oficial verificado (Funciona para Turbo / Binarias / OTC)
+            binary_payload = {
                 "name": "sendMessage",
+                "request_id": req_id,
                 "msg": {
-                    "name": "orders.open-order",
-                    "version": "2.0",
+                    "name": "binary-options.open-option",
+                    "version": "1.0",
                     "body": {
                         "user_balance_id": target_balance,
-                        "instrument_id": clean_sym,
-                        "side": "buy" if direction == "call" else "sell",
-                        "type": "market",
-                        "amount": order_amount
+                        "active_id": active_id,
+                        "option_type_id": 3,
+                        "direction": direction,
+                        "expired": exp_time,
+                        "price": order_amount
                     }
                 }
             }
-            ws.send(json.dumps(order_payload))
-
-            # Enviar también buyV2 para compatibilidad si el broker opera el par como derivado
-            exp_time = int(time.time()) + 60
-            buyv2_payload = {
-                "name": "buyV2",
-                "msg": {
-                    "price": order_amount,
-                    "act": active_id,
-                    "exp": exp_time,
-                    "type": "turbo",
-                    "direction": direction,
-                    "time": int(time.time())
-                }
-            }
-            ws.send(json.dumps(buyv2_payload))
+            ws.send(json.dumps(binary_payload))
 
             # 3. Leer respuesta con timeout de 5 segundos
             start_wait = time.time()
@@ -477,9 +483,10 @@ class IQOptionAdapter:
                     data = json.loads(raw_resp)
                     msg_name = data.get("name", "")
                     msg_body = data.get("msg", {})
+                    st = data.get("status")
                     
-                    if msg_name in ["order-placed", "orders.open-order", "order-changed", "buyComplete"]:
-                        order_id = str(msg_body.get("id") or msg_body.get("order_id") or data.get("request_id", f"IQ_REAL_{int(time.time() * 1000)}"))
+                    if st == 2000 or msg_name in ["option-opened", "socket-option-opened", "order-placed", "buyComplete"]:
+                        order_id = str(msg_body.get("id") or msg_body.get("option_id") or msg_body.get("order_id") or data.get("request_id", req_id))
                         result = {
                             "success": True,
                             "order_id": order_id,
@@ -490,8 +497,24 @@ class IQOptionAdapter:
                             "status": "FILLED"
                         }
                         break
-                    elif "error" in data or (isinstance(msg_body, dict) and "message" in msg_body and "successful" not in str(msg_body.get("message", "")).lower()):
-                        err_text = data.get("error") or msg_body.get("message")
+                    elif msg_name == "option" and isinstance(msg_body, dict):
+                        if "message" in msg_body:
+                            result = {"success": False, "error": f"Rechazado por IQ Option: {msg_body.get('message')}"}
+                            break
+                        elif "id" in msg_body:
+                            order_id = str(msg_body.get("id"))
+                            result = {
+                                "success": True,
+                                "order_id": order_id,
+                                "symbol": clean_sym,
+                                "side": side.lower(),
+                                "amount": order_amount,
+                                "environment": self.environment,
+                                "status": "FILLED"
+                            }
+                            break
+                    elif "error" in data:
+                        err_text = data.get("error")
                         if err_text:
                             result = {"success": False, "error": f"Rechazado por IQ Option: {err_text}"}
                             break
@@ -499,16 +522,6 @@ class IQOptionAdapter:
                     pass
 
             ws.close()
-            if not result.get("success") and not result.get("error"):
-                result = {
-                    "success": True,
-                    "order_id": f"IQ_REAL_{int(time.time() * 1000)}",
-                    "symbol": clean_sym,
-                    "side": side.lower(),
-                    "amount": order_amount,
-                    "environment": self.environment,
-                    "status": "SUBMITTED"
-                }
         except Exception as e:
             result = {"success": False, "error": f"Error WebSocket IQ Option: {str(e)}"}
 
