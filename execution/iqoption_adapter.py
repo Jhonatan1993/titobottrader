@@ -1,8 +1,10 @@
 import time
 import requests
+import datetime
 from typing import Dict, Any, Optional
 
 ACTIVE_ASSET_IDS = {
+    # Forex Estándar (Lunes a Viernes)
     "EURUSD": 1,
     "EURGBP": 2,
     "GBPJPY": 3,
@@ -22,6 +24,25 @@ ACTIVE_ASSET_IDS = {
     "CHFJPY": 106,
     "CADCHF": 107,
     "EURAUD": 108,
+    # Forex OTC (Fines de semana y 24/7)
+    "EURUSD-OTC": 76,
+    "EURUSDOTC": 76,
+    "EURGBP-OTC": 77,
+    "EURGBPOTC": 77,
+    "USDCHF-OTC": 78,
+    "USDCHFOTC": 78,
+    "EURJPY-OTC": 79,
+    "EURJPYOTC": 79,
+    "NZDUSD-OTC": 80,
+    "NZDUSDOTC": 80,
+    "GBPUSD-OTC": 81,
+    "GBPUSDOTC": 81,
+    "GBPJPY-OTC": 86,
+    "GBPJPYOTC": 86,
+    "USDJPY-OTC": 87,
+    "USDJPYOTC": 87,
+    "AUDCAD-OTC": 88,
+    "AUDCADOTC": 88,
 }
 
 class IQOptionAdapter:
@@ -373,14 +394,31 @@ class IQOptionAdapter:
         """
         import websocket
         import json
+        import ssl
 
         if not self.ssid:
             return {"success": False, "error": "No hay SSID de sesión activo para ejecutar orden en IQ Option"}
 
         clean_sym = symbol.replace("/", "").replace("_", "").upper()
-        active_id = ACTIVE_ASSET_IDS.get(clean_sym, 1)
+        # Detección inteligente de activo OTC para fines de semana (Sábado y Domingo mercado estándar cerrado)
+        is_weekend = datetime.datetime.now(datetime.timezone.utc).weekday() >= 5
+        if is_weekend or "OTC" in clean_sym:
+            active_id = ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC", ACTIVE_ASSET_IDS.get(f"{clean_sym}OTC", ACTIVE_ASSET_IDS.get(clean_sym, 76)))
+        else:
+            active_id = ACTIVE_ASSET_IDS.get(clean_sym, 1)
+
         direction = "call" if side.lower() in ["buy", "buy_long"] else "put"
-        order_amount = max(1.0, round(float(amount), 2))
+        
+        # En cuentas COP de IQ Option, el importe mínimo de operación es de 2,000 COP (En USD es $1.00)
+        min_amount = 2000.0 if self.currency == "COP" else 1.0
+        order_amount = max(min_amount, round(float(amount), 2))
+
+        # Validación estricta de saldo disponible en cuenta real
+        if self.environment == "LIVE_REAL" and order_amount > self.real_amount:
+            return {
+                "success": False,
+                "error": f"Saldo insuficiente en IQ Option: Se requieren al menos {order_amount:,.2f} {self.currency} y dispones de {self.real_amount:,.2f} {self.currency}."
+            }
 
         ws_url = "wss://iqoption.com/echo/websocket"
         headers = [
@@ -391,7 +429,7 @@ class IQOptionAdapter:
         result = {"success": False, "error": "Tiempo de espera agotado al conectar al WebSocket de IQ Option"}
 
         try:
-            ws = websocket.create_connection(ws_url, header=headers, timeout=8)
+            ws = websocket.create_connection(ws_url, header=headers, timeout=8, sslopt={"cert_reqs": ssl.CERT_NONE})
             # 1. Autenticar sesión vía mensaje SSID
             auth_msg = {"name": "ssid", "msg": self.ssid}
             ws.send(json.dumps(auth_msg))
