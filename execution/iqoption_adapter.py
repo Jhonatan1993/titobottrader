@@ -54,6 +54,59 @@ class IQOptionAdapter:
         self.profile_data: Dict[str, Any] = {}
         self._last_auth_attempt: float = 0.0
 
+    def _fetch_live_balances_ws(self) -> bool:
+        """
+        Consulta balances y perfil en tiempo real a través del WebSocket oficial de IQ Option.
+        Indispensable porque la API HTTP /getprofile devuelve 'balances: []' en cuentas modernas,
+        mientras que el WebSocket transmite el array completo con saldo real (depósito + bonos) y de práctica.
+        """
+        if not self.ssid:
+            return False
+        import websocket
+        import json
+        import ssl
+        try:
+            ws_url = "wss://iqoption.com/echo/websocket"
+            headers = [
+                f"Cookie: ssid={self.ssid}",
+                "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            ]
+            ws = websocket.create_connection(ws_url, header=headers, timeout=8, sslopt={"cert_reqs": ssl.CERT_NONE})
+            ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
+
+            start_t = time.time()
+            found = False
+            while time.time() - start_t < 6.0:
+                raw = ws.recv()
+                if not raw:
+                    continue
+                try:
+                    data = json.loads(raw)
+                    if data.get("name") == "profile":
+                        msg = data.get("msg", {})
+                        if isinstance(msg, dict):
+                            self.profile_data.update(msg)
+                            self.currency = msg.get("currency", self.currency)
+                            balances = msg.get("balances", [])
+                            for b in balances:
+                                b_type = b.get("type")
+                                b_id = b.get("id")
+                                amt = float(b.get("amount", 0.0)) + float(b.get("bonus_amount", 0.0))
+                                if b_type == 1:
+                                    self.real_balance_id = b_id
+                                    self.real_amount = round(amt, 2)
+                                elif b_type == 4:
+                                    self.practice_balance_id = b_id
+                                    self.practice_amount = round(amt, 2)
+                            found = True
+                            break
+                except Exception:
+                    pass
+            ws.close()
+            return found
+        except Exception:
+            return False
+
     def _fetch_profile(self) -> Dict[str, Any]:
         """Consulta perfil y balances vía API oficial usando la sesión de cookies/SSID activa."""
         if not self.ssid:
@@ -76,7 +129,7 @@ class IQOptionAdapter:
                 for b in balances:
                     b_type = b.get("type")
                     b_id = b.get("id")
-                    amt = float(b.get("amount", 0.0))
+                    amt = float(b.get("amount", 0.0)) + float(b.get("bonus_amount", 0.0))
                     # type 1 = Real, type 4 = Practice (Demo)
                     if b_type == 1:
                         self.real_balance_id = b_id
@@ -84,6 +137,10 @@ class IQOptionAdapter:
                     elif b_type == 4:
                         self.practice_balance_id = b_id
                         self.practice_amount = amt
+
+                # Si HTTP devolvió balances vacíos, sincronizar directamente vía WebSocket oficial en vivo
+                if not balances or (self.real_balance_id is None and self.practice_balance_id is None):
+                    self._fetch_live_balances_ws()
 
                 if self.environment == "LIVE_REAL":
                     self.balance = self.real_amount
@@ -96,7 +153,7 @@ class IQOptionAdapter:
                     if self.practice_balance_id:
                         self.change_balance(self.practice_balance_id)
 
-                return {"success": True, "profile": profile}
+                return {"success": True, "profile": self.profile_data}
             elif prof_resp.status_code == 401:
                 return {"success": False, "error": "Token SSID inválido o expirado. Inicia sesión en iqoption.com y actualiza tu SSID en Ajustes."}
             else:
@@ -277,6 +334,12 @@ class IQOptionAdapter:
         """Consulta el saldo y estado actual."""
         if self.is_configured and not self.connected:
             self.connect()
+        elif self.connected and self.ssid and self.environment == "LIVE_REAL":
+            now_t = time.time()
+            if not hasattr(self, "_last_ws_balance_sync") or (now_t - getattr(self, "_last_ws_balance_sync", 0.0) > 12.0) or self.real_amount <= 0.0:
+                self._last_ws_balance_sync = now_t
+                self._fetch_live_balances_ws()
+                self.balance = self.real_amount
 
         return {
             "authenticated": self.connected,

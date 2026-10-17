@@ -1009,6 +1009,20 @@ class RealTimeTradingEngine:
                             alp_vault = float(b_wal.get("profit_vault", 0.0))
                             total_eq = float(acc.get("equity", b_wal["initial_balance"]))
                             b_wal["initial_balance"] = max(0.0, round(total_eq - alp_vault, 2))
+                elif b_id == "IQOPTION" and hasattr(self.feed, 'iqoption') and self.feed.iqoption.is_configured:
+                    if (now_sync - self._last_broker_sync.get("IQOPTION", 0.0)) > 10.0:
+                        self._last_broker_sync["IQOPTION"] = now_sync
+                        acc = self.feed.iqoption.get_account_balances()
+                        if acc.get("authenticated"):
+                            r_bal = float(acc.get("real_balance", 0.0))
+                            if r_bal > 0:
+                                b_wal["cash"] = r_bal
+                                if b_wal.get("initial_balance", 0.0) <= 0.0:
+                                    b_wal["initial_balance"] = r_bal
+                                if self.active_broker == "IQOPTION":
+                                    self.cash_balance = b_wal["cash"]
+                                    if self.initial_balance <= 0.0:
+                                        self.initial_balance = b_wal["initial_balance"]
 
         # 5. Escaneo y Operación Autónoma Continua 24/7
         if self.is_running:
@@ -1608,7 +1622,8 @@ class RealTimeTradingEngine:
                 "user_email": self.feed.iqoption.email if (b_id == "IQOPTION" and hasattr(self.feed, 'iqoption')) else "",
                 "real_balance": iq_real if b_id == "IQOPTION" else None,
                 "practice_balance": iq_demo if b_id == "IQOPTION" else None,
-                "is_running": b_wal.get("is_running", True)
+                "is_running": b_wal.get("is_running", True),
+                "currency": getattr(self.feed.iqoption, "currency", "COP") if (b_id == "IQOPTION" and hasattr(self.feed, 'iqoption')) else "USD"
             }
 
         return {
@@ -1637,6 +1652,7 @@ class RealTimeTradingEngine:
             "financial_summary": {
                 "total_equity": total_equity,
                 "cash_available": cash_avail,
+                "currency": getattr(self.feed.iqoption, "currency", "COP") if (active_b == "IQOPTION" and hasattr(self.feed, 'iqoption')) else "USD",
                 "invested_capital": round(invested, 2),
                 "initial_balance": initial_bal,
                 "operating_capital_base": initial_bal,

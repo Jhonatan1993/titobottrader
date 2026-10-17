@@ -3373,12 +3373,15 @@
                         
                         const userTag = bInfo.logged_user ? `<span style="font-size:9.5px; color:#A0AEC0; font-weight:normal; max-width:95px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="Cuenta: ${bInfo.logged_user}">(${bInfo.logged_user})</span>` : '';
                         
+                        const bCurr = bInfo.currency || (bId === 'IQOPTION' ? 'COP' : 'USD');
+                        const formattedEq = bCurr === 'COP' ? `COP ${bEq.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}` : `$${bEq.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} USD`;
+
                         pillsHtml += `
                             <button type="button" class="broker-pill-btn ${activeClass}" id="broker-tab-${bId.toLowerCase()}" onclick="selectActiveBroker('${bId}')" title="Ver operaciones de ${bName} ${bInfo.logged_user ? '(' + bInfo.logged_user + ')' : ''}">
                                 <span class="broker-pill-icon">${bIcon}</span>
                                 <div class="broker-pill-meta">
                                     <span class="broker-pill-name" style="display:flex; align-items:center; gap:4px;">${bName} ${userTag}</span>
-                                    <span class="broker-pill-balance mono" id="broker-equity-${bId.toLowerCase()}">$${bEq.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} USD</span>
+                                    <span class="broker-pill-balance mono" id="broker-equity-${bId.toLowerCase()}">${formattedEq}</span>
                                 </div>
                                 <span class="broker-pill-badge ${isActive ? 'active' : ''}" id="broker-badge-${bId.toLowerCase()}">${isActive ? 'ACTIVO' : 'CONECTADO'}</span>
                             </button>
@@ -3402,9 +3405,11 @@
                         const isActive = (bId === activeBroker);
                         const isBin = (bId === 'BINANCE');
                         const isAlp = (bId === 'ALPACA');
+                        const bCurr = bInfo.currency || (bId === 'IQOPTION' ? 'COP' : 'USD');
+                        const formattedEq = bCurr === 'COP' ? `COP ${bEq.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}` : `$${bEq.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} USD`;
 
                         if (eqEl) {
-                            eqEl.innerText = `$${bEq.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} USD`;
+                            eqEl.innerText = formattedEq;
                         }
                         if (btn) {
                             if (isActive) {
@@ -3439,22 +3444,24 @@
             }
 
             // Métricas Bento & Bóveda
-            document.getElementById('total-equity').innerText = `$${(fin.total_equity || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+            const activeCurr = fin.currency || (activeBroker === 'IQOPTION' ? 'COP' : 'USD');
+            const currSym = activeCurr === 'COP' ? 'COP ' : '$';
+            document.getElementById('total-equity').innerText = `${currSym}${(fin.total_equity || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
             
             const baseCap = fin.operating_capital_base !== undefined ? fin.operating_capital_base : (fin.initial_balance || 0);
             const availCash = fin.cash_available || 0;
             const unPnL = fin.unrealized_pnl || 0;
-            let cashSubtext = `Base: $${baseCap.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} · Disp: $${availCash.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+            let cashSubtext = `Base: ${currSym}${baseCap.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} · Disp: ${currSym}${availCash.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
             if (Math.abs(unPnL) >= 0.01) {
                 const unPnLSign = unPnL >= 0 ? '+' : '';
-                cashSubtext += ` · Flotante: <span style="color:${unPnL >= 0 ? 'var(--emerald-win)' : 'var(--neon-rose)'}">${unPnLSign}$${unPnL.toFixed(2)}</span>`;
+                cashSubtext += ` · Flotante: <span style="color:${unPnL >= 0 ? 'var(--emerald-win)' : 'var(--neon-rose)'}">${unPnLSign}${currSym}${unPnL.toFixed(2)}</span>`;
             }
             document.getElementById('cash-available').innerHTML = cashSubtext;
 
             const vaultVal = fin.profit_vault !== undefined ? fin.profit_vault : 0;
             const vaultEl = document.getElementById('vault-amount');
             if (vaultEl) {
-                vaultEl.innerText = `+$${vaultVal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+                vaultEl.innerText = `+${currSym}${vaultVal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
             }
 
             const pnlUsd = fin.total_profit_usd || 0;
