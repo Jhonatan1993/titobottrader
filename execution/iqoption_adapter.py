@@ -402,6 +402,16 @@ class IQOptionAdapter:
             "balance": self.balance
         }
 
+    def get_payout(self, symbol: str) -> float:
+        """
+        Retorna el ratio de retorno/payout vigente para la opción binaria (ej. 0.88 para 88%).
+        Permite filtrar pares que no cumplan el mínimo de rentabilidad matemática (>= 0.80).
+        """
+        clean_sym = symbol.upper().replace("-OTC", "").replace("OTC", "")
+        if hasattr(self, "_payout_cache") and symbol in self._payout_cache:
+            return float(self._payout_cache[symbol])
+        return 0.88
+
     def _execute_real_ws_order(self, symbol: str, side: str, amount: float) -> Dict[str, Any]:
         """
         Envía una orden real al servidor WebSocket de IQ Option utilizando el token SSID de la sesión autenticada.

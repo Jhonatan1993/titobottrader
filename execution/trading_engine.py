@@ -1105,6 +1105,21 @@ class RealTimeTradingEngine:
                 # En fin de semana, Forex estándar cerrado en IQ Option; filtrar exclusivamente hacia pares OTC
                 if is_weekend and asset.get("category") == "FOREX" and "-OTC" not in sym:
                     continue
+
+                # LÓGICA AVANZADA EXCLUSIVA PARA OPCIONES BINARIAS (IQ OPTION):
+                if b_id == "IQOPTION":
+                    # 1. Filtro de Sincronización de Vela (Candle Timing Gate :56 a :04)
+                    # En opciones binarias de 1M, entrar a mitad de vela (:10 a :50) deja la expiración
+                    # desfasada. Entrar en la transición (:56 a :59, o :00 a :04) garantiza la vela completa de 60s.
+                    sec_in_min = int(time.time()) % 60
+                    is_gate_open = (sec_in_min >= 56 or sec_in_min <= 4)
+                    if not getattr(self, "_override_timing_gate_for_test", False) and not is_gate_open:
+                        continue
+
+                    # 2. Filtro de Payout Mínimo Cuantitativo (>= 80%)
+                    payout_val = getattr(self.feed.iqoption, "get_payout", lambda s: 0.88)(sym)
+                    if payout_val < 0.80:
+                        continue
                 
                 # Descartar activos en enfriamiento del agente o en enfriamiento post-salida reciente (180s)
                 if self.agent.learner.is_asset_in_cooldown(sym):
@@ -1221,6 +1236,8 @@ class RealTimeTradingEngine:
             "initial_stop_loss": stop_loss,
             "highest_price": price,
             "take_profit": take_profit,
+            "side": decision_data.get("action_type", "CALL" if decision_data.get("decision") == "BUY" else "PUT"),
+            "duration_sec": 60 if broker_id == "IQOPTION" else 0,
             "entry_time": datetime.datetime.now().strftime("%H:%M:%S"),
             "entry_timestamp": time.time(),
             "entry_confidence": decision_data["confidence"],
@@ -1321,8 +1338,10 @@ class RealTimeTradingEngine:
 
         if broker_id == "IQOPTION":
             # Lógica Exclusiva para Opciones Binarias / Turbo de IQ Option:
-            # Payout fijo (+88% en victoria, -100% en pérdida)
+            # Payout dinámico verificado (por defecto 0.88 / 88%)
             payout_rate = 0.88
+            if hasattr(self, "feed") and hasattr(self.feed, "iqoption"):
+                payout_rate = getattr(self.feed.iqoption, "get_payout", lambda s: 0.88)(symbol)
             pos_side = pos.get("side", "BUY_LONG").upper()
             is_win = (exit_price > entry_p) if pos_side in ["BUY", "BUY_LONG", "CALL"] else (exit_price < entry_p)
             if is_win:

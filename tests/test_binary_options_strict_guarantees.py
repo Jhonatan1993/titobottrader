@@ -209,3 +209,255 @@ def test_forex_feed_precision_and_no_price_runaway():
     
     # Debe tener decimales de alta precisión (más de 2 decimales)
     assert round(eur_price, 2) != eur_price or eur_price == 1.08, "EURUSD debe tener precisión de 5 decimales"
+
+def test_binary_candle_timing_gate_blocks_mid_candle():
+    """
+    GARANTÍA 6: El filtro de tiempo (Candle Timing Gate) debe bloquear la entrada
+    en opciones binarias si el segundo actual está a mitad de vela (ej. segundo :25).
+    """
+    engine = RealTimeTradingEngine(initial_balance=50000.0, execution_environment="PAPER")
+    engine.set_active_broker("IQOPTION")
+    
+    # Simular tiempo a mitad de vela: segundo 25 (60 * 1000 + 25 = 60025, 60025 % 60 = 25)
+    fixed_time = 60000 + 25
+    
+    asset = {
+        "symbol": "EURUSD-OTC",
+        "name": "EUR / USD (OTC 24/7)",
+        "category": "FOREX",
+        "price": 1.0850,
+        "rsi": 50.0,
+        "ema20": 1.0852,
+        "ema50": 1.0848,
+        "support": 1.0830,
+        "resistance": 1.0920,
+        "volatility": 0.0035,
+        "trend_bias": 0.0001
+    }
+    market_state = {"EURUSD-OTC": asset}
+    
+    with patch("time.time", return_value=float(fixed_time)):
+        with patch.object(engine.agent, "evaluate_asset", return_value={
+            "decision": "BUY",
+            "confidence": 92,
+            "budget_percent": 20.0,
+            "reason_simple": "Confluencia técnica óptima",
+            "stop_loss": 1.0800,
+            "take_profit": 1.0900
+        }):
+            engine._evaluate_and_trade(market_state)
+            
+    # La posición NO debe abrirse porque a segundo :25 el Timing Gate está CERRADO
+    assert "EURUSD-OTC" not in engine.open_positions, "El Timing Gate debió bloquear la compra a mitad de vela (:25)!"
+
+def test_binary_candle_timing_gate_allows_boundary():
+    """
+    GARANTÍA 7: El filtro de tiempo debe PERMITIR la entrada cuando el segundo
+    está en la ventana de transición (:56 a :59, o :00 a :04), garantizando vela completa.
+    """
+    engine = RealTimeTradingEngine(initial_balance=50000.0, execution_environment="PAPER")
+    engine.set_active_broker("IQOPTION")
+    
+    # Simular tiempo en segundo 58 (transición de vela)
+    fixed_time = 60000 + 58
+    
+    asset = {
+        "symbol": "EURUSD-OTC",
+        "name": "EUR / USD (OTC 24/7)",
+        "category": "FOREX",
+        "price": 1.0850,
+        "rsi": 50.0,
+        "ema20": 1.0852,
+        "ema50": 1.0848,
+        "support": 1.0830,
+        "resistance": 1.0920,
+        "volatility": 0.0035,
+        "trend_bias": 0.0001
+    }
+    market_state = {"EURUSD-OTC": asset}
+    
+    with patch("time.time", return_value=float(fixed_time)):
+        with patch.object(engine.agent, "evaluate_asset", return_value={
+            "decision": "BUY",
+            "confidence": 92,
+            "budget_percent": 20.0,
+            "reason_simple": "Confluencia técnica óptima",
+            "stop_loss": 1.0800,
+            "take_profit": 1.0900
+        }):
+            engine._evaluate_and_trade(market_state)
+            
+    # La posición SÍ debe abrirse porque en segundo :58 el Timing Gate está ABIERTO
+    assert "EURUSD-OTC" in engine.open_positions, "El Timing Gate debió permitir la compra en la frontera de vela (:58)!"
+    assert engine.open_positions["EURUSD-OTC"]["duration_sec"] == 60
+
+def test_binary_payout_filter_rejects_sub_80_percent():
+    """
+    GARANTÍA 8: Si el payout de IQ Option para un par cae por debajo del 80% (ej. 72%),
+    el motor cuantitativo debe descartar el par para proteger la expectativa matemática.
+    """
+    engine = RealTimeTradingEngine(initial_balance=50000.0, execution_environment="PAPER")
+    engine.set_active_broker("IQOPTION")
+    engine._override_timing_gate_for_test = True
+    
+    asset = {
+        "symbol": "GBPUSD-OTC",
+        "name": "GBP / USD (OTC 24/7)",
+        "category": "FOREX",
+        "price": 1.2950,
+        "rsi": 50.0,
+        "ema20": 1.2955,
+        "ema50": 1.2945,
+        "support": 1.2900,
+        "resistance": 1.3050,
+        "volatility": 0.0035,
+        "trend_bias": 0.0001
+    }
+    market_state = {"GBPUSD-OTC": asset}
+    
+    # Simular payout bajo (72% < 80%)
+    with patch.object(engine.feed.iqoption, "get_payout", return_value=0.72):
+        with patch.object(engine.agent, "evaluate_asset", return_value={
+            "decision": "BUY",
+            "confidence": 95,
+            "budget_percent": 20.0,
+            "reason_simple": "Confluencia alta",
+            "stop_loss": 1.2900,
+            "take_profit": 1.3000
+        }):
+            engine._evaluate_and_trade(market_state)
+            
+    # No debe operar por payout insuficiente
+    assert "GBPUSD-OTC" not in engine.open_positions, "El filtro de Payout debió rechazar el par con payout 72%!"
+
+def test_binary_payout_filter_allows_above_80_percent():
+    """
+    GARANTÍA 9: Si el payout es >= 80% (ej. 88%), el activo es aprobado para ejecución.
+    """
+    engine = RealTimeTradingEngine(initial_balance=50000.0, execution_environment="PAPER")
+    engine.set_active_broker("IQOPTION")
+    engine._override_timing_gate_for_test = True
+    
+    asset = {
+        "symbol": "USDJPY-OTC",
+        "name": "USD / JPY (OTC 24/7)",
+        "category": "FOREX",
+        "price": 150.25,
+        "rsi": 52.0,
+        "ema20": 150.30,
+        "ema50": 150.15,
+        "support": 149.80,
+        "resistance": 151.00,
+        "volatility": 0.0035,
+        "trend_bias": 0.0001
+    }
+    market_state = {"USDJPY-OTC": asset}
+    
+    with patch.object(engine.feed.iqoption, "get_payout", return_value=0.88):
+        with patch.object(engine.agent, "evaluate_asset", return_value={
+            "decision": "BUY",
+            "confidence": 95,
+            "budget_percent": 20.0,
+            "reason_simple": "Confluencia alta",
+            "stop_loss": 149.80,
+            "take_profit": 151.00
+        }):
+            engine._evaluate_and_trade(market_state)
+            
+    assert "USDJPY-OTC" in engine.open_positions, "El activo con payout de 88% debió ser aprobado!"
+
+def test_iqoption_category_lockdown_no_crypto_no_stock():
+    """
+    GARANTÍA 10: Bloqueo estricto de categoría en IQ Option:
+    Aunque BTC o NVDA tengan señal de compra con 99% de confianza,
+    IQ Option NUNCA los compra (solo FOREX, OPTIONS, CFD).
+    """
+    engine = RealTimeTradingEngine(initial_balance=50000.0, execution_environment="PAPER")
+    engine.set_active_broker("IQOPTION")
+    engine._override_timing_gate_for_test = True
+    
+    # Desactivar temporalmente Binance y Alpaca para probar únicamente IQ Option
+    engine.broker_wallets["BINANCE"]["is_running"] = False
+    engine.broker_wallets["ALPACA"]["is_running"] = False
+    
+    market_state = {
+        "BTC": {"symbol": "BTC", "name": "Bitcoin", "category": "CRYPTO", "price": 65000.0},
+        "NVDA": {"symbol": "NVDA", "name": "NVIDIA", "category": "TRADFI_STOCK", "price": 125.0}
+    }
+    
+    with patch.object(engine.agent, "evaluate_asset", return_value={
+        "decision": "BUY",
+        "confidence": 99,
+        "budget_percent": 20.0,
+        "reason_simple": "Super señal",
+        "stop_loss": 60000.0,
+        "take_profit": 70000.0
+    }):
+        engine._evaluate_and_trade(market_state)
+        
+    assert "BTC" not in engine.open_positions, "IQ Option jamás debe abrir CRYPTO!"
+    assert "NVDA" not in engine.open_positions, "IQ Option jamás debe abrir TRADFI_STOCK!"
+
+def test_alpaca_and_binance_not_affected_by_binary_timing_gate():
+    """
+    GARANTÍA 11: Independencia multibróker: Las acciones de Alpaca y Cripto de Binance
+    pueden operar en cualquier segundo (ej. :25) y NO están sujetas al Timing Gate de binarias.
+    """
+    engine = RealTimeTradingEngine(initial_balance=50000.0, execution_environment="PAPER")
+    engine.broker_wallets["ALPACA"]["environment"] = "PAPER"
+    engine.agent.learner.clear_cooldown()
+    
+    # Segundo :25 (Timing Gate cerrado para binarias)
+    fixed_time = 60000 + 25
+    
+    market_state = {
+        "BTC": {"symbol": "BTC", "name": "Bitcoin", "category": "CRYPTO", "price": 65000.0, "binance_pair": "BTCUSDT"},
+        "AAPL": {"symbol": "AAPL", "name": "Apple", "category": "TRADFI_STOCK", "price": 230.0}
+    }
+    
+    with patch("time.time", return_value=float(fixed_time)):
+        with patch.object(engine.agent, "evaluate_asset", return_value={
+            "decision": "BUY",
+            "confidence": 90,
+            "budget_percent": 20.0,
+            "reason_simple": "Compra Spot válida",
+            "stop_loss": 60000.0,
+            "take_profit": 70000.0
+        }):
+            engine._evaluate_and_trade(market_state)
+            
+    # BTC (Binance) y AAPL (Alpaca) deben operar normalmente a segundo :25
+    assert "BTC" in engine.open_positions, "Binance Spot debió operar sin bloqueo de timing gate!"
+    assert "AAPL" in engine.open_positions, "Alpaca TradFi debió operar sin bloqueo de timing gate!"
+
+def test_binary_option_dynamic_payout_calculation():
+    """
+    GARANTÍA 12: Si un activo paga 91% en IQ Option, el PnL calculado debe ser
+    exactamente el 91% de la inversión en caso de victoria.
+    """
+    engine = RealTimeTradingEngine(initial_balance=50000.0, execution_environment="PAPER")
+    engine.set_active_broker("IQOPTION")
+    
+    engine.open_positions["EURUSD-OTC"] = {
+        "symbol": "EURUSD-OTC",
+        "name": "EUR / USD (OTC 24/7)",
+        "broker": "IQOPTION",
+        "category": "FOREX",
+        "side": "BUY",
+        "quantity": 1843.0,
+        "entry_price": 1.0850,
+        "invested_amount": 2000.0,
+        "entry_timestamp": time.time() - 65.0,
+        "duration_sec": 60
+    }
+    
+    asset_win = {"symbol": "EURUSD-OTC", "name": "EUR / USD", "price": 1.0855, "category": "FOREX"}
+    
+    with patch.object(engine.feed.iqoption, "get_payout", return_value=0.91):
+        engine._execute_sell("EURUSD-OTC", asset_win, {"decision": "SELL_EXPIRATION"})
+        
+    last_trade = engine.journal.trades[0]
+    # Inversión 2000 COP * 0.91 = 1820 COP
+    assert last_trade["pnl"] == 1820.0, f"Ganancia esperada +1,820 COP (+91%), pero dio {last_trade['pnl']}"
+    assert last_trade["pnl_percent"] == 91.0
+
