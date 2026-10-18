@@ -112,7 +112,7 @@ class RealTimeTradingEngine:
                 "name": "IQ Option",
                 "icon": "📈",
                 "category": "FOREX_CFD",
-                "allowed_categories": ["FOREX", "CFD", "OPTIONS", "CRYPTO", "TRADFI_STOCK"],
+                "allowed_categories": ["FOREX", "OPTIONS", "CFD"],
                 "environment": iqoption_env,
                 "initial_balance": iqoption_paper_init,
                 "cash": iqoption_paper_init,
@@ -1109,7 +1109,7 @@ class RealTimeTradingEngine:
                 # Descartar activos en enfriamiento del agente o en enfriamiento post-salida reciente (180s)
                 if self.agent.learner.is_asset_in_cooldown(sym):
                     continue
-                if (now_ts - self.last_exit_times.get(sym, 0)) < 180.0:
+                if (time.time() - self.last_exit_times.get(sym, 0)) < 180.0:
                     continue
 
                 decision_data = self.agent.evaluate_asset(asset, self.open_positions)
