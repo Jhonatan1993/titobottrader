@@ -94,13 +94,13 @@ class IntelligentTradingAgent:
 
     def evaluate_asset(self, asset: Dict[str, Any], current_positions: Dict[str, Any]) -> Dict[str, Any]:
         symbol = asset["symbol"]
-        price = asset["price"]
-        rsi = asset["rsi"]
-        ema20 = asset["ema20"]
-        ema50 = asset["ema50"]
-        support = asset["support"]
-        resistance = asset["resistance"]
-        name = asset["name"]
+        price = float(asset.get("price", 1.0))
+        rsi = float(asset.get("rsi", 50.0))
+        ema20 = float(asset.get("ema20", price))
+        ema50 = float(asset.get("ema50", price))
+        support = float(asset.get("support", price * 0.98))
+        resistance = float(asset.get("resistance", price * 1.02))
+        name = asset.get("name", symbol)
         icon = asset.get("icon", "📈")
         is_open = symbol in current_positions
 

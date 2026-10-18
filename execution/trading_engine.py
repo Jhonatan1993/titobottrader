@@ -1043,15 +1043,12 @@ class RealTimeTradingEngine:
             asset = market_state.get(sym)
             if not asset:
                 continue
-            decision_data = self.agent.evaluate_asset(asset, self.open_positions)
-            
-            # Protección de Tiempo Mínimo de Maduración y Reglas por Bróker
             entry_ts = pos.get("entry_timestamp", 0)
             elapsed = time.time() - entry_ts if entry_ts > 0 else 999
 
-            # REGLA FUNDAMENTAL PARA OPCIONES BINARIAS (IQ OPTION):
+            # AISLAMIENTO TOTAL: REGLA EXCLUSIVA PARA OPCIONES BINARIAS (IQ OPTION):
             # Las opciones binarias son contratos de tiempo fijo (mínimo 60s).
-            # NUNCA se cierran prematuramente por Stop-Loss de precio spot para no perder el contrato.
+            # NUNCA se evalúan con Stop-Loss spot ni se cierran prematuramente.
             if pos_b == "IQOPTION":
                 duration_sec = pos.get("duration_sec", 60)
                 if elapsed < duration_sec:
@@ -1059,6 +1056,9 @@ class RealTimeTradingEngine:
                 else:
                     self._execute_sell(sym, asset, {"decision": "SELL_EXPIRATION", "reason_simple": f"Expiración de opción binaria ({duration_sec}s cumplidos)"})
                     continue
+
+            # Para acciones TradFi (Alpaca) y Cripto Spot (Binance):
+            decision_data = self.agent.evaluate_asset(asset, self.open_positions)
 
             # Para acciones TradFi y Cripto Spot: evaluación de Stop-Loss y Take-Profit
             active_sl = pos.get("initial_stop_loss", pos.get("stop_loss", 0)) if elapsed < 30.0 else pos.get("stop_loss", 0)
@@ -1207,10 +1207,10 @@ class RealTimeTradingEngine:
 
         position = {
             "symbol": symbol,
-            "name": asset["name"],
+            "name": asset.get("name", symbol),
             "broker": broker_id,
             "category": category,
-            "type": asset["type"],
+            "type": asset.get("type", "Activo Financiero"),
             "icon": asset.get("icon", "📈"),
             "entry_price": price,
             "current_price": price,
