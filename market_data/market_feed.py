@@ -643,6 +643,18 @@ class MultiAssetMarketFeed:
                         val = round(1.0 / float(rates["NZD"]), 5)
                         self.live_cache["NZDUSD"] = val
                         self.live_cache["NZDUSD-OTC"] = val
+                    if "EUR" in rates and "GBP" in rates and rates["EUR"] > 0 and rates["GBP"] > 0:
+                        val = round(float(rates["GBP"]) / float(rates["EUR"]), 5)
+                        self.live_cache["EURGBP"] = val
+                        self.live_cache["EURGBP-OTC"] = val
+                    if "EUR" in rates and "JPY" in rates and rates["EUR"] > 0:
+                        val = round(float(rates["JPY"]) / float(rates["EUR"]), 3)
+                        self.live_cache["EURJPY"] = val
+                        self.live_cache["EURJPY-OTC"] = val
+                    if "GBP" in rates and "JPY" in rates and rates["GBP"] > 0:
+                        val = round(float(rates["JPY"]) / float(rates["GBP"]), 3)
+                        self.live_cache["GBPJPY"] = val
+                        self.live_cache["GBPJPY-OTC"] = val
             except Exception:
                 pass
 
