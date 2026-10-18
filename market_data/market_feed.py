@@ -297,10 +297,30 @@ AVAILABLE_ASSETS = [
         "trend_bias": 0.0001
     },
     {
+        "symbol": "GBPUSD-OTC",
+        "name": "GBP / USD (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Libra / Dólar OTC (24/7)",
+        "icon": "💷",
+        "base_price": 1.2950,
+        "volatility": 0.0040,
+        "trend_bias": 0.0001
+    },
+    {
         "symbol": "USDJPY",
         "name": "USD / JPY",
         "category": "FOREX",
         "type": "Dólar / Yen Japonés",
+        "icon": "💴",
+        "base_price": 152.30,
+        "volatility": 0.0045,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "USDJPY-OTC",
+        "name": "USD / JPY (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Dólar / Yen OTC (24/7)",
         "icon": "💴",
         "base_price": 152.30,
         "volatility": 0.0045,
@@ -317,10 +337,30 @@ AVAILABLE_ASSETS = [
         "trend_bias": 0.0001
     },
     {
+        "symbol": "AUDUSD-OTC",
+        "name": "AUD / USD (OTC 24/7)",
+        "category": "FOREX",
+        "type": "AUD / USD OTC (24/7)",
+        "icon": "🇦🇺",
+        "base_price": 0.6550,
+        "volatility": 0.0038,
+        "trend_bias": 0.0001
+    },
+    {
         "symbol": "USDCAD",
         "name": "USD / CAD",
         "category": "FOREX",
         "type": "Dólar / Dólar Canadiense",
+        "icon": "🇨🇦",
+        "base_price": 1.3850,
+        "volatility": 0.0035,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "USDCAD-OTC",
+        "name": "USD / CAD (OTC 24/7)",
+        "category": "FOREX",
+        "type": "USD / CAD OTC (24/7)",
         "icon": "🇨🇦",
         "base_price": 1.3850,
         "volatility": 0.0035,
@@ -337,10 +377,30 @@ AVAILABLE_ASSETS = [
         "trend_bias": 0.0001
     },
     {
+        "symbol": "USDCHF-OTC",
+        "name": "USD / CHF (OTC 24/7)",
+        "category": "FOREX",
+        "type": "USD / CHF OTC (24/7)",
+        "icon": "🇨🇭",
+        "base_price": 0.8650,
+        "volatility": 0.0034,
+        "trend_bias": 0.0001
+    },
+    {
         "symbol": "NZDUSD",
         "name": "NZD / USD",
         "category": "FOREX",
         "type": "Dólar Neozelandés / USD",
+        "icon": "🇳🇿",
+        "base_price": 0.6050,
+        "volatility": 0.0040,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "NZDUSD-OTC",
+        "name": "NZD / USD (OTC 24/7)",
+        "category": "FOREX",
+        "type": "NZD / USD OTC (24/7)",
         "icon": "🇳🇿",
         "base_price": 0.6050,
         "volatility": 0.0040,
@@ -357,6 +417,16 @@ AVAILABLE_ASSETS = [
         "trend_bias": 0.0001
     },
     {
+        "symbol": "EURGBP-OTC",
+        "name": "EUR / GBP (OTC 24/7)",
+        "category": "FOREX",
+        "type": "EUR / GBP OTC (24/7)",
+        "icon": "🇪🇺",
+        "base_price": 0.8350,
+        "volatility": 0.0028,
+        "trend_bias": 0.0001
+    },
+    {
         "symbol": "EURJPY",
         "name": "EUR / JPY",
         "category": "FOREX",
@@ -367,10 +437,30 @@ AVAILABLE_ASSETS = [
         "trend_bias": 0.0001
     },
     {
+        "symbol": "EURJPY-OTC",
+        "name": "EUR / JPY (OTC 24/7)",
+        "category": "FOREX",
+        "type": "EUR / JPY OTC (24/7)",
+        "icon": "🇯🇵",
+        "base_price": 165.20,
+        "volatility": 0.0050,
+        "trend_bias": 0.0001
+    },
+    {
         "symbol": "GBPJPY",
         "name": "GBP / JPY",
         "category": "FOREX",
         "type": "Libra / Yen Japonés",
+        "icon": "🇬🇧",
+        "base_price": 197.80,
+        "volatility": 0.0065,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "GBPJPY-OTC",
+        "name": "GBP / JPY (OTC 24/7)",
+        "category": "FOREX",
+        "type": "GBP / JPY OTC (24/7)",
         "icon": "🇬🇧",
         "base_price": 197.80,
         "volatility": 0.0065,
@@ -514,6 +604,47 @@ class MultiAssetMarketFeed:
                 if p > 0:
                     self.live_cache[sym] = p
 
+        # 3. Obtener cotizaciones Forex reales interbancarias en tiempo real
+        now_fx = time.time()
+        if (now_fx - getattr(self, "_last_fx_fetch", 0.0)) > 4.0:
+            self._last_fx_fetch = now_fx
+            try:
+                import urllib.request
+                import json
+                req = urllib.request.Request("https://api.frankfurter.app/latest?from=USD", headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=2.5) as resp:
+                    rates = json.loads(resp.read().decode()).get("rates", {})
+                    if "EUR" in rates and rates["EUR"] > 0:
+                        val = round(1.0 / float(rates["EUR"]), 5)
+                        self.live_cache["EURUSD"] = val
+                        self.live_cache["EURUSD-OTC"] = val
+                    if "GBP" in rates and rates["GBP"] > 0:
+                        val = round(1.0 / float(rates["GBP"]), 5)
+                        self.live_cache["GBPUSD"] = val
+                        self.live_cache["GBPUSD-OTC"] = val
+                    if "JPY" in rates and float(rates["JPY"]) > 0:
+                        val = round(float(rates["JPY"]), 3)
+                        self.live_cache["USDJPY"] = val
+                        self.live_cache["USDJPY-OTC"] = val
+                    if "CAD" in rates and float(rates["CAD"]) > 0:
+                        val = round(float(rates["CAD"]), 5)
+                        self.live_cache["USDCAD"] = val
+                        self.live_cache["USDCAD-OTC"] = val
+                    if "CHF" in rates and float(rates["CHF"]) > 0:
+                        val = round(float(rates["CHF"]), 5)
+                        self.live_cache["USDCHF"] = val
+                        self.live_cache["USDCHF-OTC"] = val
+                    if "AUD" in rates and rates["AUD"] > 0:
+                        val = round(1.0 / float(rates["AUD"]), 5)
+                        self.live_cache["AUDUSD"] = val
+                        self.live_cache["AUDUSD-OTC"] = val
+                    if "NZD" in rates and rates["NZD"] > 0:
+                        val = round(1.0 / float(rates["NZD"]), 5)
+                        self.live_cache["NZDUSD"] = val
+                        self.live_cache["NZDUSD-OTC"] = val
+            except Exception:
+                pass
+
     def tick(self) -> Dict[str, Dict[str, Any]]:
         now = time.time()
         try:
@@ -525,21 +656,35 @@ class MultiAssetMarketFeed:
             old_price = asset["price"]
             category = asset.get("category", "TRADFI_STOCK")
             
+            # Determinación de precisión decimal según tipo de activo
+            if category == "FOREX":
+                dec_places = 3 if "JPY" in sym else 5
+            elif old_price < 1000:
+                dec_places = 2
+            else:
+                dec_places = 1
+
             use_live_price = (sym in self.live_cache)
             if use_live_price:
-                new_price = self.live_cache[sym]
+                new_price = round(self.live_cache[sym], dec_places)
                 asset["source"] = "LIVE_MARKET"
             else:
-                # Simulación estocástica browniana dinámica con reversión a la media
-                shock = random.gauss(asset["trend_bias"], asset["volatility"])
-                wave = math.sin(now / 18.0 + hash(sym) % 12) * (asset["volatility"] * 0.35)
-                delta_ratio = shock + wave
-                dec_places = 2 if old_price < 1000 else 1
-                new_price = max(0.01, round(old_price * (1 + delta_ratio), dec_places))
+                if category == "FOREX":
+                    # Reversión de Ornstein-Uhlenbeck hacia el valor base para evitar desvíos ficticios
+                    base_p = asset.get("open_price", 1.0)
+                    reversion = (base_p - old_price) * 0.05
+                    shock = random.gauss(reversion, asset["volatility"] * 0.15)
+                    new_price = max(0.0001, round(old_price * (1 + shock), dec_places))
+                else:
+                    shock = random.gauss(asset["trend_bias"], asset["volatility"])
+                    wave = math.sin(now / 18.0 + hash(sym) % 12) * (asset["volatility"] * 0.35)
+                    delta_ratio = shock + wave
+                    new_price = max(0.01, round(old_price * (1 + delta_ratio), dec_places))
                 asset["source"] = "SIMULATION"
 
             asset["price"] = new_price
-            asset["change_percent"] = round(((new_price - asset["open_price"]) / asset["open_price"]) * 100, 2)
+            open_p = asset.get("open_price", new_price)
+            asset["change_percent"] = round(((new_price - open_p) / open_p) * 100, 2) if open_p > 0 else 0.0
             if new_price > asset["high_24h"]:
                 asset["high_24h"] = new_price
             if new_price < asset["low_24h"]:
@@ -548,20 +693,20 @@ class MultiAssetMarketFeed:
             vol_delta = random.randint(200, 3500)
             asset["volume"] += vol_delta
 
-            # Medias móviles exponenciales EMA 20 y 50
-            asset["ema20"] = round(asset["ema20"] * 0.94 + new_price * 0.06, 2 if new_price < 1000 else 1)
-            asset["ema50"] = round(asset["ema50"] * 0.98 + new_price * 0.02, 2 if new_price < 1000 else 1)
+            # Medias móviles exponenciales EMA 20 y 50 con precisión adecuada
+            asset["ema20"] = round(asset["ema20"] * 0.94 + new_price * 0.06, dec_places)
+            asset["ema50"] = round(asset["ema50"] * 0.98 + new_price * 0.02, dec_places)
 
             # RSI dinámico
             if new_price > old_price:
-                asset["rsi"] = min(96.0, round(asset["rsi"] + (random.uniform(0.4, 1.8) if not use_live_price else 0.6), 1))
+                asset["rsi"] = min(96.0, round(asset["rsi"] + (random.uniform(0.3, 1.2) if not use_live_price else 0.4), 1))
             elif new_price < old_price:
-                asset["rsi"] = max(4.0, round(asset["rsi"] - (random.uniform(0.4, 1.8) if not use_live_price else 0.6), 1))
+                asset["rsi"] = max(4.0, round(asset["rsi"] - (random.uniform(0.3, 1.2) if not use_live_price else 0.4), 1))
             else:
                 asset["rsi"] = round(asset["rsi"] * 0.98 + 50.0 * 0.02, 1)
 
-            asset["support"] = round(min(asset["support"], new_price * 0.985), 2 if new_price < 1000 else 1)
-            asset["resistance"] = round(max(asset["resistance"], new_price * 1.015), 2 if new_price < 1000 else 1)
+            asset["support"] = round(min(asset["support"], new_price * 0.985), dec_places)
+            asset["resistance"] = round(max(asset["resistance"], new_price * 1.015), dec_places)
 
             if asset["price"] > asset["ema20"] and asset["ema20"] > asset["ema50"]:
                 asset["trend_status"] = "ALCISTA (Fuerte Demanda)"
@@ -731,9 +876,49 @@ class MultiAssetMarketFeed:
     def get_asset(self, symbol: str) -> Optional[Dict[str, Any]]:
         return self.assets.get(symbol)
 
+    def reset_forex_feed(self):
+        """Restaura los activos Forex a sus precios base reales e inicializa sus indicadores limpios."""
+        now = time.time()
+        for item in AVAILABLE_ASSETS:
+            sym = item["symbol"]
+            if item.get("category") == "FOREX":
+                price = item["base_price"]
+                dec = 3 if "JPY" in sym else 5
+                self.assets[sym] = {
+                    "symbol": sym,
+                    "name": item["name"],
+                    "category": "FOREX",
+                    "type": item["type"],
+                    "icon": item["icon"],
+                    "price": price,
+                    "open_price": price,
+                    "change_percent": 0.0,
+                    "high_24h": round(price * 1.005, dec),
+                    "low_24h": round(price * 0.995, dec),
+                    "volume": random.randint(50000, 450000),
+                    "ema20": price,
+                    "ema50": price,
+                    "rsi": 50.0,
+                    "support": round(price * 0.992, dec),
+                    "resistance": round(price * 1.008, dec),
+                    "volatility": item["volatility"],
+                    "trend_bias": item["trend_bias"],
+                    "trend_status": "ESTABLE (Consolidación)",
+                    "source": "REAL_RESET",
+                    "last_update": now,
+                }
+                if sym in self.candles:
+                    del self.candles[sym]
+                self._ensure_candles(sym)
+
     def get_all_assets(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
+        is_weekend = datetime.datetime.now(datetime.timezone.utc).weekday() >= 5
+        all_items = list(self.assets.values())
+        if is_weekend:
+            # En fin de semana, el mercado Forex estándar está cerrado en IQ Option; mostrar y priorizar pares OTC 24/7
+            all_items = [a for a in all_items if not (a.get("category") == "FOREX" and "-OTC" not in a.get("symbol", ""))]
         if not category or category == "ALL":
-            return list(self.assets.values())
+            return all_items
         if category == "TRADFI":
-            return [a for a in self.assets.values() if a.get("category") in ["TRADFI_STOCK", "ETF"]]
-        return [a for a in self.assets.values() if a.get("category") == category]
+            return [a for a in all_items if a.get("category") in ["TRADFI_STOCK", "ETF"]]
+        return [a for a in all_items if a.get("category") == category]

@@ -104,7 +104,8 @@ class IntelligentTradingAgent:
         icon = asset.get("icon", "📈")
         is_open = symbol in current_positions
 
-        profile = ASSET_RISK_PROFILES.get(symbol, {"sl_pct": 0.015, "tp_pct": 0.040, "vol_type": "Estándar"})
+        clean_sym = symbol.replace("-OTC", "").replace("OTC", "")
+        profile = ASSET_RISK_PROFILES.get(symbol, ASSET_RISK_PROFILES.get(clean_sym, {"sl_pct": 0.015, "tp_pct": 0.040, "vol_type": "Estándar"}))
         adaptive_levels = self.learner.get_adaptive_sl_tp(
             symbol=symbol,
             base_sl_pct=profile["sl_pct"],

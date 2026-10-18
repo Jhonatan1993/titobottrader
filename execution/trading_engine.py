@@ -864,7 +864,9 @@ class RealTimeTradingEngine:
 
     def clear_cooldown(self, symbol: Optional[str] = None):
         self.agent.learner.clear_cooldown(symbol)
-        msg = f"Cooldown restaurado para {symbol}" if symbol else "Todos los cooldowns han sido reiniciados."
+        if hasattr(self.feed, "reset_forex_feed"):
+            self.feed.reset_forex_feed()
+        msg = f"Cooldown restaurado para {symbol}" if symbol else "Todos los cooldowns y cotizaciones han sido reiniciados."
         self.agent._add_thought(f"🔄 {msg}", "INFO", icon="✨")
 
     def step(self):
@@ -1043,11 +1045,22 @@ class RealTimeTradingEngine:
                 continue
             decision_data = self.agent.evaluate_asset(asset, self.open_positions)
             
-            # Protección de Tiempo Mínimo de Maduración (35 segundos para consolidación)
+            # Protección de Tiempo Mínimo de Maduración y Reglas por Bróker
             entry_ts = pos.get("entry_timestamp", 0)
             elapsed = time.time() - entry_ts if entry_ts > 0 else 999
-            
-            # Durante los primeros 30s se evalúa el SL inicial para no ser asfixiado por micro-ruido de segundos
+
+            # REGLA FUNDAMENTAL PARA OPCIONES BINARIAS (IQ OPTION):
+            # Las opciones binarias son contratos de tiempo fijo (mínimo 60s).
+            # NUNCA se cierran prematuramente por Stop-Loss de precio spot para no perder el contrato.
+            if pos_b == "IQOPTION":
+                duration_sec = pos.get("duration_sec", 60)
+                if elapsed < duration_sec:
+                    continue  # Esperar expiración natural del contrato binario
+                else:
+                    self._execute_sell(sym, asset, {"decision": "SELL_EXPIRATION", "reason_simple": f"Expiración de opción binaria ({duration_sec}s cumplidos)"})
+                    continue
+
+            # Para acciones TradFi y Cripto Spot: evaluación de Stop-Loss y Take-Profit
             active_sl = pos.get("initial_stop_loss", pos.get("stop_loss", 0)) if elapsed < 30.0 else pos.get("stop_loss", 0)
             is_hard_sl = asset["price"] <= active_sl
             is_hard_tp = asset["price"] >= pos.get("take_profit", 999999)
@@ -1061,6 +1074,7 @@ class RealTimeTradingEngine:
         # B. OPERACIÓN CONCURRENTE MULTIBROKER (TODOS LOS BROKERS OPERAN AL MISMO TIEMPO):
         min_cash = 5.0
         now_ts = time.time()
+        is_weekend = datetime.datetime.now(datetime.timezone.utc).weekday() >= 5
 
         for b_id, wallet in list(self.broker_wallets.items()):
             if not wallet.get("is_running", True):
@@ -1086,6 +1100,10 @@ class RealTimeTradingEngine:
                 if clean_underlying in existing_underlyings:
                     continue
                 if allowed_categories and asset.get("category") not in allowed_categories:
+                    continue
+                
+                # En fin de semana, Forex estándar cerrado en IQ Option; filtrar exclusivamente hacia pares OTC
+                if is_weekend and asset.get("category") == "FOREX" and "-OTC" not in sym:
                     continue
                 
                 # Descartar activos en enfriamiento del agente o en enfriamiento post-salida reciente (180s)

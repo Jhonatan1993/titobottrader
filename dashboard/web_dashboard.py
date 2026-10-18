@@ -334,12 +334,39 @@ def clear_cooldown():
     data = request.get_json(silent=True) or {}
     symbol = data.get("symbol")
     ENGINE.clear_cooldown(symbol)
+    if hasattr(ENGINE.feed, "reset_forex_feed"):
+        ENGINE.feed.reset_forex_feed()
     return jsonify({"success": True, "symbol": symbol})
 
 @app.route("/api/control/recalibrate", methods=["POST"])
 def recalibrate():
     ENGINE.agent.update_learning_from_disk()
+    if hasattr(ENGINE.feed, "reset_forex_feed"):
+        ENGINE.feed.reset_forex_feed()
     return jsonify({"success": True, "learning": ENGINE.agent.learner.get_learning_summary()})
+
+@app.route("/api/admin/system-update", methods=["POST"])
+def api_admin_system_update():
+    """Descarga la última versión de GitHub y recarga el motor."""
+    current_admin_id = session.get("user_id")
+    user = get_user_by_id(current_admin_id) if current_admin_id else None
+    if not user or user.get("role") != "admin":
+        return jsonify({"success": False, "error": "Acceso denegado: solo Administradores pueden actualizar el sistema."}), 403
+
+    import subprocess
+    try:
+        pull_res = subprocess.run(["git", "pull", "origin", "main"], capture_output=True, text=True, timeout=15)
+        ENGINE.agent.learner.clear_cooldown()
+        if hasattr(ENGINE.feed, "reset_forex_feed"):
+            ENGINE.feed.reset_forex_feed()
+        return jsonify({
+            "success": True,
+            "stdout": pull_res.stdout,
+            "stderr": pull_res.stderr,
+            "message": "Sistema actualizado con éxito desde GitHub."
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route("/api/control/get-broker-keys", methods=["GET"])
 def get_broker_keys():
