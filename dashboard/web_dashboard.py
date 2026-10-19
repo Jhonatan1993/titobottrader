@@ -425,6 +425,8 @@ def api_admin_iq_diagnostics():
                 n = d.get("name")
                 if n and n not in received_names:
                     received_names.append(n)
+                if n == "profile":
+                    profile_msg = d.get("msg", {})
                 if n in ["profile", "api_game_getoptions", "option", "front", "instruments"]:
                     sample_messages.append({"name": n, "keys": list(d.get("msg", {}).keys()) if isinstance(d.get("msg"), dict) else []})
             except Exception:
@@ -437,9 +439,13 @@ def api_admin_iq_diagnostics():
             "real_balance_id": iq.real_balance_id,
             "practice_balance_id": iq.practice_balance_id,
             "real_amount": iq.real_amount,
+            "trade_restricted": profile_msg.get("trade_restricted"),
+            "account_status": profile_msg.get("account_status"),
+            "finance_state": profile_msg.get("finance_state"),
+            "kyc_confirmed": profile_msg.get("kyc_confirmed"),
+            "country_id": profile_msg.get("country_id"),
+            "functions": profile_msg.get("functions"),
             "received_message_names": received_names,
-            "sample_messages": sample_messages,
-            "profile_country": profile_msg.get("country_id"),
             "profile_currency": profile_msg.get("currency")
         })
     except Exception as e:
