@@ -25,6 +25,7 @@ class RiskManager:
         self.max_open_trades = max_open_trades
         self.current_open_trades = 0
         self.daily_loss = 0.0
+        self.daily_losses: Dict[str, float] = {}
         
         # Blindaje FINRA 4210 (Pattern Day Trader)
         self.pdt_protection = pdt_protection
@@ -36,14 +37,18 @@ class RiskManager:
         risk_amount: float, 
         current_equity: Optional[float] = None, 
         is_margin_account: bool = True, 
-        is_tradfi: bool = False
+        is_tradfi: bool = False,
+        broker_id: Optional[str] = None,
+        broker_initial_balance: Optional[float] = None
     ) -> bool:
         # 1. Límite de cupos simultáneos
         if self.current_open_trades >= self.max_open_trades:
             return False
             
-        # 2. Circuit Breaker de pérdida diaria
-        if (self.daily_loss + risk_amount) > (self.max_daily_loss * self.initial_balance):
+        # 2. Circuit Breaker de pérdida diaria (aislado por divisa y broker)
+        b_init = broker_initial_balance if (broker_initial_balance and broker_initial_balance > 0) else (current_equity if (current_equity and current_equity > 0) else self.initial_balance)
+        b_loss = self.daily_losses.get(broker_id, self.daily_loss if not broker_id else 0.0)
+        if b_init > 0 and (b_loss + risk_amount) > (self.max_daily_loss * b_init):
             return False
             
         # 3. Blindaje regulatorio FINRA PDT para Wall Street (acciones/ETFs)
@@ -97,13 +102,20 @@ class RiskManager:
     def register_trade_open(self):
         self.current_open_trades += 1
 
-    def register_trade_close(self, pnl: float, symbol: str = "", is_intraday: bool = False):
+    def register_trade_close(self, pnl: float, symbol: str = "", is_intraday: bool = False, broker_id: Optional[str] = None):
         self.current_open_trades = max(0, self.current_open_trades - 1)
         if pnl < 0:
-            self.daily_loss += abs(pnl)
+            if broker_id:
+                self.daily_losses[broker_id] = self.daily_losses.get(broker_id, 0.0) + abs(pnl)
+            else:
+                self.daily_loss += abs(pnl)
         if is_intraday and symbol:
             self.record_day_trade(symbol)
 
-    def reset_daily_loss(self):
-        self.daily_loss = 0.0
+    def reset_daily_loss(self, broker_id: Optional[str] = None):
+        if broker_id:
+            self.daily_losses[broker_id] = 0.0
+        else:
+            self.daily_loss = 0.0
+            self.daily_losses.clear()
 

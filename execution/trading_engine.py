@@ -1108,11 +1108,11 @@ class RealTimeTradingEngine:
 
                 # LÓGICA AVANZADA EXCLUSIVA PARA OPCIONES BINARIAS (IQ OPTION):
                 if b_id == "IQOPTION":
-                    # 1. Filtro de Sincronización de Vela (Candle Timing Gate :56 a :04)
-                    # En opciones binarias de 1M, entrar a mitad de vela (:10 a :50) deja la expiración
-                    # desfasada. Entrar en la transición (:56 a :59, o :00 a :04) garantiza la vela completa de 60s.
+                    # 1. Filtro de Sincronización de Vela (Candle Timing Gate :48 a :12)
+                    # En opciones binarias de 1M, entrar en la ventana :48 a :59 o :00 a :12 garantiza
+                    # que la opción opere durante la vela completa de 60s sin desfasarse a mitad de vela.
                     sec_in_min = int(time.time()) % 60
-                    is_gate_open = (sec_in_min >= 56 or sec_in_min <= 4)
+                    is_gate_open = (sec_in_min >= 48 or sec_in_min <= 12)
                     if not getattr(self, "_override_timing_gate_for_test", False) and not is_gate_open:
                         continue
 
@@ -1121,14 +1121,18 @@ class RealTimeTradingEngine:
                     if payout_val < 0.80:
                         continue
                 
-                # Descartar activos en enfriamiento del agente o en enfriamiento post-salida reciente (180s)
+                # Descartar activos en enfriamiento del agente o en enfriamiento post-salida reciente (60s en binarias, 180s en spot)
+                cooldown_dur = 60.0 if b_id == "IQOPTION" else 180.0
                 if self.agent.learner.is_asset_in_cooldown(sym):
                     continue
-                if (time.time() - self.last_exit_times.get(sym, 0)) < 180.0:
+                if (time.time() - self.last_exit_times.get(sym, 0)) < cooldown_dur:
                     continue
 
                 decision_data = self.agent.evaluate_asset(asset, self.open_positions)
-                if decision_data["decision"] == "BUY" and decision_data["confidence"] >= 80:
+                is_buy = (decision_data["decision"] == "BUY" and decision_data["confidence"] >= 80)
+                is_put = (b_id == "IQOPTION" and decision_data["decision"] in ["SELL", "PUT"] and decision_data["confidence"] >= 80)
+
+                if (is_buy or is_put):
                     volatility_weight = asset.get("volatility", 0.005) * 1000
                     exp_boost = self.agent.learner.get_asset_confidence_boost(sym)
                     priority_score = decision_data["confidence"] * exp_boost * (1.0 + volatility_weight * 0.5)
@@ -1207,7 +1211,9 @@ class RealTimeTradingEngine:
                 risk_amount=actual_investment * 0.02,
                 current_equity=equity_now,
                 is_margin_account=True,
-                is_tradfi=is_tradfi
+                is_tradfi=is_tradfi,
+                broker_id=broker_id,
+                broker_initial_balance=wallet.get("initial_balance", equity_now)
             ):
                 if is_tradfi and self.risk_manager.is_pdt_restricted(current_equity=equity_now):
                     self.agent._add_thought(f"🛡️ ESCUDO FINRA 4210 (PDT): Entrada en {symbol} prevenida para proteger la cuenta de suspensión por Pattern Day Trader (< $25k USD).", "WARNING", symbol, "⚠️")
@@ -1236,7 +1242,7 @@ class RealTimeTradingEngine:
             "initial_stop_loss": stop_loss,
             "highest_price": price,
             "take_profit": take_profit,
-            "side": decision_data.get("action_type", "CALL" if decision_data.get("decision") == "BUY" else "PUT"),
+            "side": "PUT" if ("SELL" in str(decision_data.get("decision", "")) or "PUT" in str(decision_data.get("action_type", "")) or "BAJISTA" in str(decision_data.get("action_type", ""))) else "CALL",
             "duration_sec": 60 if broker_id == "IQOPTION" else 0,
             "entry_time": datetime.datetime.now().strftime("%H:%M:%S"),
             "entry_timestamp": time.time(),
@@ -1292,12 +1298,15 @@ class RealTimeTradingEngine:
 
         # Enrutamiento de orden en IQ Option (Paper o Real)
         if broker_id == "IQOPTION" and hasattr(self.feed, "iqoption"):
-            iq_res = self.feed.iqoption.submit_order(symbol, "buy", actual_investment)
+            pos_side = position.get("side", "CALL")
+            option_dir = "put" if pos_side == "PUT" else "buy"
+            iq_res = self.feed.iqoption.submit_order(symbol, option_dir, actual_investment)
             if iq_res.get("success"):
                 oid = iq_res.get("order_id", "")
                 position["broker_order_id"] = oid
                 mode_str = "REAL" if is_broker_live else "DEMO/PRACTICE"
-                self.agent._add_thought(f"📈 ORDEN IQ OPTION ({mode_str}): Operación abierta en {symbol} (ID: {oid}).", "INFO", symbol, "⚡")
+                dir_label = "🔻 BAJA (PUT)" if pos_side == "PUT" else "🟢 SUBE (CALL)"
+                self.agent._add_thought(f"📈 ORDEN IQ OPTION ({mode_str}): {dir_label} en {symbol} (ID: {oid}).", "INFO", symbol, "⚡")
             else:
                 self.agent._add_thought(f"🛑 Error en broker IQ Option: {iq_res.get('error')}. Operación abortada.", "WARNING", symbol, "🛑")
                 if is_broker_live:
@@ -1473,7 +1482,7 @@ class RealTimeTradingEngine:
         self.agent.record_trade_result(trade_record)
         self.last_exit_times[symbol] = time.time()
         if hasattr(self, "risk_manager"):
-            self.risk_manager.register_trade_close(pnl, symbol=symbol, is_intraday=True)
+            self.risk_manager.register_trade_close(pnl, symbol=symbol, is_intraday=True, broker_id=broker_id)
 
         b_curr = "COP" if (broker_id == "IQOPTION" and getattr(self.feed.iqoption, "currency", "USD") == "COP") else "USD"
         if pnl > 0:

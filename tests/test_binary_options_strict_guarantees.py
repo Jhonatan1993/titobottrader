@@ -461,3 +461,72 @@ def test_binary_option_dynamic_payout_calculation():
     assert last_trade["pnl"] == 1820.0, f"Ganancia esperada +1,820 COP (+91%), pero dio {last_trade['pnl']}"
     assert last_trade["pnl_percent"] == 91.0
 
+def test_binary_option_put_execution_and_win():
+    """
+    GARANTÍA 13: El motor debe permitir operaciones de BAJA (PUT) en IQ Option
+    cuando hay confluencia técnica bajista y liquidarlas con +88% si el precio cae.
+    """
+    engine = RealTimeTradingEngine(initial_balance=50000.0, execution_environment="PAPER")
+    engine.set_active_broker("IQOPTION")
+    engine._override_timing_gate_for_test = True
+    
+    asset = {
+        "symbol": "EURUSD-OTC",
+        "name": "EUR / USD (OTC 24/7)",
+        "category": "FOREX",
+        "price": 1.0850,
+        "rsi": 45.0,
+        "ema20": 1.0845,
+        "ema50": 1.0855,
+        "support": 1.0750,
+        "resistance": 1.0860,
+        "volatility": 0.0035,
+        "trend_bias": -0.0001
+    }
+    market_state = {"EURUSD-OTC": asset}
+    
+    # Simular señal bajista SELL / PUT
+    with patch.object(engine.agent, "evaluate_asset", return_value={
+        "decision": "SELL",
+        "action_type": "VENTA_BAJISTA_CONFIRMADA",
+        "confidence": 92,
+        "budget_percent": 20.0,
+        "reason_simple": "Confluencia bajista fuerte",
+        "stop_loss": 1.0900,
+        "take_profit": 1.0800
+    }):
+        engine._evaluate_and_trade(market_state)
+        
+    assert "EURUSD-OTC" in engine.open_positions, "La opción PUT debió abrirse!"
+    pos = engine.open_positions["EURUSD-OTC"]
+    assert pos["side"] == "PUT", f"La posición debió tener lado PUT pero tiene {pos['side']}"
+    
+    # Simular expiración donde el precio cayó a 1.0840 (Ganancia para el PUT)
+    asset_expired = {"symbol": "EURUSD-OTC", "name": "EUR / USD", "price": 1.0840, "category": "FOREX"}
+    engine._execute_sell("EURUSD-OTC", asset_expired, {"decision": "SELL_EXPIRATION"})
+    
+    last_trade = engine.journal.trades[0]
+    assert last_trade["pnl"] > 0, f"El PUT con precio menor debió ser ganador (+88%), pero dio {last_trade['pnl']}"
+    assert last_trade["pnl_percent"] == 88.0
+
+def test_risk_manager_isolated_daily_loss_per_broker():
+    """
+    GARANTÍA 14: Una pérdida en IQ Option (en pesos COP) NO debe bloquear
+    a Alpaca o Binance (en USD) por choque de divisas en el RiskManager.
+    """
+    from risk_management.risk_manager import RiskManager
+    rm = RiskManager(initial_balance=14.87, risk_per_trade=0.01, max_daily_loss=0.05, max_open_trades=5)
+    
+    # Registrar una pérdida de 2000 COP en IQ Option
+    rm.register_trade_close(pnl=-2000.0, symbol="EURUSD-OTC", broker_id="IQOPTION")
+    
+    # La pérdida de IQ Option está aislada en IQ Option
+    assert rm.daily_losses.get("IQOPTION") == 2000.0
+    # Binance no tiene pérdidas
+    assert rm.daily_losses.get("BINANCE", 0.0) == 0.0
+    
+    # Binance debe poder abrir su trade normalmente sin ser bloqueado por los 2000 COP de IQ Option
+    can_binance_open = rm.can_open_trade(risk_amount=0.12, current_equity=14.87, broker_id="BINANCE", broker_initial_balance=14.87)
+    assert can_binance_open is True, "Binance no debió ser bloqueado por las pérdidas en COP de IQ Option!"
+
+

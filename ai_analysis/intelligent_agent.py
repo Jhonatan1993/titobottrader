@@ -314,24 +314,79 @@ class IntelligentTradingAgent:
         total_confluence = trend_score + rsi_score + runway_score + support_score
         adjusted_conf = min(98, max(20, int(total_confluence * confidence_boost)))
 
-        # Condición Cuantitativa Estricta de COMPRA: Confluencia >= 80 y margen libre hacia resistencia
+        # Matriz Cuantitativa para Operaciones Bajistas (PUT / Baja):
+        # 1. Alineación de Tendencia Bajista (0 - 30 pts)
+        bear_trend_score = 0
+        if price <= ema20:
+            bear_trend_score += 15
+        elif price <= ema20 * 1.005:
+            bear_trend_score += 8
+        if ema20 <= ema50:
+            bear_trend_score += 15
+        elif ema20 <= ema50 * 1.004:
+            bear_trend_score += 7
+
+        # 2. Impulso y Momentum Bajista (0 - 30 pts)
+        bear_rsi_score = 0
+        if 40.0 <= rsi <= 54.0:
+            bear_rsi_score = 30
+        elif 35.0 <= rsi < 40.0:
+            bear_rsi_score = 22
+        elif 54.0 < rsi <= 58.0:
+            bear_rsi_score = 20
+        elif 58.0 < rsi <= 64.0:
+            bear_rsi_score = 12
+        elif rsi >= 72.0:
+            bear_rsi_score = 25  # Fuerte rechazo por sobrecompra
+        else:
+            bear_rsi_score = 0
+
+        # 3. Margen Libre hacia Soporte / Runway Bajista (0 - 20 pts)
+        bear_runway_score = 0
+        if dist_to_support >= 2.0:
+            bear_runway_score = 20
+        elif dist_to_support >= 1.2:
+            bear_runway_score = 15
+        elif dist_to_support >= 0.8:
+            bear_runway_score = 10
+        else:
+            bear_runway_score = 0
+
+        # 4. Resistencia y Dinámica de Cambio 24h (0 - 20 pts)
+        dist_from_resistance = ((resistance - price) / price) * 100 if resistance > 0 else 1.0
+        bear_res_score = 0
+        if 0.2 <= dist_from_resistance <= 3.8:
+            bear_res_score += 10
+        if -5.0 <= change_24h <= 1.5:
+            bear_res_score += 10
+
+        bear_confluence = bear_trend_score + bear_rsi_score + bear_runway_score + bear_res_score
+        adjusted_conf_bear = min(98, max(20, int(bear_confluence * confidence_boost)))
+
+        # Condición Cuantitativa Estricta de COMPRA (CALL / Sube):
         if total_confluence >= 80 and dist_to_resistance >= 0.8 and rsi < 68 and adjusted_conf >= 82:
             decision = "BUY"
             score = adjusted_conf
             action_type = "COMPRA_ALCISTA_CONFIRMADA"
-            reason_simple = f"🌟 Confluencia A+ ({total_confluence}/100): {name} ({profile['vol_type']}) - Tendencia {trend_score}p, RSI {rsi:.1f} {rsi_score}p, Margen a ${resistance:,.2f} {runway_score}p."
+            reason_simple = f"🌟 Confluencia Alcista A+ ({total_confluence}/100): {name} ({profile['vol_type']}) - Tendencia {trend_score}p, RSI {rsi:.1f} {rsi_score}p, Margen a ${resistance:,.2f} {runway_score}p."
+        # Condición Cuantitativa Estricta de VENTA / BAJA (PUT / Baja):
+        elif bear_confluence >= 80 and dist_to_support >= 0.8 and rsi > 32 and adjusted_conf_bear >= 82:
+            decision = "SELL"
+            score = adjusted_conf_bear
+            action_type = "VENTA_BAJISTA_CONFIRMADA"
+            reason_simple = f"🌟 Confluencia Bajista A+ ({bear_confluence}/100): {name} ({profile['vol_type']}) - Tendencia {bear_trend_score}p, RSI {rsi:.1f} {bear_rsi_score}p, Margen a soporte ${support:,.2f} {bear_runway_score}p."
         else:
             decision = "HOLD"
-            score = adjusted_conf
+            score = max(adjusted_conf, adjusted_conf_bear)
             action_type = "MONITOREO_ESTABLE"
             reasons = []
-            if trend_score < 20:
+            if max(trend_score, bear_trend_score) < 20:
                 reasons.append("tendencia EMA débil")
-            if rsi_score < 18:
+            if max(rsi_score, bear_rsi_score) < 18:
                 reasons.append(f"RSI ({rsi:.1f}) subóptimo")
-            if runway_score < 10:
-                reasons.append("resistencia cercana")
-            reason_details = ", ".join(reasons) if reasons else f"confluencia {total_confluence}/100"
+            if max(runway_score, bear_runway_score) < 10:
+                reasons.append("margen acotado")
+            reason_details = ", ".join(reasons) if reasons else f"confluencia {max(total_confluence, bear_confluence)}/100"
             reason_simple = f"En espera: {name} consolidando ({reason_details})."
 
         return {
