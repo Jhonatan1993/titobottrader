@@ -1045,6 +1045,9 @@ class RealTimeTradingEngine:
         is_weekend = datetime.datetime.now(datetime.timezone.utc).weekday() >= 5
 
         for b_id, wallet in list(self.broker_wallets.items()):
+            # Enfoque exclusivo: Si el broker activo es IQ Option, concentrar el 100% del análisis en él
+            if self.active_broker and b_id != self.active_broker:
+                continue
             if not wallet.get("is_running", True):
                 continue
             if wallet.get("target_reached") or wallet.get("loss_limit_reached"):
