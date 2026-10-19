@@ -413,8 +413,8 @@ def api_admin_iq_diagnostics():
         ws.send(json.dumps({"name": "sendMessage", "request_id": "init", "msg": {"name": "get-initialization-data", "version": "3.0", "body": {}}}))
         
         start_w = time.time()
-        init_data = {}
-        profile_msg = {}
+        received_names = []
+        sample_messages = []
         while time.time() - start_w < 5.0:
             raw = ws.recv()
             if not raw:
@@ -422,27 +422,13 @@ def api_admin_iq_diagnostics():
             try:
                 d = json.loads(raw)
                 n = d.get("name")
-                if n == "profile":
-                    profile_msg = d.get("msg", {})
-                elif n == "initialization-data" or d.get("request_id") == "init":
-                    init_data = d
-                    break
+                if n and n not in received_names:
+                    received_names.append(n)
+                if n in ["profile", "api_game_getoptions", "option", "front", "instruments"]:
+                    sample_messages.append({"name": n, "keys": list(d.get("msg", {}).keys()) if isinstance(d.get("msg"), dict) else []})
             except Exception:
                 pass
         ws.close()
-        
-        # Extraer estado de todos los tipos de instrumentos disponibles
-        msg_body = init_data.get("msg", {}) if isinstance(init_data, dict) else {}
-        available_categories = {}
-        for cat_name, cat_data in msg_body.items():
-            if isinstance(cat_data, dict) and "actives" in cat_data:
-                acts = cat_data.get("actives", {})
-                open_acts = [aid for aid, ainfo in acts.items() if isinstance(ainfo, dict) and ainfo.get("enabled")]
-                available_categories[cat_name] = {
-                    "total_actives": len(acts),
-                    "open_actives_count": len(open_acts),
-                    "sample_open_ids": open_acts[:10]
-                }
         
         return jsonify({
             "success": True,
@@ -450,7 +436,8 @@ def api_admin_iq_diagnostics():
             "real_balance_id": iq.real_balance_id,
             "practice_balance_id": iq.practice_balance_id,
             "real_amount": iq.real_amount,
-            "available_categories": available_categories,
+            "received_message_names": received_names,
+            "sample_messages": sample_messages,
             "profile_country": profile_msg.get("country_id"),
             "profile_currency": profile_msg.get("currency")
         })
