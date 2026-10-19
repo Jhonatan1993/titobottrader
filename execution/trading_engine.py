@@ -1316,11 +1316,10 @@ class RealTimeTradingEngine:
                 # Enfriamiento y penalización inmediata para evitar spam y permitir que otros pares operen
                 self.last_exit_times[symbol] = time.time()
                 self.agent.learner.penalize(symbol, penalty=25.0)
-                if is_broker_live:
-                    wallet["cash"] = round(wallet["cash"] + actual_investment, 2)
-                    if broker_id == self.active_broker:
-                        self.cash_balance = wallet["cash"]
-                    return
+                wallet["cash"] = round(wallet["cash"] + actual_investment, 2)
+                if broker_id == self.active_broker:
+                    self.cash_balance = wallet["cash"]
+                return
 
         self.open_positions[symbol] = position
         if hasattr(self, "risk_manager"):

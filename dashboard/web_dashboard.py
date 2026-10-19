@@ -388,6 +388,74 @@ def api_admin_restart_service():
     threading.Thread(target=trigger_restart, daemon=True).start()
     return jsonify({"success": True, "message": "Servicio reiniciando en 1 segundo..."})
 
+@app.route("/api/admin/iq-diagnostics", methods=["GET"])
+def api_admin_iq_diagnostics():
+    """Diagnóstico en tiempo real directo con los servidores de IQ Option."""
+    current_admin_id = session.get("user_id")
+    user = get_user_by_id(current_admin_id) if current_admin_id else None
+    if not user or user.get("role") != "admin":
+        return jsonify({"success": False, "error": "Acceso denegado: solo Administradores."}), 403
+
+    import websocket
+    import ssl
+    import json
+    iq = ENGINE.feed.iqoption
+    if not iq.ssid:
+        return jsonify({"success": False, "error": "No hay SSID en IQ Option"}), 400
+
+    ws_url = "wss://iqoption.com/echo/websocket"
+    headers = [f"Cookie: ssid={iq.ssid}", "User-Agent: Mozilla/5.0"]
+    try:
+        ws = websocket.create_connection(ws_url, header=headers, timeout=6, sslopt={"cert_reqs": ssl.CERT_NONE})
+        ws.send(json.dumps({"name": "ssid", "msg": iq.ssid}))
+        
+        # Consultar inicialización y activos abiertos
+        ws.send(json.dumps({"name": "sendMessage", "request_id": "init", "msg": {"name": "get-initialization-data", "version": "3.0", "body": {}}}))
+        
+        start_w = time.time()
+        init_data = {}
+        profile_msg = {}
+        while time.time() - start_w < 5.0:
+            raw = ws.recv()
+            if not raw:
+                continue
+            try:
+                d = json.loads(raw)
+                n = d.get("name")
+                if n == "profile":
+                    profile_msg = d.get("msg", {})
+                elif n == "initialization-data" or d.get("request_id") == "init":
+                    init_data = d
+                    break
+            except Exception:
+                pass
+        ws.close()
+        
+        # Extraer estado de turbos y binarias
+        msg_body = init_data.get("msg", {}) if isinstance(init_data, dict) else {}
+        turbos = msg_body.get("turbo", {}).get("actives", {}) if isinstance(msg_body, dict) else {}
+        binaries = msg_body.get("binary", {}).get("actives", {}) if isinstance(msg_body, dict) else {}
+        
+        open_turbos = [aid for aid, info in turbos.items() if isinstance(info, dict) and info.get("enabled")]
+        open_binaries = [aid for aid, info in binaries.items() if isinstance(info, dict) and info.get("enabled")]
+        
+        return jsonify({
+            "success": True,
+            "currency": iq.currency,
+            "real_balance_id": iq.real_balance_id,
+            "practice_balance_id": iq.practice_balance_id,
+            "real_amount": iq.real_amount,
+            "open_turbo_active_ids": open_turbos,
+            "open_binary_active_ids": open_binaries,
+            "turbo_count": len(open_turbos),
+            "binary_count": len(open_binaries),
+            "sample_turbo_info": {aid: turbos[aid] for aid in open_turbos[:8]} if open_turbos else {},
+            "profile_country": profile_msg.get("country_id"),
+            "profile_currency": profile_msg.get("currency")
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route("/api/control/get-broker-keys", methods=["GET"])
 def get_broker_keys():
     cfg = ENGINE.broker_config
