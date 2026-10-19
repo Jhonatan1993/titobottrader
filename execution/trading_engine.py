@@ -1102,14 +1102,11 @@ class RealTimeTradingEngine:
                 if allowed_categories and asset.get("category") not in allowed_categories:
                     continue
                 
-                # Filtrado estricto de mercado Forex según día de la semana:
-                # - En fin de semana: IQ Option solo opera OTC (pares terminados en -OTC)
-                # - En días de semana: IQ Option solo opera pares bancarios estándar (sin -OTC)
-                if asset.get("category") == "FOREX":
-                    if is_weekend and "-OTC" not in sym:
-                        continue
-                    if not is_weekend and "-OTC" in sym:
-                        continue
+                # Filtrado de mercado Forex según calendario:
+                # - En fin de semana: el mercado Forex estándar mundial está cerrado -> solo pares OTC 24/7
+                # - En días de semana: permite operar tanto pares estándar como pares OTC 24/7
+                if asset.get("category") == "FOREX" and is_weekend and "-OTC" not in sym:
+                    continue
 
                 # LÓGICA AVANZADA EXCLUSIVA PARA OPCIONES BINARIAS (IQ OPTION):
                 if b_id == "IQOPTION":
@@ -1317,10 +1314,17 @@ class RealTimeTradingEngine:
                 dir_label = "🔻 BAJA (PUT)" if pos_side == "PUT" else "🟢 SUBE (CALL)"
                 self.agent._add_thought(f"📈 ORDEN IQ OPTION ({mode_str}): {dir_label} en {symbol} (ID: {oid}).", "INFO", symbol, "⚡")
             else:
-                self.agent._add_thought(f"🛑 Error en broker IQ Option: {iq_res.get('error')}. Operación abortada.", "WARNING", symbol, "🛑")
-                # Enfriamiento y penalización inmediata para evitar spam y permitir que otros pares operen
-                self.last_exit_times[symbol] = time.time()
-                self.agent.learner.penalize(symbol, penalty=25.0)
+                err_msg = str(iq_res.get('error', 'Error desconocido'))
+                is_closed_or_suspended = any(k in err_msg.lower() for k in ["not available", "suspended", "not found", "closed"])
+                cooldown_dur = 600.0 if is_closed_or_suspended else 120.0
+                self.last_exit_times[symbol] = time.time() + cooldown_dur
+                self.agent.learner.penalize(symbol, penalty=30.0)
+
+                if is_closed_or_suspended:
+                    self.agent._add_thought(f"⏸️ Horario IQ Option: {symbol} cerrado en este momento. Pausado preventivamente 10m para operar activos abiertos.", "INFO", symbol, "⏸️")
+                else:
+                    self.agent._add_thought(f"🛑 Error en broker IQ Option: {err_msg}. Operación abortada.", "WARNING", symbol, "🛑")
+
                 wallet["cash"] = round(wallet["cash"] + actual_investment, 2)
                 if broker_id == self.active_broker:
                     self.cash_balance = wallet["cash"]

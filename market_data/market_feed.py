@@ -950,11 +950,8 @@ class MultiAssetMarketFeed:
         is_weekend = datetime.datetime.now(datetime.timezone.utc).weekday() >= 5
         all_items = list(self.assets.values())
         if is_weekend:
-            # En fin de semana, Forex estándar cerrado en IQ Option; mostrar pares OTC 24/7
+            # En fin de semana, Forex bancario mundial cerrado; operar exclusivamente pares OTC 24/7
             all_items = [a for a in all_items if not (a.get("category") == "FOREX" and "-OTC" not in a.get("symbol", ""))]
-        else:
-            # En días de semana, pares OTC cerrados en IQ Option; mostrar pares Forex estándar
-            all_items = [a for a in all_items if not (a.get("category") == "FOREX" and "-OTC" in a.get("symbol", ""))]
         if not category or category == "ALL":
             return all_items
         if category == "TRADFI":
