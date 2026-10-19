@@ -436,7 +436,7 @@ def api_admin_iq_diagnostics():
         }
         ws.send(json.dumps(test_payload))
         
-        test_res = {}
+        test_res = []
         start_w2 = time.time()
         while time.time() - start_w2 < 4.0:
             raw = ws.recv()
@@ -444,9 +444,7 @@ def api_admin_iq_diagnostics():
                 continue
             try:
                 d = json.loads(raw)
-                if d.get("request_id") == "test_order" or d.get("name") in ["option-opened", "option", "buyComplete"]:
-                    test_res = d
-                    break
+                test_res.append(d)
             except Exception:
                 pass
         ws.close()
