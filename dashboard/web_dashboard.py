@@ -409,47 +409,14 @@ def api_admin_iq_diagnostics():
         ws = websocket.create_connection(ws_url, header=headers, timeout=6, sslopt={"cert_reqs": ssl.CERT_NONE})
         ws.send(json.dumps({"name": "ssid", "msg": iq.ssid}))
         
-        # Consultar inicialización y activos abiertos
-        ws.send(json.dumps({"name": "sendMessage", "request_id": "init", "msg": {"name": "get-initialization-data", "version": "3.0", "body": {}}}))
-        
-        # Probar formato oficial buyV2 del motor Quadcode de IQ Option
-        now_ts = int(time.time())
-        rem = now_ts % 60
-        exp_time = (now_ts // 60 + (2 if rem > 28 else 1)) * 60
-        
-        buyv2_payload = {
-            "name": "buyV2",
-            "msg": {
-                "price": 1,
-                "act": 1,
-                "exp": exp_time,
-                "type": 3,
-                "direction": "call",
-                "time": now_ts,
-                "user_balance_id": iq.practice_balance_id
-            }
-        }
-        ws.send(json.dumps(buyv2_payload))
-        
-        test_res = []
-        start_w2 = time.time()
-        while time.time() - start_w2 < 4.0:
-            raw = ws.recv()
-            if not raw:
-                continue
-            try:
-                d = json.loads(raw)
-                test_res.append(d)
-            except Exception:
-                pass
-        ws.close()
-        
         return jsonify({
             "success": True,
+            "connected": iq.connected,
+            "currency": iq.currency,
+            "real_balance_id": iq.real_balance_id,
             "practice_balance_id": iq.practice_balance_id,
-            "exp_time": exp_time,
-            "rem_seconds": rem,
-            "test_order_response": test_res
+            "real_amount": iq.real_amount,
+            "practice_amount": iq.practice_amount
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
