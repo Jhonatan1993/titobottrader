@@ -819,7 +819,21 @@ class MultiAssetMarketFeed:
             except Exception:
                 pass
 
-        # 2. Intentar velas reales de Alpaca para acciones TradFi y ETFs
+        # 2. Intentar velas reales de IQ Option para activos FOREX / OTC
+        if item.get("category") == "FOREX" and hasattr(self, "iqoption") and self.iqoption.is_configured and getattr(self.iqoption, "ssid", None):
+            try:
+                iq_candles = self.iqoption.get_candles(sym, interval=60, count=60)
+                if iq_candles and len(iq_candles) > 10:
+                    self.candles[sym] = iq_candles
+                    latest = iq_candles[-1]
+                    if sym in self.assets:
+                        self.assets[sym]["price"] = latest["close"]
+                        self.assets[sym]["source"] = "IQOPTION_REAL_FEED"
+                    return
+            except Exception:
+                pass
+
+        # 3. Intentar velas reales de Alpaca para acciones TradFi y ETFs
         if item.get("category") in ["TRADFI_STOCK", "ETF"] and self.alpaca.is_configured:
             try:
                 stock_bars = self.alpaca.get_stock_bars(sym, limit=90)

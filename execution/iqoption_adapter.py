@@ -651,3 +651,82 @@ class IQOptionAdapter:
 
         # Enviar orden real vía WebSocket autenticado de IQ Option
         return self._execute_real_ws_order(symbol, side, amount)
+
+    def get_candles(self, symbol: str, interval: int = 60, count: int = 40) -> list:
+        """Obtiene velas reales en vivo directamente desde IQ Option vía WebSocket."""
+        clean_sym = symbol.upper().replace("/", "").replace("_", "")
+        active_id = ACTIVE_ASSET_IDS.get(clean_sym, ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC", 76))
+        
+        if not self.ssid:
+            return []
+            
+        import websocket
+        import json
+        import ssl
+        try:
+            ws_url = "wss://iqoption.com/echo/websocket"
+            headers = [
+                f"Cookie: ssid={self.ssid}",
+                "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+            ]
+            ws = websocket.create_connection(ws_url, header=headers, timeout=5, sslopt={"cert_reqs": ssl.CERT_NONE})
+            ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
+            
+            auth_start = time.time()
+            while time.time() - auth_start < 1.5:
+                raw = ws.recv()
+                if not raw:
+                    continue
+                try:
+                    d = json.loads(raw)
+                    if d.get("name") in ["profile", "timeSync", "front"]:
+                        break
+                except Exception:
+                    pass
+
+            req_id = f"candles_{int(time.time()*1000)}"
+            msg = {
+                "name": "sendMessage",
+                "request_id": req_id,
+                "msg": {
+                    "name": "get-candles",
+                    "version": "2.0",
+                    "body": {
+                        "active_id": active_id,
+                        "split_normalization": 0,
+                        "count": count,
+                        "size": interval
+                    }
+                }
+            }
+            ws.send(json.dumps(msg))
+            
+            candles_list = []
+            start = time.time()
+            while time.time() - start < 4.0:
+                raw = ws.recv()
+                if not raw:
+                    continue
+                try:
+                    data = json.loads(raw)
+                    if data.get("request_id") == req_id or data.get("name") in ["candles", "candle-generated"]:
+                        body = data.get("msg", {})
+                        raw_c = body.get("candles", []) if isinstance(body, dict) else (body if isinstance(body, list) else [])
+                        if raw_c:
+                            for c in raw_c:
+                                candles_list.append({
+                                    "time": c.get("from") or c.get("time") or int(time.time()),
+                                    "open": float(c.get("open", 0.0)),
+                                    "high": float(c.get("max") or c.get("high", 0.0)),
+                                    "low": float(c.get("min") or c.get("low", 0.0)),
+                                    "close": float(c.get("close", 0.0)),
+                                    "volume": float(c.get("volume", 0.0))
+                                })
+                            break
+                except Exception:
+                    pass
+            ws.close()
+            return candles_list
+        except Exception:
+            return []
+

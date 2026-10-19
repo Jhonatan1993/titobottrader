@@ -1045,9 +1045,11 @@ class RealTimeTradingEngine:
         is_weekend = datetime.datetime.now(datetime.timezone.utc).weekday() >= 5
 
         for b_id, wallet in list(self.broker_wallets.items()):
-            # Enfoque exclusivo: Si el broker activo es IQ Option, concentrar el 100% del análisis en él
-            if self.active_broker and b_id != self.active_broker:
-                continue
+            # Enfoque exclusivo en IQ Option: si el broker activo es IQOPTION y hay activos de Forex, concentrar el 100% en IQ Option
+            if self.active_broker == "IQOPTION" and b_id != "IQOPTION":
+                has_iq_assets = any(asset.get("category") == "FOREX" or "-OTC" in s for s, asset in market_state.items())
+                if has_iq_assets:
+                    continue
             if not wallet.get("is_running", True):
                 continue
             if wallet.get("target_reached") or wallet.get("loss_limit_reached"):
@@ -1057,7 +1059,8 @@ class RealTimeTradingEngine:
             min_cash = 2000.0 if is_cop else 1.0
 
             allowed_categories = wallet.get("allowed_categories", ["FOREX", "OPTIONS", "CFD"])
-            max_positions = 3
+            # Máximo 1 sola operación concurrente en IQ Option (Elimina el riesgo de abrir 3 o 4 operaciones a la vez)
+            max_positions = 1 if b_id == "IQOPTION" else 3
             broker_positions = self.get_broker_positions(b_id)
 
             if len(broker_positions) >= max_positions or wallet.get("cash", 0.0) < min_cash:
