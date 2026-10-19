@@ -699,7 +699,13 @@ class MultiAssetMarketFeed:
 
             use_live_price = (sym in self.live_cache)
             if use_live_price:
-                new_price = round(self.live_cache[sym], dec_places)
+                base_ref = self.live_cache[sym]
+                if category == "FOREX":
+                    # Micro-ticks de alta frecuencia anclados al precio interbancario real en vivo
+                    pip_noise = random.gauss(0, asset.get("volatility", 0.003) * 0.05)
+                    new_price = round(base_ref * (1 + pip_noise), dec_places)
+                else:
+                    new_price = round(base_ref, dec_places)
                 asset["source"] = "LIVE_MARKET"
             else:
                 if category == "FOREX":

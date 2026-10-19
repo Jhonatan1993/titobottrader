@@ -1082,7 +1082,8 @@ class RealTimeTradingEngine:
             if wallet.get("target_reached") or wallet.get("loss_limit_reached"):
                 continue
 
-            allowed_categories = wallet.get("allowed_categories", ["CRYPTO"] if b_id == "BINANCE" else ["TRADFI_STOCK", "ETF"])
+            fallback_cats = ["CRYPTO"] if b_id == "BINANCE" else (["FOREX", "OPTIONS", "CFD"] if b_id == "IQOPTION" else ["TRADFI_STOCK", "ETF"])
+            allowed_categories = wallet.get("allowed_categories") or fallback_cats
             broker_equity = self.get_broker_equity(b_id)
             max_positions = 2 if broker_equity <= 50.0 else 5
             broker_positions = self.get_broker_positions(b_id)
@@ -1367,11 +1368,16 @@ class RealTimeTradingEngine:
             if hasattr(self, "feed") and hasattr(self.feed, "iqoption"):
                 payout_rate = getattr(self.feed.iqoption, "get_payout", lambda s: 0.88)(symbol)
             pos_side = pos.get("side", "BUY_LONG").upper()
+            is_tie = (exit_price == entry_p)
             is_win = (exit_price > entry_p) if pos_side in ["BUY", "BUY_LONG", "CALL"] else (exit_price < entry_p)
             if is_win:
                 pnl = round(invested * payout_rate, 2)
                 exit_value = round(invested + pnl, 2)
                 pnl_pct = round(payout_rate * 100, 2)
+            elif is_tie:
+                pnl = 0.0
+                exit_value = invested
+                pnl_pct = 0.0
             else:
                 pnl = round(-invested, 2)
                 exit_value = 0.0
