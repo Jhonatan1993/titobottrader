@@ -412,29 +412,24 @@ def api_admin_iq_diagnostics():
         # Consultar inicialización y activos abiertos
         ws.send(json.dumps({"name": "sendMessage", "request_id": "init", "msg": {"name": "get-initialization-data", "version": "3.0", "body": {}}}))
         
-        # Prueba real de orden en cuenta DEMO (practice_balance_id) para ver respuesta exacta del WebSocket
+        # Probar formato oficial buyV2 del motor Quadcode de IQ Option
         now_ts = int(time.time())
         rem = now_ts % 60
-        # En IQ Option: si faltan menos de 30 segundos para el minuto, la expiración debe ser al minuto siguiente (+2), si faltan más de 30s es (+1)
         exp_time = (now_ts // 60 + (2 if rem > 28 else 1)) * 60
         
-        test_payload = {
-            "name": "sendMessage",
-            "request_id": "test_order",
+        buyv2_payload = {
+            "name": "buyV2",
             "msg": {
-                "name": "binary-options.open-option",
-                "version": "1.0",
-                "body": {
-                    "user_balance_id": iq.practice_balance_id,
-                    "active_id": 1,
-                    "option_type_id": 3,
-                    "direction": "call",
-                    "expired": exp_time,
-                    "price": 1
-                }
+                "price": 1,
+                "act": 1,
+                "exp": exp_time,
+                "type": 3,
+                "direction": "call",
+                "time": now_ts,
+                "user_balance_id": iq.practice_balance_id
             }
         }
-        ws.send(json.dumps(test_payload))
+        ws.send(json.dumps(buyv2_payload))
         
         test_res = []
         start_w2 = time.time()
