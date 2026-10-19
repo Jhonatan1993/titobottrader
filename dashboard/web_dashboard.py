@@ -347,7 +347,7 @@ def recalibrate():
 
 @app.route("/api/admin/system-update", methods=["POST"])
 def api_admin_system_update():
-    """Descarga la última versión de GitHub y recarga el motor."""
+    """Descarga la última versión de GitHub y recarga el motor reiniciando el servicio en systemd."""
     current_admin_id = session.get("user_id")
     user = get_user_by_id(current_admin_id) if current_admin_id else None
     if not user or user.get("role") != "admin":
@@ -359,14 +359,34 @@ def api_admin_system_update():
         ENGINE.agent.learner.clear_cooldown()
         if hasattr(ENGINE.feed, "reset_forex_feed"):
             ENGINE.feed.reset_forex_feed()
+
+        def trigger_restart():
+            time.sleep(1.2)
+            os._exit(0)
+        threading.Thread(target=trigger_restart, daemon=True).start()
+
         return jsonify({
             "success": True,
             "stdout": pull_res.stdout,
             "stderr": pull_res.stderr,
-            "message": "Sistema actualizado con éxito desde GitHub."
+            "message": "Sistema actualizado con éxito desde GitHub. Reiniciando servicio para aplicar cambios..."
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/admin/restart-service", methods=["POST"])
+def api_admin_restart_service():
+    """Reinicia limpiamente el proceso del servicio para cargar código fresco."""
+    current_admin_id = session.get("user_id")
+    user = get_user_by_id(current_admin_id) if current_admin_id else None
+    if not user or user.get("role") != "admin":
+        return jsonify({"success": False, "error": "Acceso denegado: solo Administradores pueden reiniciar el servicio."}), 403
+
+    def trigger_restart():
+        time.sleep(1.0)
+        os._exit(0)
+    threading.Thread(target=trigger_restart, daemon=True).start()
+    return jsonify({"success": True, "message": "Servicio reiniciando en 1 segundo..."})
 
 @app.route("/api/control/get-broker-keys", methods=["GET"])
 def get_broker_keys():

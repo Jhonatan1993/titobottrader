@@ -612,14 +612,34 @@ class MultiAssetMarketFeed:
             try:
                 import urllib.request
                 import json
-                req = urllib.request.Request("https://api.frankfurter.app/latest?from=USD", headers={"User-Agent": "Mozilla/5.0"})
-                with urllib.request.urlopen(req, timeout=2.5) as resp:
-                    rates = json.loads(resp.read().decode()).get("rates", {})
-                    if "EUR" in rates and rates["EUR"] > 0:
+                import ssl
+                ctx = ssl._create_unverified_context()
+                rates = {}
+                # Intento 1: open.er-api.com (Rápido, oficial, sin redirects, sin SSL bloqueante)
+                try:
+                    req1 = urllib.request.Request("https://open.er-api.com/v6/latest/USD", headers={"User-Agent": "Mozilla/5.0 (TitoBotTrader/2.0)"})
+                    with urllib.request.urlopen(req1, timeout=3.0, context=ctx) as resp1:
+                        data1 = json.loads(resp1.read().decode())
+                        if data1.get("result") == "success":
+                            rates = data1.get("rates", {})
+                except Exception:
+                    pass
+
+                # Intento 2: frankfurter.dev oficial si el intento 1 falló
+                if not rates:
+                    try:
+                        req2 = urllib.request.Request("https://api.frankfurter.dev/v1/latest?from=USD", headers={"User-Agent": "Mozilla/5.0 (TitoBotTrader/2.0)"})
+                        with urllib.request.urlopen(req2, timeout=3.0, context=ctx) as resp2:
+                            rates = json.loads(resp2.read().decode()).get("rates", {})
+                    except Exception:
+                        pass
+
+                if rates:
+                    if "EUR" in rates and float(rates["EUR"]) > 0:
                         val = round(1.0 / float(rates["EUR"]), 5)
                         self.live_cache["EURUSD"] = val
                         self.live_cache["EURUSD-OTC"] = val
-                    if "GBP" in rates and rates["GBP"] > 0:
+                    if "GBP" in rates and float(rates["GBP"]) > 0:
                         val = round(1.0 / float(rates["GBP"]), 5)
                         self.live_cache["GBPUSD"] = val
                         self.live_cache["GBPUSD-OTC"] = val
@@ -635,23 +655,23 @@ class MultiAssetMarketFeed:
                         val = round(float(rates["CHF"]), 5)
                         self.live_cache["USDCHF"] = val
                         self.live_cache["USDCHF-OTC"] = val
-                    if "AUD" in rates and rates["AUD"] > 0:
+                    if "AUD" in rates and float(rates["AUD"]) > 0:
                         val = round(1.0 / float(rates["AUD"]), 5)
                         self.live_cache["AUDUSD"] = val
                         self.live_cache["AUDUSD-OTC"] = val
-                    if "NZD" in rates and rates["NZD"] > 0:
+                    if "NZD" in rates and float(rates["NZD"]) > 0:
                         val = round(1.0 / float(rates["NZD"]), 5)
                         self.live_cache["NZDUSD"] = val
                         self.live_cache["NZDUSD-OTC"] = val
-                    if "EUR" in rates and "GBP" in rates and rates["EUR"] > 0 and rates["GBP"] > 0:
+                    if "EUR" in rates and "GBP" in rates and float(rates["EUR"]) > 0 and float(rates["GBP"]) > 0:
                         val = round(float(rates["GBP"]) / float(rates["EUR"]), 5)
                         self.live_cache["EURGBP"] = val
                         self.live_cache["EURGBP-OTC"] = val
-                    if "EUR" in rates and "JPY" in rates and rates["EUR"] > 0:
+                    if "EUR" in rates and "JPY" in rates and float(rates["EUR"]) > 0 and float(rates["JPY"]) > 0:
                         val = round(float(rates["JPY"]) / float(rates["EUR"]), 3)
                         self.live_cache["EURJPY"] = val
                         self.live_cache["EURJPY-OTC"] = val
-                    if "GBP" in rates and "JPY" in rates and rates["GBP"] > 0:
+                    if "GBP" in rates and "JPY" in rates and float(rates["GBP"]) > 0 and float(rates["JPY"]) > 0:
                         val = round(float(rates["JPY"]) / float(rates["GBP"]), 3)
                         self.live_cache["GBPJPY"] = val
                         self.live_cache["GBPJPY-OTC"] = val
@@ -683,11 +703,13 @@ class MultiAssetMarketFeed:
                 asset["source"] = "LIVE_MARKET"
             else:
                 if category == "FOREX":
-                    # Reversión de Ornstein-Uhlenbeck hacia el valor base para evitar desvíos ficticios
-                    base_p = asset.get("open_price", 1.0)
+                    base_p = asset.get("base_price", asset.get("open_price", 1.0))
+                    # Si el precio anterior colapsó o se disparó más de 50%, recuperamos el base
+                    if old_price < base_p * 0.5 or old_price > base_p * 2.0:
+                        old_price = base_p
                     reversion = (base_p - old_price) * 0.05
                     shock = random.gauss(reversion, asset["volatility"] * 0.15)
-                    new_price = max(0.0001, round(old_price * (1 + shock), dec_places))
+                    new_price = max(base_p * 0.7, round(old_price * (1 + shock), dec_places))
                 else:
                     shock = random.gauss(asset["trend_bias"], asset["volatility"])
                     wave = math.sin(now / 18.0 + hash(sym) % 12) * (asset["volatility"] * 0.35)
