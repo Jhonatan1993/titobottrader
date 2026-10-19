@@ -412,41 +412,51 @@ def api_admin_iq_diagnostics():
         # Consultar inicialización y activos abiertos
         ws.send(json.dumps({"name": "sendMessage", "request_id": "init", "msg": {"name": "get-initialization-data", "version": "3.0", "body": {}}}))
         
-        start_w = time.time()
-        profile_msg = {}
-        received_names = []
-        sample_messages = []
-        while time.time() - start_w < 5.0:
+        # Prueba real de orden en cuenta DEMO (practice_balance_id) para ver respuesta exacta del WebSocket
+        now_ts = int(time.time())
+        rem = now_ts % 60
+        # En IQ Option: si faltan menos de 30 segundos para el minuto, la expiración debe ser al minuto siguiente (+2), si faltan más de 30s es (+1)
+        exp_time = (now_ts // 60 + (2 if rem > 28 else 1)) * 60
+        
+        test_payload = {
+            "name": "sendMessage",
+            "request_id": "test_order",
+            "msg": {
+                "name": "binary-options.open-option",
+                "version": "1.0",
+                "body": {
+                    "user_balance_id": iq.practice_balance_id,
+                    "active_id": 1,
+                    "option_type_id": 3,
+                    "direction": "call",
+                    "expired": exp_time,
+                    "price": 1
+                }
+            }
+        }
+        ws.send(json.dumps(test_payload))
+        
+        test_res = {}
+        start_w2 = time.time()
+        while time.time() - start_w2 < 4.0:
             raw = ws.recv()
             if not raw:
                 continue
             try:
                 d = json.loads(raw)
-                n = d.get("name")
-                if n and n not in received_names:
-                    received_names.append(n)
-                if n == "profile":
-                    profile_msg = d.get("msg", {})
-                if n in ["profile", "api_game_getoptions", "option", "front", "instruments"]:
-                    sample_messages.append({"name": n, "keys": list(d.get("msg", {}).keys()) if isinstance(d.get("msg"), dict) else []})
+                if d.get("request_id") == "test_order" or d.get("name") in ["option-opened", "option", "buyComplete"]:
+                    test_res = d
+                    break
             except Exception:
                 pass
         ws.close()
         
         return jsonify({
             "success": True,
-            "currency": iq.currency,
-            "real_balance_id": iq.real_balance_id,
             "practice_balance_id": iq.practice_balance_id,
-            "real_amount": iq.real_amount,
-            "trade_restricted": profile_msg.get("trade_restricted"),
-            "account_status": profile_msg.get("account_status"),
-            "finance_state": profile_msg.get("finance_state"),
-            "kyc_confirmed": profile_msg.get("kyc_confirmed"),
-            "country_id": profile_msg.get("country_id"),
-            "functions": profile_msg.get("functions"),
-            "received_message_names": received_names,
-            "profile_currency": profile_msg.get("currency")
+            "exp_time": exp_time,
+            "rem_seconds": rem,
+            "test_order_response": test_res
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
