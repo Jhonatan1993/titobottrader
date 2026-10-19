@@ -1102,9 +1102,14 @@ class RealTimeTradingEngine:
                 if allowed_categories and asset.get("category") not in allowed_categories:
                     continue
                 
-                # En fin de semana, Forex estándar cerrado en IQ Option; filtrar exclusivamente hacia pares OTC
-                if is_weekend and asset.get("category") == "FOREX" and "-OTC" not in sym:
-                    continue
+                # Filtrado estricto de mercado Forex según día de la semana:
+                # - En fin de semana: IQ Option solo opera OTC (pares terminados en -OTC)
+                # - En días de semana: IQ Option solo opera pares bancarios estándar (sin -OTC)
+                if asset.get("category") == "FOREX":
+                    if is_weekend and "-OTC" not in sym:
+                        continue
+                    if not is_weekend and "-OTC" in sym:
+                        continue
 
                 # LÓGICA AVANZADA EXCLUSIVA PARA OPCIONES BINARIAS (IQ OPTION):
                 if b_id == "IQOPTION":
