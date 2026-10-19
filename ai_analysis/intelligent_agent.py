@@ -389,14 +389,17 @@ class IntelligentTradingAgent:
             reason_details = ", ".join(reasons) if reasons else f"confluencia {max(total_confluence, bear_confluence)}/100"
             reason_simple = f"En espera: {name} consolidando ({reason_details})."
 
+        final_conf = adjusted_conf_bear if decision == "SELL" else adjusted_conf
+        final_score = adjusted_conf_bear if decision == "SELL" else adjusted_conf
+
         return {
             "symbol": symbol,
             "name": name,
             "icon": icon,
             "decision": decision,
             "action_type": action_type,
-            "confidence": adjusted_conf,
-            "score": score,
+            "confidence": final_conf,
+            "score": final_score,
             "reason_simple": reason_simple,
             "price": price,
             "take_profit": suggested_tp,
@@ -405,3 +408,4 @@ class IntelligentTradingAgent:
             "regime": regime_info["regime"],
             "regime_tag": regime_info["tag"]
         }
+

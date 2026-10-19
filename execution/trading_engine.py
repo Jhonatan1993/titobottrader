@@ -1075,21 +1075,26 @@ class RealTimeTradingEngine:
                 # LÓGICA DE MODOS OPERATIVOS IQ OPTION (BINARIAS, CFD, HÍBRIDO):
                 if b_id == "IQOPTION":
                     cur_mode = self.operating_mode
-                    if is_weekend or cur_mode == "IQ_BINARY":
-                        op_trade_type = "BINARY"
-                    elif cur_mode == "IQ_CFD":
+                    if cur_mode == "IQ_CFD":
                         op_trade_type = "CFD"
+                    elif cur_mode == "IQ_BINARY" or is_weekend or "-OTC" in sym:
+                        op_trade_type = "BINARY"
                     else: # IQ_HYBRID
-                        regime = asset.get("regime", "")
-                        if regime in ["TRENDING_BULL", "TRENDING_BEAR"]:
-                            op_trade_type = "CFD"
-                        else:
+                        # En Híbrido: Los pares OTC son estrictamente opciones binarias (en IQ Option no existe CFD OTC)
+                        if "-OTC" in sym:
                             op_trade_type = "BINARY"
+                        else:
+                            regime_info = self.agent.regime_detector.detect_regime(asset)
+                            regime = regime_info.get("regime", "")
+                            if regime in ["TRENDING_BULL", "TRENDING_BEAR"]:
+                                op_trade_type = "CFD"
+                            else:
+                                op_trade_type = "BINARY"
 
-                    # En Binarias 60s, sincronizamos con apertura de vela (:48 a :12) y payout >= 80%
+                    # En Binarias 60s, sincronizamos con apertura de vela y payout >= 80%
                     if op_trade_type == "BINARY":
                         sec_in_min = int(time.time()) % 60
-                        is_gate_open = (sec_in_min >= 48 or sec_in_min <= 12)
+                        is_gate_open = (sec_in_min >= 45 or sec_in_min <= 15)
                         if not getattr(self, "_override_timing_gate_for_test", False) and not is_gate_open:
                             continue
 
@@ -1490,12 +1495,20 @@ class RealTimeTradingEngine:
                 icon="⚖️"
             )
         else:
-            self.agent._add_thought(
-                f"🛡️ CIERRE DEFENSIVO [{broker_badge} - {trade_label}]: {symbol} cerrado a ${exit_price:,.2f}. Resultado: -{b_curr} {abs(pnl):,.2f} ({pnl_pct:.2f}%).",
-                "TRADE_LOSS",
-                symbol,
-                icon="🛑"
-            )
+            if pos.get("is_cfd"):
+                self.agent._add_thought(
+                    f"🛡️ CIERRE DEFENSIVO STOP-LOSS [{broker_badge} - CFD]: {symbol} cerrado a ${exit_price:,.2f}. Pérdida controlada: -{b_curr} {abs(pnl):,.2f} ({pnl_pct:.2f}%).",
+                    "TRADE_LOSS",
+                    symbol,
+                    icon="🛑"
+                )
+            else:
+                self.agent._add_thought(
+                    f"🛑 CONTRATO NO CUMPLIDO [{broker_badge} - Binarias 60s]: {symbol} expiró a ${exit_price:,.2f}. Pérdida de contrato: -{b_curr} {abs(pnl):,.2f}.",
+                    "TRADE_LOSS",
+                    symbol,
+                    icon="🛑"
+                )
 
     def emergency_close_all(self, broker: Optional[str] = None):
         target_b = broker.upper() if broker else None
@@ -1693,6 +1706,10 @@ class RealTimeTradingEngine:
                 "is_running": b_wal.get("is_running", True),
                 "currency": getattr(self.feed.iqoption, "currency", "COP") if (b_id == "IQOPTION" and hasattr(self.feed, 'iqoption')) else "USD"
             }
+
+        # Enfoque exclusivo en IQ Option para el dashboard y la API (elimina Alpaca y Binance de la interfaz)
+        if "IQOPTION" in brokers_dict:
+            brokers_dict = {"IQOPTION": brokers_dict["IQOPTION"]}
 
         return {
             "system_status": {

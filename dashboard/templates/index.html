@@ -2153,12 +2153,8 @@
                                 0 activas · 5 cupos libres (Máx. 5 simultáneas)
                             </div>
                         </div>
-                        <div style="text-align:right; display:flex; flex-direction:column; align-items:flex-end; gap:3px;">
                             <div style="display:flex; align-items:center; gap:6px;">
                                 <span class="mono" id="unrealized-pnl-header" style="font-size:12px; font-weight:700;">$0.00</span>
-                                <button class="btn-harvest-pill" id="btn-harvest-profits" onclick="harvestProfitsToVault()" title="Asegurar todas las ganancias positivas flotantes y trasladarlas inmediatamente a la Bóveda">
-                                    🔒 A Bóveda
-                                </button>
                             </div>
                             <div style="font-size:9px; color:var(--text-muted); font-family:var(--font-mono);">PnL Flotante</div>
                         </div>
@@ -3330,11 +3326,10 @@
                 document.getElementById('system-status-text').style.color = isRunningState ? 'var(--emerald-win)' : 'var(--binance-yellow)';
             }
 
-            // Broker Switcher Dock Bar Sync
-            // Renderizado Dinámico de Brokers (Operación Concurrente Multi-Broker 24/7)
+            // Broker Switcher Dock Bar Sync - Centrado Exclusivamente en IQ Option
             const pillsContainer = document.getElementById('broker-segmented-pill');
             if (pillsContainer && sys.brokers) {
-                const brokerKeys = Object.keys(sys.brokers);
+                const brokerKeys = Object.keys(sys.brokers).filter(bId => bId === 'IQOPTION');
                 const brokerSignature = brokerKeys.sort().join('|');
 
                 // Solo reconstruir el HTML si la lista de brokers conectados cambió
@@ -3343,40 +3338,29 @@
                     let pillsHtml = '';
                     brokerKeys.forEach(bId => {
                         const bInfo = sys.brokers[bId] || {};
-                        const isActive = (bId === activeBroker);
-                        const bIcon = bInfo.icon || '💼';
-                        const bName = bInfo.name || bId;
+                        const isActive = true;
+                        const bIcon = bInfo.icon || '📈';
+                        const bName = bInfo.name || 'IQ Option';
                         const bEq = (bInfo.equity !== undefined) ? bInfo.equity : 0;
-                        const isBin = (bId === 'BINANCE');
-                        const isAlp = (bId === 'ALPACA');
-                        
-                        let activeClass = '';
-                        if (isActive) {
-                            activeClass = isBin ? 'active active-binance' : (isAlp ? 'active active-alpaca' : 'active');
-                        }
+                        const activeClass = 'active';
                         
                         const userTag = bInfo.logged_user ? `<span style="font-size:9.5px; color:#A0AEC0; font-weight:normal; max-width:95px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="Cuenta: ${bInfo.logged_user}">(${bInfo.logged_user})</span>` : '';
                         
-                        const bCurr = bInfo.currency || (bId === 'IQOPTION' ? 'COP' : 'USD');
+                        const bCurr = bInfo.currency || 'COP';
                         const formattedEq = bCurr === 'COP' ? `COP ${bEq.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}` : `$${bEq.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} USD`;
 
                         pillsHtml += `
-                            <button type="button" class="broker-pill-btn ${activeClass}" id="broker-tab-${bId.toLowerCase()}" onclick="selectActiveBroker('${bId}')" title="Ver operaciones de ${bName} ${bInfo.logged_user ? '(' + bInfo.logged_user + ')' : ''}">
+                            <button type="button" class="broker-pill-btn ${activeClass}" id="broker-tab-${bId.toLowerCase()}" onclick="selectActiveBroker('${bId}')" title="Operaciones de ${bName} ${bInfo.logged_user ? '(' + bInfo.logged_user + ')' : ''}">
                                 <span class="broker-pill-icon">${bIcon}</span>
                                 <div class="broker-pill-meta">
                                     <span class="broker-pill-name" style="display:flex; align-items:center; gap:4px;">${bName} ${userTag}</span>
                                     <span class="broker-pill-balance mono" id="broker-equity-${bId.toLowerCase()}">${formattedEq}</span>
                                 </div>
-                                <span class="broker-pill-badge ${isActive ? 'active' : ''}" id="broker-badge-${bId.toLowerCase()}">${isActive ? 'ACTIVO' : 'CONECTADO'}</span>
+                                <span class="broker-pill-badge active" id="broker-badge-${bId.toLowerCase()}">ACTIVO</span>
                             </button>
                         `;
                     });
                     
-                    pillsHtml += `
-                        <button type="button" class="broker-pill-add" onclick="openAddBrokerModal()" title="Conectar otro broker (Bybit, IBKR, OKX, IQ Option, etc.)">
-                            <span>➕</span>
-                        </button>
-                    `;
                     pillsContainer.innerHTML = pillsHtml;
                 } else {
                     // Actualización fluida sin destruir el DOM ni causar parpadeo/rebotes
