@@ -413,6 +413,7 @@ def api_admin_iq_diagnostics():
         ws.send(json.dumps({"name": "sendMessage", "request_id": "init", "msg": {"name": "get-initialization-data", "version": "3.0", "body": {}}}))
         
         start_w = time.time()
+        profile_msg = {}
         received_names = []
         sample_messages = []
         while time.time() - start_w < 5.0:
