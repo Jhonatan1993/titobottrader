@@ -879,12 +879,12 @@ class RealTimeTradingEngine:
 
             # Meta de ganancia por broker
             b_target_amt = b_wal.get("target_amount", self.profit_target_amount)
+            b_curr = "COP" if (b_id == "IQOPTION" and getattr(self.feed.iqoption, "currency", "USD") == "COP") else "USD"
             if self.profit_target_enabled and b_profit >= b_target_amt and not b_wal.get("target_alerted", False):
                 b_wal["target_alerted"] = True
                 self.agent._add_thought(
-                    f"🏆 ¡OBJETIVO DE GANANCIA ALCANZADO [{b_wal.get('icon','💼')} {b_wal.get('name', b_id)}] (+${b_profit:,.2f} USD)! "
-                    f"Ganancias protegidas e intocables en la Bóveda (${b_wal.get('profit_vault', 0.0):,.2f} USD). "
-                    f"El motor continúa operando con el Capital Base de ${b_wal['initial_balance']:,.2f} USD.",
+                    f"🏆 ¡OBJETIVO DE GANANCIA ALCANZADO [{b_wal.get('icon','📈')} {b_wal.get('name', b_id)}] (+{b_curr} {b_profit:,.2f})! "
+                    f"Saldo total disponible en cuenta: {b_curr} {b_equity:,.2f}. El motor continúa operando con disciplina matemática.",
                     "TRADE_WIN",
                     icon="🎯"
                 )

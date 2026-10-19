@@ -355,7 +355,11 @@ def api_admin_system_update():
 
     import subprocess
     try:
+        subprocess.run(["git", "checkout", "--", "data/trades_history.csv", "data/trades_history.json"], capture_output=True, text=True, timeout=10)
         pull_res = subprocess.run(["git", "pull", "origin", "main"], capture_output=True, text=True, timeout=15)
+        if pull_res.returncode != 0:
+            subprocess.run(["git", "fetch", "origin", "main"], capture_output=True, text=True, timeout=15)
+            pull_res = subprocess.run(["git", "reset", "--hard", "origin/main"], capture_output=True, text=True, timeout=15)
         ENGINE.agent.learner.clear_cooldown()
         if hasattr(ENGINE.feed, "reset_forex_feed"):
             ENGINE.feed.reset_forex_feed()
