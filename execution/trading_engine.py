@@ -797,6 +797,12 @@ class RealTimeTradingEngine:
 
     def clear_cooldown(self, symbol: Optional[str] = None):
         self.agent.learner.clear_cooldown(symbol)
+        if symbol:
+            self.last_exit_times.pop(symbol, None)
+        else:
+            self.last_exit_times.clear()
+        if hasattr(self, "risk_manager"):
+            self.risk_manager.clear_daily_losses(symbol)
         if hasattr(self.feed, "reset_forex_feed"):
             self.feed.reset_forex_feed()
         msg = f"Cooldown restaurado para {symbol}" if symbol else "Todos los cooldowns y cotizaciones han sido reiniciados."
@@ -1170,16 +1176,22 @@ class RealTimeTradingEngine:
         equity_now = self.get_broker_equity(broker_id)
         is_tradfi = (category in ["TRADFI", "ETF", "TRADFI_STOCK"])
         if hasattr(self, "risk_manager"):
+            b_max_loss = wallet.get("max_loss_amount", self.max_loss_amount)
+            b_loss_enabled = wallet.get("max_loss_enabled", self.max_loss_enabled)
             if not self.risk_manager.can_open_trade(
                 risk_amount=actual_investment * 0.02,
                 current_equity=equity_now,
                 is_margin_account=True,
                 is_tradfi=is_tradfi,
                 broker_id=broker_id,
-                broker_initial_balance=wallet.get("initial_balance", equity_now)
+                broker_initial_balance=wallet.get("initial_balance", equity_now),
+                max_loss_amount=b_max_loss,
+                max_loss_enabled=b_loss_enabled
             ):
                 if is_tradfi and self.risk_manager.is_pdt_restricted(current_equity=equity_now):
                     self.agent._add_thought(f"🛡️ ESCUDO FINRA 4210 (PDT): Entrada en {symbol} prevenida para proteger la cuenta de suspensión por Pattern Day Trader (< $25k USD).", "WARNING", symbol, "⚠️")
+                else:
+                    self.agent._add_thought(f"🛡️ Gestión de riesgo: Entrada en {symbol} pausada por límites operativos.", "INFO", symbol, "🛡️")
                 return
 
         wallet["cash"] = round(wallet["cash"] - actual_investment, 2)

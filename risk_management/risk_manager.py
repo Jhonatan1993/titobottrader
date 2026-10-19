@@ -39,17 +39,28 @@ class RiskManager:
         is_margin_account: bool = True, 
         is_tradfi: bool = False,
         broker_id: Optional[str] = None,
-        broker_initial_balance: Optional[float] = None
+        broker_initial_balance: Optional[float] = None,
+        max_loss_amount: Optional[float] = None,
+        max_loss_enabled: bool = False
     ) -> bool:
         # 1. Límite de cupos simultáneos
         if self.current_open_trades >= self.max_open_trades:
             return False
             
         # 2. Circuit Breaker de pérdida diaria (aislado por divisa y broker)
-        b_init = broker_initial_balance if (broker_initial_balance and broker_initial_balance > 0) else (current_equity if (current_equity and current_equity > 0) else self.initial_balance)
-        b_loss = self.daily_losses.get(broker_id, self.daily_loss if not broker_id else 0.0)
-        if b_init > 0 and (b_loss + risk_amount) > (self.max_daily_loss * b_init):
-            return False
+        if broker_id == "IQOPTION":
+            # Para IQ Option: respeta el límite explícito configurado por el usuario en la interfaz.
+            # No aplica el 5% estático de TradFi porque en cuentas micro de COP (ej. 20k COP),
+            # una sola orden mínima (2,000 COP) equivale al 10%, lo que bloqueaba el bot tras 1 sola pérdida.
+            if max_loss_enabled and max_loss_amount and max_loss_amount > 0:
+                b_loss = self.daily_losses.get(broker_id, 0.0)
+                if b_loss >= max_loss_amount:
+                    return False
+        else:
+            b_init = broker_initial_balance if (broker_initial_balance and broker_initial_balance > 0) else (current_equity if (current_equity and current_equity > 0) else self.initial_balance)
+            b_loss = self.daily_losses.get(broker_id, self.daily_loss if not broker_id else 0.0)
+            if b_init > 0 and (b_loss + risk_amount) > (self.max_daily_loss * b_init):
+                return False
             
         # 3. Blindaje regulatorio FINRA PDT para Wall Street (acciones/ETFs)
         if is_tradfi and self.pdt_protection:
@@ -58,6 +69,14 @@ class RiskManager:
                 return False
                 
         return True
+
+    def clear_daily_losses(self, broker_id: Optional[str] = None):
+        """Reinicia el acumulador de pérdidas diarias."""
+        if broker_id:
+            self.daily_losses.pop(broker_id, None)
+        else:
+            self.daily_losses.clear()
+            self.daily_loss = 0.0
 
     def is_pdt_restricted(self, current_equity: float, is_margin_account: bool = True) -> bool:
         """
