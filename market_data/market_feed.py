@@ -478,6 +478,9 @@ class MultiAssetMarketFeed:
     - Modo SIMULATION: Motor browniano de alta fidelidad 24/7.
     """
     VALID_MODES = [
+        "IQ_HYBRID",
+        "IQ_BINARY",
+        "IQ_CFD",
         "UNIFIED_TRADFI_CRYPTO", 
         "TRADFI_WALLSTREET", 
         "BINANCE_CRYPTO", 
@@ -493,9 +496,9 @@ class MultiAssetMarketFeed:
         self.history: Dict[str, List[Dict[str, Any]]] = {}
         self.candles: Dict[str, List[Dict[str, Any]]] = {}
         self.broker_config = load_broker_config()
-        self.mode = self.broker_config.get("operating_mode", "UNIFIED_TRADFI_CRYPTO")
+        self.mode = self.broker_config.get("operating_mode", "IQ_HYBRID")
         if self.mode not in self.VALID_MODES:
-            self.mode = "UNIFIED_TRADFI_CRYPTO"
+            self.mode = "IQ_HYBRID"
 
         self.alpaca = AlpacaAdapter(
             api_key=self.broker_config.get("alpaca", {}).get("api_key", ""),

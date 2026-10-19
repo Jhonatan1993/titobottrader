@@ -5,12 +5,12 @@ from typing import Dict, Any
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "broker_config.json")
 
 DEFAULT_CONFIG: Dict[str, Any] = {
-    "operating_mode": "BINANCE_CRYPTO",  # "SIMULATION", "ALPACA_PAPER", "BINANCE_CRYPTO", "HYBRID"
-    "active_broker": "BINANCE",  # "BINANCE", "ALPACA"
-    "profit_target_amount": 500.0,
+    "operating_mode": "IQ_HYBRID",  # "IQ_HYBRID", "IQ_BINARY", "IQ_CFD"
+    "active_broker": "IQOPTION",    # IQOPTION exclusivo
+    "profit_target_amount": 50000.0,
     "profit_target_enabled": True,
-    "max_loss_amount": 150.0,
-    "max_loss_enabled": True,
+    "max_loss_amount": 0.0,
+    "max_loss_enabled": False,
     "paper_initial_balance": 30.0,
     "alpaca_initial_balance": 100000.0,
     "binance_profit_vault": 0.0,

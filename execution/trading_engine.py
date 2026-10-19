@@ -21,8 +21,8 @@ class RealTimeTradingEngine:
     """
     def __init__(self, initial_balance: Optional[float] = None, max_open_positions: int = 5, execution_environment: Optional[str] = None):
         self.broker_config = load_broker_config()
-        self.operating_mode = self.broker_config.get("operating_mode", "UNIFIED_TRADFI_CRYPTO")
-        self.execution_environment = execution_environment or self.broker_config.get("execution_environment", "PAPER")
+        self.operating_mode = self.broker_config.get("operating_mode", "IQ_HYBRID")
+        self.execution_environment = execution_environment or self.broker_config.get("execution_environment", "LIVE_REAL")
         
         saved_paper = float(self.broker_config.get("paper_initial_balance", 10000.0))
         self.paper_initial_balance = initial_balance if initial_balance is not None else saved_paper
@@ -58,55 +58,19 @@ class RealTimeTradingEngine:
         self.feed = MultiAssetMarketFeed()
         self.agent = IntelligentTradingAgent()
         self.journal = TradeJournal()
-        self.active_broker = self.broker_config.get("active_broker", "BINANCE").upper()
-        alpaca_paper_init = float(self.broker_config.get("alpaca_initial_balance", 252.65))
-        binance_paper_init = float(self.broker_config.get("paper_initial_balance", 30.0))
-
-        # Billeteras y Parámetros Aislados por Broker (Arquitectura Modular Simétrica)
-        binance_env = self.broker_config.get("binance_environment", self.broker_config.get("execution_environment", "PAPER"))
-        alpaca_env = self.broker_config.get("alpaca_environment", "PAPER")
-        iqoption_env = self.broker_config.get("iqoption_environment", "PAPER")
+        self.active_broker = "IQOPTION"
+        iqoption_env = self.broker_config.get("iqoption_environment", "LIVE_REAL")
         iqoption_paper_init = float(self.broker_config.get("iqoption_paper_initial_balance", self.broker_config.get("iqoption_initial_balance", 10000.0)))
         if iqoption_paper_init <= 0.0:
             iqoption_paper_init = 10000.0
 
-        binance_vault = self.get_broker_vault("BINANCE", binance_env)
-        alpaca_vault = self.get_broker_vault("ALPACA", alpaca_env)
-        iqoption_vault = self.get_broker_vault("IQOPTION", iqoption_env)
+        alpaca_env = self.broker_config.get("alpaca_environment", "PAPER")
+        alpaca_paper_init = float(self.broker_config.get("alpaca_paper_initial_balance", self.broker_config.get("alpaca_initial_balance", 100000.0)))
+        binance_env = self.broker_config.get("binance_environment", "PAPER")
+        binance_paper_init = float(self.broker_config.get("binance_paper_initial_balance", self.broker_config.get("paper_initial_balance", 30.0)))
 
+        # Arquitectura centrada en IQ Option (Sin Bóveda)
         self.broker_wallets: Dict[str, Dict[str, Any]] = {
-            "BINANCE": {
-                "id": "BINANCE",
-                "name": "Binance Spot",
-                "icon": "🪙",
-                "category": "CRYPTO",
-                "allowed_categories": ["CRYPTO"],
-                "environment": binance_env,
-                "initial_balance": binance_paper_init,
-                "cash": binance_paper_init,
-                "profit_vault": binance_vault,
-                "target_amount": float(self.broker_config.get("profit_target_amount", 3000.0)),
-                "max_loss_amount": float(self.broker_config.get("max_loss_amount", 0.0)),
-                "target_reached": False,
-                "loss_limit_reached": False,
-                "is_running": True
-            },
-            "ALPACA": {
-                "id": "ALPACA",
-                "name": "Alpaca Wall Street",
-                "icon": "🏛️",
-                "category": "TRADFI",
-                "allowed_categories": ["TRADFI_STOCK", "ETF"],
-                "environment": alpaca_env,
-                "initial_balance": alpaca_paper_init,
-                "cash": alpaca_paper_init,
-                "profit_vault": alpaca_vault,
-                "target_amount": float(self.broker_config.get("alpaca_profit_target_amount", 5000.0)),
-                "max_loss_amount": float(self.broker_config.get("alpaca_max_loss_amount", 10.0)),
-                "target_reached": False,
-                "loss_limit_reached": False,
-                "is_running": True
-            },
             "IQOPTION": {
                 "id": "IQOPTION",
                 "name": "IQ Option",
@@ -116,111 +80,80 @@ class RealTimeTradingEngine:
                 "environment": iqoption_env,
                 "initial_balance": iqoption_paper_init,
                 "cash": iqoption_paper_init,
-                "profit_vault": iqoption_vault,
-                "target_amount": float(self.broker_config.get("iqoption_profit_target_amount", 5000.0)),
-                "max_loss_amount": float(self.broker_config.get("iqoption_max_loss_amount", 10.0)),
+                "profit_vault": 0.0,
+                "target_amount": float(self.broker_config.get("iqoption_profit_target_amount", 50000.0)),
+                "max_loss_amount": float(self.broker_config.get("iqoption_max_loss_amount", 0.0)),
+                "target_reached": False,
+                "loss_limit_reached": False,
+                "is_running": True
+            },
+            "BINANCE": {
+                "id": "BINANCE",
+                "name": "Binance Spot",
+                "icon": "🪙",
+                "category": "CRYPTO",
+                "allowed_categories": ["CRYPTO"],
+                "environment": binance_env,
+                "initial_balance": binance_paper_init,
+                "cash": binance_paper_init,
+                "profit_vault": 0.0,
+                "target_amount": float(self.broker_config.get("profit_target_amount", 500.0)),
+                "max_loss_amount": float(self.broker_config.get("max_loss_amount", 150.0)),
+                "target_reached": False,
+                "loss_limit_reached": False,
+                "is_running": True
+            },
+            "ALPACA": {
+                "id": "ALPACA",
+                "name": "Alpaca Wall St.",
+                "icon": "🏛️",
+                "category": "TRADFI",
+                "allowed_categories": ["TRADFI_STOCK", "ETF"],
+                "environment": alpaca_env,
+                "initial_balance": alpaca_paper_init,
+                "cash": alpaca_paper_init,
+                "profit_vault": 0.0,
+                "target_amount": float(self.broker_config.get("alpaca_profit_target_amount", 500.0)),
+                "max_loss_amount": float(self.broker_config.get("alpaca_max_loss_amount", 150.0)),
                 "target_reached": False,
                 "loss_limit_reached": False,
                 "is_running": True
             }
         }
 
-        # Carga dinámica de brokers adicionales conectados por el usuario
-        custom_b = self.broker_config.get("custom_brokers", {})
-        for cb_id, cb_data in custom_b.items():
-            self.broker_wallets[cb_id] = cb_data
-
         self.open_positions: Dict[str, Dict[str, Any]] = {}
         self.equity_history: List[Dict[str, Any]] = []
         self.last_exit_times: Dict[str, float] = {}
 
-        # Sincronización con Alpaca según entorno (Paper vs Real)
-        if alpaca_env == "LIVE_REAL":
-            self.feed.alpaca.base_url = "https://api.alpaca.markets"
-            if self.feed.alpaca.is_configured:
-                alp_acc = self.feed.alpaca.get_account_summary()
-                if alp_acc.get("connected"):
-                    self.broker_wallets["ALPACA"]["cash"] = float(alp_acc.get("cash", alpaca_paper_init))
-                    alp_vault = float(self.broker_wallets["ALPACA"].get("profit_vault", 0.0))
-                    total_eq = float(alp_acc.get("equity", alpaca_paper_init))
-                    self.broker_wallets["ALPACA"]["initial_balance"] = max(0.0, round(total_eq - alp_vault, 2))
-        else:
-            self.feed.alpaca.base_url = "https://paper-api.alpaca.markets"
-
-        # Sincronización con IQ Option según entorno (Paper vs Real)
+        # Sincronización exclusiva con IQ Option según entorno (Paper vs Real)
         if hasattr(self.feed, "iqoption"):
             if iqoption_env == "LIVE_REAL" and self.feed.iqoption.is_configured:
                 iq_conn = self.feed.iqoption.connect()
                 if iq_conn.get("connected"):
-                    self.broker_wallets["IQOPTION"]["cash"] = float(iq_conn.get("balance", iqoption_paper_init))
-                    iq_v = float(self.broker_wallets["IQOPTION"].get("profit_vault", 0.0))
-                    total_iq_eq = float(iq_conn.get("balance", iqoption_paper_init))
-                    self.broker_wallets["IQOPTION"]["initial_balance"] = max(0.0, round(total_iq_eq - iq_v, 2))
+                    real_bal = float(iq_conn.get("balance", iqoption_paper_init))
+                    self.broker_wallets["IQOPTION"]["cash"] = real_bal
+                    self.broker_wallets["IQOPTION"]["initial_balance"] = real_bal
+                    self.broker_wallets["IQOPTION"]["environment"] = "LIVE_REAL"
+                else:
+                    self.feed.iqoption.set_environment("PAPER")
+                    self.broker_wallets["IQOPTION"]["environment"] = "PAPER"
             else:
                 self.feed.iqoption.set_environment("PAPER")
                 if self.broker_wallets["IQOPTION"]["cash"] <= 0.0:
                     self.broker_wallets["IQOPTION"]["cash"] = iqoption_paper_init
                     self.broker_wallets["IQOPTION"]["initial_balance"] = iqoption_paper_init
 
-        # Si se especificó un saldo inicial explícito al instanciar (ej. en tests), respetarlo en el broker activo
+        # Si se especificó un saldo inicial explícito al instanciar (ej. en tests), respetarlo
         if initial_balance is not None:
-            active_b = self.active_broker
-            if active_b in self.broker_wallets:
-                self.broker_wallets[active_b]["initial_balance"] = float(initial_balance)
-                self.broker_wallets[active_b]["cash"] = float(initial_balance)
-                self.broker_wallets[active_b]["profit_vault"] = 0.0
+            self.broker_wallets["IQOPTION"]["initial_balance"] = float(initial_balance)
+            self.broker_wallets["IQOPTION"]["cash"] = float(initial_balance)
+            self.broker_wallets["IQOPTION"]["profit_vault"] = 0.0
 
-        # Asignar saldo activo según el broker en vista
-        active_wallet = self.broker_wallets.get(self.active_broker, self.broker_wallets["BINANCE"])
+        # Asignar saldo activo según IQ Option (broker único exclusivo)
+        active_wallet = self.broker_wallets["IQOPTION"]
         self.cash_balance = active_wallet["cash"]
         self.initial_balance = active_wallet["initial_balance"]
         self.execution_environment = active_wallet.get("environment", "PAPER")
-
-        # Si el entorno guardado en Binance es LIVE_REAL, verificar obligatoriamente la autenticación real
-        if binance_env == "LIVE_REAL":
-            is_authenticated = False
-            if self.feed.binance.is_configured:
-                self.feed.binance.live_trading_enabled = True
-                acc = self.feed.binance.get_account_balances()
-                if acc.get("authenticated"):
-                    is_authenticated = True
-                    self._sync_binance_wallet_positions(acc)
-                    saved_real_init = float(self.broker_config.get("real_initial_balance", 0.0))
-                    self.broker_wallets["BINANCE"]["initial_balance"] = saved_real_init if saved_real_init > 0 else round(self.broker_wallets["BINANCE"]["cash"] + self.get_invested_capital(), 2)
-                    self.broker_wallets["BINANCE"]["environment"] = "LIVE_REAL"
-                    if self.active_broker == "BINANCE":
-                        self.initial_balance = self.broker_wallets["BINANCE"]["initial_balance"]
-                        self.loss_limit_reached = False
-                else:
-                    err_msg = acc.get("error", "Error de autenticación API")
-                    self.agent._add_thought(
-                        f"🛡️ BLOQUEO DE SEGURIDAD: Falló autenticación con Binance ({err_msg}). Forzando MODO SIMULACIÓN (PAPER).",
-                        "WARNING",
-                        icon="🛑"
-                    )
-
-            if not is_authenticated:
-                self.broker_wallets["BINANCE"]["environment"] = "PAPER"
-                self.feed.binance.live_trading_enabled = False
-                self.broker_config["binance_environment"] = "PAPER"
-                self.broker_config["execution_environment"] = "PAPER"
-                if self.active_broker == "BINANCE":
-                    self.execution_environment = "PAPER"
-                    self.paper_initial_balance = float(self.broker_config.get("paper_initial_balance", 10000.0))
-                    self.cash_balance = self.paper_initial_balance
-                    self.initial_balance = self.paper_initial_balance
-                save_broker_config(self.broker_config)
-
-        # Si el entorno guardado en IQ Option es LIVE_REAL, verificar que esté configurado
-        iq_env = self.broker_wallets.get("IQOPTION", {}).get("environment", "PAPER")
-        if iq_env == "LIVE_REAL":
-            if not hasattr(self.feed, "iqoption") or not self.feed.iqoption.is_configured:
-                if "IQOPTION" in self.broker_wallets:
-                    self.broker_wallets["IQOPTION"]["environment"] = "PAPER"
-                self.broker_config["iqoption_environment"] = "PAPER"
-                if self.active_broker == "IQOPTION":
-                    self.execution_environment = "PAPER"
-                save_broker_config(self.broker_config)
 
         self.agent.update_learning_from_disk()
         self._record_equity_snapshot()
@@ -734,31 +667,31 @@ class RealTimeTradingEngine:
 
     def set_operating_mode(self, mode: str):
         valid_modes = [
-            "UNIFIED_TRADFI_CRYPTO", 
-            "TRADFI_WALLSTREET", 
-            "BINANCE_CRYPTO", 
-            "HYBRID", 
-            "ALPACA_PAPER", 
-            "SIMULATION"
+            "IQ_HYBRID", "HYBRID", "HYBRID_INTELLIGENT",
+            "IQ_BINARY", "BINARY", "BINARY_OPTIONS",
+            "IQ_CFD", "CFD", "FOREX_CFD"
         ]
         if mode in valid_modes:
+            if mode in ["HYBRID", "HYBRID_INTELLIGENT"]:
+                mode = "IQ_HYBRID"
+            elif mode in ["BINARY", "BINARY_OPTIONS"]:
+                mode = "IQ_BINARY"
+            elif mode in ["CFD", "FOREX_CFD"]:
+                mode = "IQ_CFD"
+
             self.operating_mode = mode
-            self.feed.set_mode(mode)
             self.broker_config["operating_mode"] = mode
             save_broker_config(self.broker_config)
             
             mode_names = {
-                "UNIFIED_TRADFI_CRYPTO": "🌐 Multiactivo Unificado (Wall Street TradFi + Cripto 24/7)",
-                "TRADFI_WALLSTREET": "🏛️ Wall Street TradFi (Acciones de EE.UU. + ETFs)",
-                "BINANCE_CRYPTO": "🪙 Criptomonedas 24/7 (Binance Spot)",
-                "HYBRID": "🔄 Modo Híbrido Multiactivo",
-                "ALPACA_PAPER": "🟢 Wall Street Paper Trading (Alpaca)",
-                "SIMULATION": "🔵 Simulador Cuantitativo 24/7"
+                "IQ_HYBRID": "🔄 Híbrido Inteligente 24/7 (CFD en Tendencias + Binarias en Rango / OTC)",
+                "IQ_BINARY": "⚡ Opciones Binarias Turbo 60s (Contratos Fijos 1M)",
+                "IQ_CFD": "📈 Forex Tradicional CFD (Stop-Loss y Take-Profit Dinámicos sin Expiración Fija)"
             }
             self.agent._add_thought(
-                f"🔀 Modo de Mercado: {mode_names.get(mode, mode)}",
+                f"🔀 Modo IQ Option Activado: {mode_names.get(mode, mode)}",
                 "INFO",
-                icon="📡"
+                icon="🎯"
             )
 
     def update_broker_keys(self, alpaca_key: str = "", alpaca_secret: str = "", binance_key: str = "", binance_secret: str = "", iqoption_email: str = "", iqoption_password: str = "", iqoption_ssid: str = ""):
@@ -1046,33 +979,62 @@ class RealTimeTradingEngine:
             entry_ts = pos.get("entry_timestamp", 0)
             elapsed = time.time() - entry_ts if entry_ts > 0 else 999
 
-            # AISLAMIENTO TOTAL: REGLA EXCLUSIVA PARA OPCIONES BINARIAS (IQ OPTION):
-            # Las opciones binarias son contratos de tiempo fijo (mínimo 60s).
-            # NUNCA se evalúan con Stop-Loss spot ni se cierran prematuramente.
+            # GESTIÓN DUAL EXCLUSIVA IQ OPTION: BINARIAS 60S VS FOREX CFD CON SL/TP
             if pos_b == "IQOPTION":
-                duration_sec = pos.get("duration_sec", 60)
-                if elapsed < duration_sec:
-                    continue  # Esperar expiración natural del contrato binario
+                is_cfd = pos.get("is_cfd", False)
+                if not is_cfd:
+                    # MODO BINARIAS 60S:
+                    duration_sec = pos.get("duration_sec", 60)
+                    if elapsed < duration_sec:
+                        continue  # Esperar expiración natural del contrato binario
+                    else:
+                        self._execute_sell(sym, asset, {"decision": "SELL_EXPIRATION", "reason_simple": f"Expiración de opción binaria ({duration_sec}s cumplidos)"})
+                        continue
                 else:
-                    self._execute_sell(sym, asset, {"decision": "SELL_EXPIRATION", "reason_simple": f"Expiración de opción binaria ({duration_sec}s cumplidos)"})
+                    # MODO FOREX CFD CON STOP-LOSS Y TAKE-PROFIT AUTOMÁTICOS:
+                    decision_data = self.agent.evaluate_asset(asset, self.open_positions)
+                    pos_side = pos.get("side", "BUY_LONG").upper()
+                    cur_price = asset["price"]
+
+                    if pos_side in ["BUY", "BUY_LONG", "CALL"]:
+                        is_hard_sl = cur_price <= pos.get("stop_loss", 0)
+                        is_hard_tp = cur_price >= pos.get("take_profit", 999999)
+                    else:
+                        is_hard_sl = cur_price >= pos.get("stop_loss", 999999)
+                        is_hard_tp = cur_price <= pos.get("take_profit", 0)
+
+                    # Espera mínima de 15s para dar margen de desarrollo a la posición
+                    if elapsed < 15.0 and not is_hard_sl and not is_hard_tp:
+                        continue
+
+                    if is_hard_tp:
+                        self._execute_sell(sym, asset, {"decision": "SELL_TAKE_PROFIT", "reason_simple": f"🎯 Take-Profit alcanzado en {sym}: Objetivo de beneficio cumplido."})
+                        continue
+                    elif is_hard_sl:
+                        self._execute_sell(sym, asset, {"decision": "SELL_STOP_LOSS", "reason_simple": f"🛡️ Stop-Loss defensivo en {sym}: Preservando capital."})
+                        continue
+                    elif decision_data.get("decision") in ["SELL", "PUT"] and pos_side in ["BUY", "BUY_LONG", "CALL"] and decision_data.get("confidence", 0) >= 85:
+                        self._execute_sell(sym, asset, {"decision": "SELL_REVERSAL", "reason_simple": f"⚡ Reversión técnica en {sym}: Asegurando rendimiento."})
+                        continue
+                    elif decision_data.get("decision") in ["BUY", "CALL"] and pos_side in ["SELL", "PUT"] and decision_data.get("confidence", 0) >= 85:
+                        self._execute_sell(sym, asset, {"decision": "SELL_REVERSAL", "reason_simple": f"⚡ Reversión técnica en {sym}: Asegurando rendimiento."})
+                        continue
+            else:
+                cur_price = asset["price"]
+                pos_side = pos.get("side", "BUY_LONG").upper()
+                if pos_side in ["BUY", "BUY_LONG"]:
+                    is_hard_sl = cur_price <= pos.get("stop_loss", 0)
+                    is_hard_tp = cur_price >= pos.get("take_profit", 999999)
+                else:
+                    is_hard_sl = cur_price >= pos.get("stop_loss", 999999)
+                    is_hard_tp = cur_price <= pos.get("take_profit", 0)
+                if is_hard_sl:
+                    self._execute_sell(sym, asset, {"decision": "SELL_STOP_LOSS", "reason_simple": f"Stop Loss en {sym}"})
+                    continue
+                elif is_hard_tp:
+                    self._execute_sell(sym, asset, {"decision": "SELL_TAKE_PROFIT", "reason_simple": f"Take Profit en {sym}"})
                     continue
 
-            # Para acciones TradFi (Alpaca) y Cripto Spot (Binance):
-            decision_data = self.agent.evaluate_asset(asset, self.open_positions)
-
-            # Para acciones TradFi y Cripto Spot: evaluación de Stop-Loss y Take-Profit
-            active_sl = pos.get("initial_stop_loss", pos.get("stop_loss", 0)) if elapsed < 30.0 else pos.get("stop_loss", 0)
-            is_hard_sl = asset["price"] <= active_sl
-            is_hard_tp = asset["price"] >= pos.get("take_profit", 999999)
-            
-            if elapsed < 35.0 and not is_hard_sl and not is_hard_tp:
-                continue
-
-            if is_hard_sl or is_hard_tp or decision_data["decision"] in ["SELL", "SELL_STOP_LOSS", "SELL_TAKE_PROFIT"] or "SELL" in decision_data.get("action_type", ""):
-                self._execute_sell(sym, asset, decision_data)
-
-        # B. OPERACIÓN CONCURRENTE MULTIBROKER (TODOS LOS BROKERS OPERAN AL MISMO TIEMPO):
-        min_cash = 5.0
         now_ts = time.time()
         is_weekend = datetime.datetime.now(datetime.timezone.utc).weekday() >= 5
 
@@ -1082,10 +1044,11 @@ class RealTimeTradingEngine:
             if wallet.get("target_reached") or wallet.get("loss_limit_reached"):
                 continue
 
-            fallback_cats = ["CRYPTO"] if b_id == "BINANCE" else (["FOREX", "OPTIONS", "CFD"] if b_id == "IQOPTION" else ["TRADFI_STOCK", "ETF"])
-            allowed_categories = wallet.get("allowed_categories") or fallback_cats
-            broker_equity = self.get_broker_equity(b_id)
-            max_positions = 2 if broker_equity <= 50.0 else 5
+            is_cop = (b_id == "IQOPTION" and getattr(self.feed.iqoption, "currency", "USD") == "COP")
+            min_cash = 2000.0 if is_cop else 1.0
+
+            allowed_categories = wallet.get("allowed_categories", ["FOREX", "OPTIONS", "CFD"])
+            max_positions = 3
             broker_positions = self.get_broker_positions(b_id)
 
             if len(broker_positions) >= max_positions or wallet.get("cash", 0.0) < min_cash:
@@ -1104,25 +1067,37 @@ class RealTimeTradingEngine:
                     continue
                 
                 # Filtrado de mercado Forex según calendario:
-                # - En fin de semana: el mercado Forex estándar mundial está cerrado -> solo pares OTC 24/7
+                # - En fin de semana: el mercado Forex bancario está cerrado -> solo pares OTC 24/7
                 # - En días de semana: permite operar tanto pares estándar como pares OTC 24/7
                 if asset.get("category") == "FOREX" and is_weekend and "-OTC" not in sym:
                     continue
 
-                # LÓGICA AVANZADA EXCLUSIVA PARA OPCIONES BINARIAS (IQ OPTION):
+                # LÓGICA DE MODOS OPERATIVOS IQ OPTION (BINARIAS, CFD, HÍBRIDO):
                 if b_id == "IQOPTION":
-                    # 1. Filtro de Sincronización de Vela (Candle Timing Gate :48 a :12)
-                    # En opciones binarias de 1M, entrar en la ventana :48 a :59 o :00 a :12 garantiza
-                    # que la opción opere durante la vela completa de 60s sin desfasarse a mitad de vela.
-                    sec_in_min = int(time.time()) % 60
-                    is_gate_open = (sec_in_min >= 48 or sec_in_min <= 12)
-                    if not getattr(self, "_override_timing_gate_for_test", False) and not is_gate_open:
-                        continue
+                    cur_mode = self.operating_mode
+                    if is_weekend or cur_mode == "IQ_BINARY":
+                        op_trade_type = "BINARY"
+                    elif cur_mode == "IQ_CFD":
+                        op_trade_type = "CFD"
+                    else: # IQ_HYBRID
+                        regime = asset.get("regime", "")
+                        if regime in ["TRENDING_BULL", "TRENDING_BEAR"]:
+                            op_trade_type = "CFD"
+                        else:
+                            op_trade_type = "BINARY"
 
-                    # 2. Filtro de Payout Mínimo Cuantitativo (>= 80%)
-                    payout_val = getattr(self.feed.iqoption, "get_payout", lambda s: 0.88)(sym)
-                    if payout_val < 0.80:
-                        continue
+                    # En Binarias 60s, sincronizamos con apertura de vela (:48 a :12) y payout >= 80%
+                    if op_trade_type == "BINARY":
+                        sec_in_min = int(time.time()) % 60
+                        is_gate_open = (sec_in_min >= 48 or sec_in_min <= 12)
+                        if not getattr(self, "_override_timing_gate_for_test", False) and not is_gate_open:
+                            continue
+
+                        payout_val = getattr(self.feed.iqoption, "get_payout", lambda s: 0.88)(sym)
+                        if payout_val < 0.80:
+                            continue
+                else:
+                    op_trade_type = "SPOT"
                 
                 # Descartar activos en enfriamiento del agente o en enfriamiento post-salida reciente (60s en binarias, 180s en spot)
                 cooldown_dur = 60.0 if b_id == "IQOPTION" else 180.0
@@ -1139,6 +1114,7 @@ class RealTimeTradingEngine:
                     volatility_weight = asset.get("volatility", 0.005) * 1000
                     exp_boost = self.agent.learner.get_asset_confidence_boost(sym)
                     priority_score = decision_data["confidence"] * exp_boost * (1.0 + volatility_weight * 0.5)
+                    decision_data["op_trade_type"] = op_trade_type
                     candidates.append((priority_score, sym, asset, decision_data))
 
             if candidates:
@@ -1147,68 +1123,47 @@ class RealTimeTradingEngine:
                 self._execute_buy(best_sym, best_asset, best_decision, broker_id=b_id)
 
     def _execute_buy(self, symbol: str, asset: Dict[str, Any], decision_data: Dict[str, Any], broker_id: Optional[str] = None):
-        category = asset.get("category", "TRADFI_STOCK")
         broker_id = (broker_id or self.active_broker).upper()
-        wallet = self.broker_wallets.get(broker_id, self.broker_wallets["BINANCE"])
-        # Capital disponible para operar: SOLO se trabaja con el capital inicial operativo base.
-        # Las ganancias acumuladas en la bóveda están 100% blindadas e intocables.
-        current_invested = sum(p["invested_amount"] for p in self.get_broker_positions(broker_id))
-        max_operable_cash = max(0.0, wallet["initial_balance"] - current_invested)
-        available_cash = min(wallet["cash"], max_operable_cash)
-
-        kelly_pct = decision_data.get("budget_percent", 20.0)
-        effective_pct = min(kelly_pct, 30.0)
-
+        wallet = self.broker_wallets.get(broker_id, self.broker_wallets.get("IQOPTION", {}))
+        category = asset.get("category", "FOREX" if broker_id == "IQOPTION" else ("CRYPTO" if broker_id == "BINANCE" else "TRADFI_STOCK"))
+        
+        # Operación directa con el efectivo de la cuenta
+        available_cash = max(0.0, float(wallet.get("cash", 0.0)))
         is_broker_live = (wallet.get("environment") == "LIVE_REAL")
+        is_cop = (broker_id == "IQOPTION" and getattr(self.feed.iqoption, "currency", "USD") == "COP")
+        kelly_pct = decision_data.get("budget_percent", 20.0)
+        effective_pct = min(kelly_pct, 25.0)
+
         if broker_id == "BINANCE":
             min_trade = 6.0 if is_broker_live else 5.0
-        elif broker_id in ["ALPACA", "IQOPTION"]:
+        elif is_cop:
+            min_trade = 2000.0
+        else:
             min_trade = 1.0
-        else:
-            min_trade = 5.0
 
-        if available_cash <= 35.0:
-            if broker_id == "IQOPTION":
-                target_amount = 1.0
+        if is_cop:
+            # En cuenta de Pesos Colombianos (COP): tamaño de orden estándar 2,000 COP
+            target_amount = 2000.0
+            actual_investment = 2000.0
+        else:
+            # En cuenta USD: según capital disponible
+            if available_cash <= 35.0:
+                target_amount = min_trade
+            elif available_cash <= 500.0:
+                target_amount = round(max(min_trade, available_cash * (effective_pct / 100.0)), 2)
             else:
-                target_amount = round(min(available_cash * 0.40, 10.0), 2)
-                target_amount = max(min_trade, target_amount)
-                if target_amount > available_cash:
-                    target_amount = round(available_cash * 0.90, 2)
-        elif available_cash <= 500.0:
-            target_amount = max(min_trade, available_cash * (effective_pct / 100.0))
-            target_amount = round(min(target_amount, available_cash * 0.35), 2)
-        else:
-            target_amount = round(max(min_trade, min(available_cash * 0.05, 5000.0)), 2)
+                target_amount = round(max(min_trade, min(available_cash * 0.05, 5000.0)), 2)
+            actual_investment = target_amount
 
-        if target_amount < min_trade or target_amount > available_cash:
+        if actual_investment < min_trade or actual_investment > available_cash:
             return
 
         price = asset["price"]
-        if price < 1.0:
-            quantity = round(target_amount / price, 2)
-        elif price < 100.0:
-            quantity = round(target_amount / price, 4)
-        else:
-            quantity = round(target_amount / price, 4 if broker_id in ["ALPACA", "IQOPTION"] else 5)
+        quantity = round(actual_investment / price, 4) if price > 0 else 1.0
 
-        actual_investment = round(quantity * price, 2)
-        if actual_investment > available_cash:
-            quantity = round((available_cash * 0.98) / price, 4 if price >= 100.0 else 2)
-            actual_investment = round(quantity * price, 2)
-
-        if actual_investment <= 0 or actual_investment > available_cash:
-            return
-
-        if broker_id == "BINANCE" and is_broker_live and actual_investment < 6.0:
-            return
-
-        if broker_id in ["ALPACA", "IQOPTION"] and actual_investment < 1.0:
-            return
-
-        # Verificación con RiskManager: Cupos, Drawdown Diario y Blindaje FINRA 4210 (PDT)
-        is_tradfi = (broker_id == "ALPACA" or category in ["TRADFI", "ETF"])
+        # Verificación de gestión de riesgo
         equity_now = self.get_broker_equity(broker_id)
+        is_tradfi = (category in ["TRADFI", "ETF", "TRADFI_STOCK"])
         if hasattr(self, "risk_manager"):
             if not self.risk_manager.can_open_trade(
                 risk_amount=actual_investment * 0.02,
@@ -1246,7 +1201,9 @@ class RealTimeTradingEngine:
             "highest_price": price,
             "take_profit": take_profit,
             "side": "PUT" if ("SELL" in str(decision_data.get("decision", "")) or "PUT" in str(decision_data.get("action_type", "")) or "BAJISTA" in str(decision_data.get("action_type", ""))) else "CALL",
-            "duration_sec": 60 if broker_id == "IQOPTION" else 0,
+            "is_cfd": (decision_data.get("op_trade_type") == "CFD"),
+            "trade_type": "CFD" if (decision_data.get("op_trade_type") == "CFD") else "BINARY",
+            "duration_sec": 0 if (decision_data.get("op_trade_type") == "CFD") else 60,
             "entry_time": datetime.datetime.now().strftime("%H:%M:%S"),
             "entry_timestamp": time.time(),
             "entry_confidence": decision_data["confidence"],
@@ -1362,43 +1319,51 @@ class RealTimeTradingEngine:
         broker_id = pos.get("broker", self.active_broker)
 
         if broker_id == "IQOPTION":
-            # Lógica Exclusiva para Opciones Binarias / Turbo de IQ Option:
-            # Payout dinámico verificado (por defecto 0.88 / 88%)
-            payout_rate = 0.88
-            if hasattr(self, "feed") and hasattr(self.feed, "iqoption"):
-                payout_rate = getattr(self.feed.iqoption, "get_payout", lambda s: 0.88)(symbol)
+            is_cfd = pos.get("is_cfd", False)
             pos_side = pos.get("side", "BUY_LONG").upper()
-            is_tie = (exit_price == entry_p)
-            is_win = (exit_price > entry_p) if pos_side in ["BUY", "BUY_LONG", "CALL"] else (exit_price < entry_p)
-            if is_win:
-                pnl = round(invested * payout_rate, 2)
-                exit_value = round(invested + pnl, 2)
-                pnl_pct = round(payout_rate * 100, 2)
-            elif is_tie:
-                pnl = 0.0
-                exit_value = invested
-                pnl_pct = 0.0
+
+            if is_cfd:
+                # MODO FOREX CFD CON STOP-LOSS Y TAKE-PROFIT AUTOMÁTICOS:
+                if pos_side in ["BUY", "BUY_LONG", "CALL"]:
+                    diff_pct = ((exit_price - entry_p) / entry_p) if entry_p > 0 else 0.0
+                else:
+                    diff_pct = ((entry_p - exit_price) / entry_p) if entry_p > 0 else 0.0
+
+                # Multiplicador CFD controlado con apalancamiento estándar (x10)
+                cfd_return = max(-1.0, min(2.5, diff_pct * 10.0))
+                pnl = round(invested * cfd_return, 2)
+                exit_value = round(max(0.0, invested + pnl), 2)
+                pnl_pct = round(cfd_return * 100, 2)
             else:
-                pnl = round(-invested, 2)
-                exit_value = 0.0
-                pnl_pct = -100.0
+                # MODO BINARIAS TURBO 60S:
+                payout_rate = 0.88
+                if hasattr(self, "feed") and hasattr(self.feed, "iqoption"):
+                    payout_rate = getattr(self.feed.iqoption, "get_payout", lambda s: 0.88)(symbol)
+                is_tie = (exit_price == entry_p)
+                is_win = (exit_price > entry_p) if pos_side in ["BUY", "BUY_LONG", "CALL"] else (exit_price < entry_p)
+                if is_win:
+                    pnl = round(invested * payout_rate, 2)
+                    exit_value = round(invested + pnl, 2)
+                    pnl_pct = round(payout_rate * 100, 2)
+                elif is_tie:
+                    pnl = 0.0
+                    exit_value = invested
+                    pnl_pct = 0.0
+                else:
+                    pnl = round(-invested, 2)
+                    exit_value = 0.0
+                    pnl_pct = -100.0
         else:
             exit_value = round(quantity * exit_price, 2)
             pnl = round(exit_value - invested, 2)
             pnl_pct = round(((exit_price - entry_p) / entry_p) * 100, 2) if entry_p > 0 else 0.0
-        wallet = self.broker_wallets.get(broker_id, self.broker_wallets["BINANCE"])
-        b_icon = wallet.get("icon", "🪙" if broker_id == "BINANCE" else "🏛️")
+
+        wallet = self.broker_wallets.get(broker_id, self.broker_wallets.get("IQOPTION", {}))
+        b_icon = wallet.get("icon", "📈")
         broker_badge = f"{b_icon} {wallet.get('name', broker_id)}"
 
-        # Separación estricta de ganancias:
-        # El principal retorna al efectivo operativo; la ganancia neta se asegura en la Bóveda y NO se toca.
-        if pnl > 0:
-            wallet["cash"] = round(wallet["cash"] + invested, 2)
-            new_vault = round(wallet.get("profit_vault", 0.0) + pnl, 2)
-            self.save_broker_vault(broker_id, new_vault, wallet.get("environment"))
-        else:
-            wallet["cash"] = round(wallet["cash"] + exit_value, 2)
-
+        # SIN BÓVEDA: El retorno total (inversión + pnl) se reintegra al 100% de forma transparente en el monedero
+        wallet["cash"] = round(wallet["cash"] + exit_value, 2)
         if broker_id == self.active_broker:
             self.cash_balance = wallet["cash"]
 
@@ -1407,7 +1372,10 @@ class RealTimeTradingEngine:
         if broker_id == "BINANCE" and is_broker_live:
             self.feed.binance.live_trading_enabled = True
             pair = asset.get("binance_pair", f"{symbol}USDT")
-            real_res = self.feed.binance.create_market_order(pair, "SELL", quantity, force_live=True)
+            try:
+                real_res = self.feed.binance.create_market_order(pair, "SELL", quantity, force_live=True)
+            except TypeError:
+                real_res = self.feed.binance.create_market_order(pair, "SELL", quantity)
             if real_res.get("success"):
                 order_data = real_res.get("data", {})
                 if order_data.get("cummulativeQuoteQty"):
@@ -1506,17 +1474,24 @@ class RealTimeTradingEngine:
             self.risk_manager.register_trade_close(pnl, symbol=symbol, is_intraday=True, broker_id=broker_id)
 
         b_curr = "COP" if (broker_id == "IQOPTION" and getattr(self.feed.iqoption, "currency", "USD") == "COP") else "USD"
+        trade_label = "CFD (SL/TP)" if pos.get("is_cfd") else "Binarias 60s"
         if pnl > 0:
             self.agent._add_thought(
-                f"💰 ¡VENDIDO CON GANANCIA [{broker_badge}]! {symbol} cerrado a ${exit_price:,.2f}. Retorno: +{b_curr} {pnl:,.2f} (+{pnl_pct:.2f}%). "
-                f"🔒 Ganancia depositada en la Bóveda (Total protegido: {b_curr} {wallet['profit_vault']:,.2f}). Capital operativo base intacto.",
+                f"💰 ¡OPERACIÓN GANADA [{broker_badge} - {trade_label}]! {symbol} cerrado a ${exit_price:,.2f}. Retorno: +{b_curr} {pnl:,.2f} (+{pnl_pct:.2f}%). Saldo acreditado directamente a tu cuenta de IQ Option.",
                 "TRADE_WIN",
                 symbol,
                 icon="💵"
             )
+        elif pnl == 0:
+            self.agent._add_thought(
+                f"⚖️ EMPATE [{broker_badge} - {trade_label}]: {symbol} cerrado al precio de entrada (${exit_price:,.2f}). Inversión de {b_curr} {invested:,.2f} reembolsada al 100%.",
+                "INFO",
+                symbol,
+                icon="⚖️"
+            )
         else:
             self.agent._add_thought(
-                f"🛡️ STOP-LOSS EJECUTADO [{broker_badge}]: {symbol} cerrado a ${exit_price:,.2f}. Pérdida mínima controlada: -{b_curr} {abs(pnl):,.2f} ({pnl_pct:.2f}%). Bóveda de ganancias protegida.",
+                f"🛡️ CIERRE DEFENSIVO [{broker_badge} - {trade_label}]: {symbol} cerrado a ${exit_price:,.2f}. Resultado: -{b_curr} {abs(pnl):,.2f} ({pnl_pct:.2f}%).",
                 "TRADE_LOSS",
                 symbol,
                 icon="🛑"
@@ -1566,11 +1541,9 @@ class RealTimeTradingEngine:
 
     def toggle_pause(self, broker: Optional[str] = None) -> bool:
         target_b = (broker or self.active_broker).upper()
-        if target_b not in self.broker_wallets:
-            target_b = self.active_broker
-
-        b_wal = self.broker_wallets.get(target_b, self.broker_wallets["BINANCE"])
-        b_name = b_wal.get("name", target_b)
+        target_b = "IQOPTION"
+        b_wal = self.broker_wallets.get("IQOPTION", {})
+        b_name = b_wal.get("name", "IQ Option")
 
         currently_running = b_wal.get("is_running", True)
         new_running_state = not currently_running
@@ -1579,9 +1552,8 @@ class RealTimeTradingEngine:
         if new_running_state:
             b_wal["target_reached"] = False
             b_wal["loss_limit_reached"] = False
-            if target_b == self.active_broker:
-                self.target_reached = False
-                self.loss_limit_reached = False
+            self.target_reached = False
+            self.loss_limit_reached = False
             self.agent._add_thought(
                 f"▶️ [{b_name}] Operaciones REANUDADAS para este broker. Escáner y ejecuciones activas.",
                 "INFO",
@@ -1589,18 +1561,17 @@ class RealTimeTradingEngine:
             )
         else:
             self.agent._add_thought(
-                f"⏸️ [{b_name}] Operaciones PAUSADAS exclusivamente para este broker. No se realizarán nuevas compras ni ventas en {b_name}. Los demás brokers continúan operando normalmente.",
+                f"⏸️ [{b_name}] Operaciones PAUSADAS. No se realizarán nuevas compras ni ventas en {b_name}.",
                 "INFO",
                 icon="⏸️"
             )
 
-        # El motor general sigue activo si al menos un broker continúa operando
-        self.is_running = any(w.get("is_running", True) for w in self.broker_wallets.values())
+        self.is_running = new_running_state
         return new_running_state
 
     def get_state(self) -> Dict[str, Any]:
-        active_b = self.active_broker
-        wallet = self.broker_wallets.get(active_b, self.broker_wallets["BINANCE"])
+        active_b = "IQOPTION"
+        wallet = self.broker_wallets.get("IQOPTION", {})
         
         # Posiciones activas aisladas por broker
         active_positions = self.get_broker_positions(active_b)
@@ -1712,7 +1683,7 @@ class RealTimeTradingEngine:
                 "status_text": status_lbl,
                 "equity": self.get_broker_equity(b_id),
                 "cash": self.get_broker_cash(b_id),
-                "profit_vault": round(self.get_broker_vault(b_id, b_wal.get("environment", "PAPER")), 2),
+                "profit_vault": 0.0,
                 "initial_balance": round(b_wal.get("initial_balance", 0.0), 2),
                 "positions_count": len(self.get_broker_positions(b_id)),
                 "logged_user": iq_user if b_id == "IQOPTION" else "",
@@ -1728,7 +1699,7 @@ class RealTimeTradingEngine:
                 "is_running": broker_running,
                 "global_is_running": self.is_running,
                 "status_text": status_text,
-                "active_broker": active_b,
+                "active_broker": "IQOPTION",
                 "operating_mode": self.operating_mode,
                 "execution_environment": self.execution_environment,
                 "paper_initial_balance": initial_bal,
@@ -1741,8 +1712,6 @@ class RealTimeTradingEngine:
                 "loss_limit_reached": self.loss_limit_reached,
                 "brokers": brokers_dict,
                 "broker_connections": {
-                    "alpaca": alpaca_status,
-                    "binance": binance_status,
                     "iqoption": iqoption_status
                 }
             },
@@ -1752,8 +1721,8 @@ class RealTimeTradingEngine:
                 "currency": getattr(self.feed.iqoption, "currency", "COP") if (active_b == "IQOPTION" and hasattr(self.feed, 'iqoption')) else "USD",
                 "invested_capital": round(invested, 2),
                 "initial_balance": initial_bal,
-                "operating_capital_base": initial_bal,
-                "profit_vault": vault_val,
+                "operating_capital_base": cash_avail,
+                "profit_vault": 0.0,
                 "total_profit_usd": total_profit,
                 "total_profit_percent": total_profit_pct,
                 "unrealized_pnl": round(unrealized_pnl, 2),

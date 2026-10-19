@@ -1733,28 +1733,15 @@
                 </div>
             </div>
 
-            <!-- Segmented Broker Capsule (Aislamiento Total de Balances & Operación Concurrente) -->
+            <!-- Segmented Broker Capsule (IQ Option Exclusivo) -->
             <div class="broker-segmented-pill" id="broker-segmented-pill">
-                <button class="broker-pill-btn active" id="broker-tab-binance" onclick="selectActiveBroker('BINANCE')" title="Ver operaciones de Binance Cripto">
-                    <span class="broker-pill-icon">🪙</span>
+                <button class="broker-pill-btn active" id="broker-tab-iqoption" onclick="selectActiveBroker('IQOPTION')" title="Operaciones IQ Option Forex & Derivados">
+                    <span class="broker-pill-icon">📈</span>
                     <div class="broker-pill-meta">
-                        <span class="broker-pill-name">Binance Spot</span>
-                        <span class="broker-pill-balance mono" id="broker-equity-binance">$30.00 USD</span>
+                        <span class="broker-pill-name">IQ Option</span>
+                        <span class="broker-pill-balance mono" id="broker-equity-iqoption">Cargando...</span>
                     </div>
-                    <span class="broker-pill-badge active" id="broker-badge-binance">ACTIVO</span>
-                </button>
-
-                <button class="broker-pill-btn" id="broker-tab-alpaca" onclick="selectActiveBroker('ALPACA')" title="Ver operaciones de Alpaca Wall Street">
-                    <span class="broker-pill-icon">🏛️</span>
-                    <div class="broker-pill-meta">
-                        <span class="broker-pill-name">Alpaca Wall St.</span>
-                        <span class="broker-pill-balance mono" id="broker-equity-alpaca">$100,000.00 USD</span>
-                    </div>
-                    <span class="broker-pill-badge" id="broker-badge-alpaca">CONECTADO</span>
-                </button>
-
-                <button class="broker-pill-add" onclick="openAddBrokerModal()" title="Conectar otro broker (Bybit, IBKR, IQ Option, etc.)">
-                    <span>➕</span>
+                    <span class="broker-pill-badge active" id="broker-badge-iqoption">ACTIVO</span>
                 </button>
             </div>
 
@@ -1804,18 +1791,18 @@
                 <span class="stat-subtext mono" id="cash-available">Base: $30.00 · Disp: $30.00</span>
             </div>
 
-            <div class="summary-stat-col highlight-vault">
+            <div class="summary-stat-col" style="border-left: 2px solid rgba(56, 189, 248, 0.35);">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span class="stat-label" style="color:var(--emerald-win); font-weight:700;">🏛️ BÓVEDA GANANCIAS</span>
-                    <span class="stat-badge mono" style="background:rgba(16,185,129,0.2); color:var(--emerald-win); font-size:9.5px; padding:1px 5px;">🔒 INTOCABLE</span>
+                    <span class="stat-label" style="color:var(--accent-cyan); font-weight:700;">🎯 MODO IQ OPTION</span>
+                    <span class="stat-badge mono" id="operating-mode-badge" style="background:rgba(56,189,248,0.15); color:var(--accent-cyan); font-size:9.5px; padding:1px 5px;">HÍBRIDO</span>
                 </div>
                 <div class="stat-value-row" style="margin-top:2px;">
-                    <span class="stat-primary-val mono" id="vault-amount" style="color:var(--emerald-win); font-size:18px;">+$0.35</span>
-                    <button class="btn-xs-reinvest" onclick="openTransferVaultModal()" title="Pasar ganancias acumuladas al capital operativo para abrir más operaciones">
-                        💼 Pasar a Capital
+                    <span class="stat-primary-val mono" id="top-operating-mode-val" style="color:#FFF; font-size:14px; font-weight:700;">Híbrido Inteligente</span>
+                    <button class="btn-xs-reinvest" onclick="openSettingsModal()" title="Configurar modo operativo (Binarias 60s, CFD SL/TP o Híbrido)">
+                        ⚙️ Modo
                     </button>
                 </div>
-                <span class="stat-subtext mono" id="vault-helper-text" style="color:#A7F3D0;">Ganancias 100% blindadas</span>
+                <span class="stat-subtext mono" id="operating-mode-desc" style="color:var(--text-muted); font-size:9.5px;">CFD en tendencia · Binarias en rango</span>
             </div>
 
             <div class="summary-stat-col">
@@ -2224,28 +2211,25 @@
                 <div style="font-size:10px; color:var(--text-muted); margin-top:3px;">(0 = Tolerancia Cero: no se permite perder ni un solo dólar; o define el límite máximo en USD)</div>
             </div>
             <div class="form-group">
-                <label>Modo Operativo del Motor</label>
+                <label>Modo Operativo IQ Option</label>
                 <!-- Custom Dropdown Elegante -->
                 <div class="custom-select-container" id="custom-mode-dropdown">
                     <div class="custom-select-trigger" onclick="toggleCustomDropdown('custom-mode-dropdown')">
-                        <span id="custom-mode-label">🌐 Multiactivo Unificado (Wall Street + Cripto)</span>
+                        <span id="custom-mode-label">⚡ Modo Híbrido Inteligente (Recomendado)</span>
                         <span class="arrow">▼</span>
                     </div>
                     <div class="custom-select-menu">
-                        <div class="custom-option selected" data-value="UNIFIED_TRADFI_CRYPTO" onclick="selectCustomOption('custom-mode-dropdown', 'UNIFIED_TRADFI_CRYPTO', '🌐 Multiactivo Unificado (Wall Street + Cripto)')">
-                            <span>🌐 Multiactivo Unificado (Wall Street + Cripto)</span>
+                        <div class="custom-option selected" data-value="IQ_HYBRID" onclick="selectCustomOption('custom-mode-dropdown', 'IQ_HYBRID', '⚡ Modo Híbrido Inteligente (Recomendado)')">
+                            <span>⚡ Modo Híbrido Inteligente (CFD + Binarias + OTC)</span>
                         </div>
-                        <div class="custom-option" data-value="TRADFI_WALLSTREET" onclick="selectCustomOption('custom-mode-dropdown', 'TRADFI_WALLSTREET', '🏛️ Wall Street TradFi (Acciones & ETFs)')">
-                            <span>🏛️ Wall Street TradFi (Acciones & ETFs)</span>
+                        <div class="custom-option" data-value="IQ_BINARY" onclick="selectCustomOption('custom-mode-dropdown', 'IQ_BINARY', '⏱️ Modo Opciones Binarias Turbo (60s)')">
+                            <span>⏱️ Modo Opciones Binarias Turbo (Contratos fijos 60s)</span>
                         </div>
-                        <div class="custom-option" data-value="BINANCE_CRYPTO" onclick="selectCustomOption('custom-mode-dropdown', 'BINANCE_CRYPTO', '🪙 Criptomonedas 24/7 (Binance Spot)')">
-                            <span>🪙 Criptomonedas 24/7 (Binance Spot)</span>
-                        </div>
-                        <div class="custom-option" data-value="SIMULATION" onclick="selectCustomOption('custom-mode-dropdown', 'SIMULATION', '🔵 Simulador Cuantitativo 24/7')">
-                            <span>🔵 Simulador Cuantitativo 24/7</span>
+                        <div class="custom-option" data-value="IQ_CFD" onclick="selectCustomOption('custom-mode-dropdown', 'IQ_CFD', '📈 Modo Forex Tradicional CFD (SL / TP)')">
+                            <span>📈 Modo Forex Tradicional CFD (SL / TP sin expiración)</span>
                         </div>
                     </div>
-                    <input type="hidden" id="modal-operating-mode" value="UNIFIED_TRADFI_CRYPTO">
+                    <input type="hidden" id="modal-operating-mode" value="IQ_HYBRID">
                 </div>
             </div>
             <div class="form-group" style="margin-top:12px;">
@@ -3458,10 +3442,24 @@
             }
             document.getElementById('cash-available').innerHTML = cashSubtext;
 
-            const vaultVal = fin.profit_vault !== undefined ? fin.profit_vault : 0;
-            const vaultEl = document.getElementById('vault-amount');
-            if (vaultEl) {
-                vaultEl.innerText = `+${currSym}${vaultVal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+            const opMode = sys.operating_mode || 'IQ_HYBRID';
+            const modeEl = document.getElementById('top-operating-mode-val');
+            const modeBadgeEl = document.getElementById('operating-mode-badge');
+            const modeDescEl = document.getElementById('operating-mode-desc');
+            if (modeEl) {
+                if (opMode === 'IQ_BINARY') {
+                    modeEl.innerText = 'Opciones Binarias';
+                    if (modeBadgeEl) modeBadgeEl.innerText = 'TURBO 60S';
+                    if (modeDescEl) modeDescEl.innerText = 'Contratos fijos de 60s';
+                } else if (opMode === 'IQ_CFD') {
+                    modeEl.innerText = 'Forex CFD';
+                    if (modeBadgeEl) modeBadgeEl.innerText = 'SL / TP';
+                    if (modeDescEl) modeDescEl.innerText = 'SL / TP dinámicos sin expiración';
+                } else {
+                    modeEl.innerText = 'Híbrido Inteligente';
+                    if (modeBadgeEl) modeBadgeEl.innerText = 'RECOMENDADO';
+                    if (modeDescEl) modeDescEl.innerText = 'CFD en tendencia · Binarias en rango';
+                }
             }
 
             const pnlUsd = fin.total_profit_usd || 0;
@@ -4098,13 +4096,13 @@
                 }
                 if (sys.operating_mode) {
                     const modeLabels = {
-                        'UNIFIED_TRADFI_CRYPTO': '🌐 Multiactivo Unificado (Wall Street + Cripto)',
-                        'TRADFI_WALLSTREET': '🏛️ Wall Street TradFi (Acciones & ETFs)',
-                        'BINANCE_CRYPTO': '🪙 Criptomonedas 24/7 (Binance Spot)',
-                        'IQOPTION_FOREX': '📈 Forex & Derivados (IQ Option)',
-                        'SIMULATION': '🔵 Simulador Cuantitativo 24/7'
+                        'IQ_HYBRID': '⚡ Modo Híbrido Inteligente (CFD + Binarias + OTC)',
+                        'IQ_BINARY': '⏱️ Modo Opciones Binarias Turbo (Contratos fijos 60s)',
+                        'IQ_CFD': '📈 Modo Forex Tradicional CFD (SL / TP sin expiración)',
+                        'UNIFIED_TRADFI_CRYPTO': '⚡ Modo Híbrido Inteligente (Recomendado)',
+                        'IQOPTION_FOREX': '⚡ Modo Híbrido Inteligente'
                     };
-                    const lbl = modeLabels[sys.operating_mode] || `${brokerIcon} Operaciones de ${brokerName}`;
+                    const lbl = modeLabels[sys.operating_mode] || `📈 ${sys.operating_mode}`;
                     selectCustomOption('custom-mode-dropdown', sys.operating_mode, lbl);
                 }
 
