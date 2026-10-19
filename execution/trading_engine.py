@@ -1304,11 +1304,18 @@ class RealTimeTradingEngine:
             if iq_res.get("success"):
                 oid = iq_res.get("order_id", "")
                 position["broker_order_id"] = oid
+                actual_sym = iq_res.get("symbol", symbol)
+                position["symbol"] = actual_sym
+                position["name"] = self.feed.assets.get(actual_sym, {}).get("name", position["name"])
+                symbol = actual_sym
                 mode_str = "REAL" if is_broker_live else "DEMO/PRACTICE"
                 dir_label = "🔻 BAJA (PUT)" if pos_side == "PUT" else "🟢 SUBE (CALL)"
                 self.agent._add_thought(f"📈 ORDEN IQ OPTION ({mode_str}): {dir_label} en {symbol} (ID: {oid}).", "INFO", symbol, "⚡")
             else:
                 self.agent._add_thought(f"🛑 Error en broker IQ Option: {iq_res.get('error')}. Operación abortada.", "WARNING", symbol, "🛑")
+                # Enfriamiento y penalización inmediata para evitar spam y permitir que otros pares operen
+                self.last_exit_times[symbol] = time.time()
+                self.agent.learner.penalize(symbol, penalty=25.0)
                 if is_broker_live:
                     wallet["cash"] = round(wallet["cash"] + actual_investment, 2)
                     if broker_id == self.active_broker:

@@ -531,7 +531,19 @@ class IQOptionAdapter:
                         break
                     elif msg_name == "option" and isinstance(msg_body, dict):
                         if "message" in msg_body:
-                            result = {"success": False, "error": f"Rechazado por IQ Option: {msg_body.get('message')}"}
+                            err_msg = str(msg_body.get('message', ''))
+                            # Si el activo estándar está suspendido en IQ Option (ej: EURUSD a esta hora), fallback automático e instantáneo a OTC (24/7)
+                            if ("suspended" in err_msg.lower() or "active is suspended" in err_msg.lower()) and "OTC" not in raw_sym:
+                                otc_id = ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC") or ACTIVE_ASSET_IDS.get(f"{clean_sym}OTC")
+                                if otc_id and otc_id != active_id:
+                                    req_id_otc = f"tito_otc_{int(time.time() * 1000)}"
+                                    binary_payload["request_id"] = req_id_otc
+                                    binary_payload["msg"]["body"]["active_id"] = otc_id
+                                    ws.send(json.dumps(binary_payload))
+                                    active_id = otc_id
+                                    clean_sym = f"{clean_sym}-OTC"
+                                    continue
+                            result = {"success": False, "error": f"Rechazado por IQ Option: {err_msg}"}
                             break
                         elif "id" in msg_body:
                             order_id = str(msg_body.get("id"))
@@ -546,8 +558,19 @@ class IQOptionAdapter:
                             }
                             break
                     elif "error" in data:
-                        err_text = data.get("error")
+                        err_text = str(data.get("error", ""))
                         if err_text:
+                            # Fallback automático a OTC si se reporta suspendido
+                            if ("suspended" in err_text.lower() or "active is suspended" in err_text.lower()) and "OTC" not in raw_sym:
+                                otc_id = ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC") or ACTIVE_ASSET_IDS.get(f"{clean_sym}OTC")
+                                if otc_id and otc_id != active_id:
+                                    req_id_otc = f"tito_otc_{int(time.time() * 1000)}"
+                                    binary_payload["request_id"] = req_id_otc
+                                    binary_payload["msg"]["body"]["active_id"] = otc_id
+                                    ws.send(json.dumps(binary_payload))
+                                    active_id = otc_id
+                                    clean_sym = f"{clean_sym}-OTC"
+                                    continue
                             result = {"success": False, "error": f"Rechazado por IQ Option: {err_text}"}
                             break
                 except Exception:
