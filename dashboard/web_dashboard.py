@@ -431,13 +431,18 @@ def api_admin_iq_diagnostics():
                 pass
         ws.close()
         
-        # Extraer estado de turbos y binarias
+        # Extraer estado de todos los tipos de instrumentos disponibles
         msg_body = init_data.get("msg", {}) if isinstance(init_data, dict) else {}
-        turbos = msg_body.get("turbo", {}).get("actives", {}) if isinstance(msg_body, dict) else {}
-        binaries = msg_body.get("binary", {}).get("actives", {}) if isinstance(msg_body, dict) else {}
-        
-        open_turbos = [aid for aid, info in turbos.items() if isinstance(info, dict) and info.get("enabled")]
-        open_binaries = [aid for aid, info in binaries.items() if isinstance(info, dict) and info.get("enabled")]
+        available_categories = {}
+        for cat_name, cat_data in msg_body.items():
+            if isinstance(cat_data, dict) and "actives" in cat_data:
+                acts = cat_data.get("actives", {})
+                open_acts = [aid for aid, ainfo in acts.items() if isinstance(ainfo, dict) and ainfo.get("enabled")]
+                available_categories[cat_name] = {
+                    "total_actives": len(acts),
+                    "open_actives_count": len(open_acts),
+                    "sample_open_ids": open_acts[:10]
+                }
         
         return jsonify({
             "success": True,
@@ -445,11 +450,7 @@ def api_admin_iq_diagnostics():
             "real_balance_id": iq.real_balance_id,
             "practice_balance_id": iq.practice_balance_id,
             "real_amount": iq.real_amount,
-            "open_turbo_active_ids": open_turbos,
-            "open_binary_active_ids": open_binaries,
-            "turbo_count": len(open_turbos),
-            "binary_count": len(open_binaries),
-            "sample_turbo_info": {aid: turbos[aid] for aid in open_turbos[:8]} if open_turbos else {},
+            "available_categories": available_categories,
             "profile_country": profile_msg.get("country_id"),
             "profile_currency": profile_msg.get("currency")
         })
