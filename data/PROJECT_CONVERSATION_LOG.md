@@ -47,4 +47,5 @@ Este documento registra de forma cronológica, inmutable y persistente todas las
   - **Corrección Integral en `iqoption_adapter.py`:** Se migró la orden WebSocket a la API oficial de Forex CFD (`place-order-temp`, versión 4.0, `instrument_type="forex"`, con apalancamiento x25, `stop_lose_kind="percent"` y `take_profit_kind="percent"`). Se implementó `close_position` oficial (`close-position`, versión 1.0).
   - **Pruebas de Payload:** Se incorporaron pruebas unitarias estrictas en `tests/test_iqoption_real_execution.py` que inspeccionan los mensajes WebSocket transmitidos, confirmando que NUNCA contienen `binary-options.open-option`, ni `option_type_id`, ni expiración de 60s.
   - **Verificación Global:** Se ejecutaron todas las suites con 100% de éxito.
-  - **Estado de VPS:** Ningún cambio ha sido subido a Git ni desplegado al servidor VPS. Cero acciones automáticas en producción sin la expresa autorización y revisión del usuario.
+  - **Estado de Git y VPS:** Cambios aprobados por el usuario. Commits subidos exitosamente a GitHub (rama `main`, commit `323a09a`). Listo para sincronización en el VPS.
+
