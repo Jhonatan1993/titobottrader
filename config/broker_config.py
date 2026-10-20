@@ -5,7 +5,7 @@ from typing import Dict, Any
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "broker_config.json")
 
 DEFAULT_CONFIG: Dict[str, Any] = {
-    "operating_mode": "IQ_HYBRID",  # "IQ_HYBRID", "IQ_BINARY", "IQ_CFD"
+    "operating_mode": "IQ_CFD",  # "IQ_CFD" (Forex Tradicional con SL/TP automáticos)
     "active_broker": "IQOPTION",    # IQOPTION exclusivo
     "profit_target_amount": 50000.0,
     "profit_target_enabled": True,

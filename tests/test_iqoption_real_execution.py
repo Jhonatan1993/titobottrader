@@ -189,7 +189,7 @@ def test_iqoption_otc_24_7_resolution_weekdays_and_weekends():
     mock_ws = MagicMock()
     mock_ws.recv.side_effect = [
         '{"name": "timeSync", "msg": 1729000000}',
-        '{"status": 2000, "name": "option-opened", "msg": {"id": 14365301803, "active_id": 76}}'
+        '{"status": 2000, "name": "order-placed-temp", "msg": {"id": 14365301803, "active_id": 76}}'
     ]
 
     with patch("websocket.create_connection", return_value=mock_ws):
@@ -202,3 +202,82 @@ def test_iqoption_otc_24_7_resolution_weekdays_and_weekends():
             assert res["success"] is True
             assert res["status"] == "FILLED"
             assert res["order_id"] == "14365301803"
+
+def test_iqoption_forex_cfd_websocket_payload_structure():
+    """Garantiza que la orden enviada por WebSocket a IQ Option sea 100% Forex CFD y NUNCA Opciones Binarias"""
+    import json
+    adapter = IQOptionAdapter(ssid="test_ssid_valid", environment="LIVE_REAL")
+    adapter.connected = True
+    adapter.real_amount = 100000.0
+    adapter.balance = 100000.0
+    adapter.real_balance_id = 123456
+
+    sent_messages = []
+    mock_ws = MagicMock()
+    def mock_send(msg):
+        sent_messages.append(json.loads(msg))
+    mock_ws.send.side_effect = mock_send
+    mock_ws.recv.side_effect = [
+        '{"name": "profile", "msg": {}}',
+        '{"name": "order-placed-temp", "status": 2000, "msg": {"id": 888777, "position_id": 888777}}'
+    ]
+
+    with patch("websocket.create_connection", return_value=mock_ws):
+        res = adapter.submit_order("EURUSD", "BUY", 5000.0, leverage=25, stop_loss_pct=1.2, take_profit_pct=3.5)
+        assert res["success"] is True
+        assert res["order_id"] == "888777"
+        assert res["side"] == "buy"
+        assert res["leverage"] == 25
+
+        # Analizar todos los mensajes transmitidos por el WebSocket
+        cfd_msg = next(m for m in sent_messages if m.get("name") == "sendMessage")
+        msg_body = cfd_msg["msg"]["body"]
+
+        # Verificaciones estrictas de Forex CFD:
+        assert cfd_msg["msg"]["name"] == "place-order-temp"
+        assert msg_body["instrument_type"] == "forex"
+        assert msg_body["side"] == "buy"
+        assert msg_body["amount"] == 5000.0
+        assert msg_body["leverage"] == 25
+        assert msg_body["stop_lose_kind"] == "percent"
+        assert msg_body["stop_lose_value"] == 1.2
+        assert msg_body["take_profit_kind"] == "percent"
+        assert msg_body["take_profit_value"] == 3.5
+
+        # PROHIBICIÓN ABSOLUTA: Verificar ausencia de cualquier vestigio de binarias
+        raw_dump = json.dumps(sent_messages)
+        assert "binary-options.open-option" not in raw_dump
+        assert "option_type_id" not in raw_dump
+        assert "expired" not in raw_dump
+
+def test_iqoption_close_position_websocket_payload():
+    """Garantiza que el cierre de posición use close-position de CFD y NUNCA venta de opciones binarias"""
+    import json
+    adapter = IQOptionAdapter(ssid="test_ssid_valid", environment="LIVE_REAL")
+    adapter.connected = True
+
+    sent_messages = []
+    mock_ws = MagicMock()
+    def mock_send(msg):
+        sent_messages.append(json.loads(msg))
+    mock_ws.send.side_effect = mock_send
+    mock_ws.recv.side_effect = [
+        '{"name": "front", "msg": {}}',
+        '{"name": "position-closed", "status": 2000, "msg": {"position_id": 999111}}'
+    ]
+
+    with patch("websocket.create_connection", return_value=mock_ws):
+        res = adapter.close_position("999111")
+        assert res["success"] is True
+        assert res["status"] == "CLOSED"
+        assert res["position_id"] == "999111"
+
+        close_msg = next(m for m in sent_messages if m.get("name") == "sendMessage")
+        assert close_msg["msg"]["name"] == "close-position"
+        assert close_msg["msg"]["body"]["position_id"] == 999111
+
+        # PROHIBICIÓN ABSOLUTA:
+        raw_dump = json.dumps(sent_messages)
+        assert "binary-options.sell-option" not in raw_dump
+        assert "options_ids" not in raw_dump
+

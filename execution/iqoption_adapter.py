@@ -412,9 +412,17 @@ class IQOptionAdapter:
             return float(self._payout_cache[symbol])
         return 0.88
 
-    def _execute_real_ws_order(self, symbol: str, side: str, amount: float) -> Dict[str, Any]:
+    def _execute_real_ws_order(
+        self, 
+        symbol: str, 
+        side: str, 
+        amount: float, 
+        leverage: int = 25, 
+        stop_loss_pct: Optional[float] = None, 
+        take_profit_pct: Optional[float] = None
+    ) -> Dict[str, Any]:
         """
-        Envía una orden real al servidor WebSocket de IQ Option utilizando el token SSID de la sesión autenticada.
+        Envía una orden real de Forex CFD al servidor WebSocket de IQ Option utilizando el token SSID.
         """
         import websocket
         import json
@@ -439,7 +447,8 @@ class IQOptionAdapter:
             # En días de semana, permite operar tanto el par estándar como el par OTC si está seleccionado
             active_id = ACTIVE_ASSET_IDS.get(clean_sym, ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC", 1))
 
-        direction = "call" if side.lower() in ["buy", "buy_long"] else "put"
+        cfd_side = "buy" if side.lower() in ["buy", "buy_long", "call"] else "sell"
+        order_leverage = int(leverage) if leverage else 25
         
         # En cuentas COP de IQ Option, el importe mínimo de operación es de 2,000 COP (En USD es $1.00)
         min_amount = 2000.0 if self.currency == "COP" else 1.0
@@ -479,31 +488,37 @@ class IQOptionAdapter:
                 except Exception:
                     pass
 
-            # 2. Calcular expiración Turbo exacta
-            now = int(time.time())
-            rem = now % 60
-            exp_time = (now // 60 + (2 if rem > 30 else 1)) * 60
             req_id = f"tito_{int(time.time() * 1000)}"
             target_balance = self.real_balance_id if self.environment == "LIVE_REAL" else self.practice_balance_id
 
-            # Enviar binary-options.open-option oficial verificado (Funciona para Turbo / Binarias / OTC)
-            binary_payload = {
+            # Enviar place-order-temp para Forex CFD (Sin expiración de tiempo, con Stop-Loss y Take-Profit)
+            cfd_payload = {
                 "name": "sendMessage",
                 "request_id": req_id,
                 "msg": {
-                    "name": "binary-options.open-option",
-                    "version": "1.0",
+                    "name": "place-order-temp",
+                    "version": "4.0",
                     "body": {
                         "user_balance_id": target_balance,
+                        "client_platform_id": "9",
+                        "instrument_type": "forex",
+                        "instrument_id": clean_sym,
                         "active_id": active_id,
-                        "option_type_id": 3,
-                        "direction": direction,
-                        "expired": exp_time,
-                        "price": order_amount
+                        "side": cfd_side,
+                        "type": "market",
+                        "amount": order_amount,
+                        "leverage": order_leverage,
+                        "stop_lose_kind": "percent",
+                        "stop_lose_value": float(stop_loss_pct) if stop_loss_pct is not None else 1.5,
+                        "take_profit_kind": "percent",
+                        "take_profit_value": float(take_profit_pct) if take_profit_pct is not None else 3.0,
+                        "use_trail_stop": False,
+                        "auto_margin_call": False,
+                        "use_token_for_commission": False
                     }
                 }
             }
-            ws.send(json.dumps(binary_payload))
+            ws.send(json.dumps(cfd_payload))
 
             # 3. Leer respuesta con timeout de 5 segundos
             start_wait = time.time()
@@ -517,19 +532,20 @@ class IQOptionAdapter:
                     msg_body = data.get("msg", {})
                     st = data.get("status")
                     
-                    if st == 2000 or msg_name in ["option-opened", "socket-option-opened", "order-placed", "buyComplete"]:
-                        order_id = str(msg_body.get("id") or msg_body.get("option_id") or msg_body.get("order_id") or data.get("request_id", req_id))
+                    if st == 2000 or msg_name in ["order-placed-temp", "order-placed", "position-changed", "order", "option-opened", "socket-option-opened", "buyComplete"]:
+                        order_id = str(msg_body.get("id") or msg_body.get("position_id") or msg_body.get("order_id") or data.get("request_id", req_id))
                         result = {
                             "success": True,
                             "order_id": order_id,
                             "symbol": clean_sym,
-                            "side": side.lower(),
+                            "side": cfd_side,
                             "amount": order_amount,
+                            "leverage": order_leverage,
                             "environment": self.environment,
                             "status": "FILLED"
                         }
                         break
-                    elif msg_name == "option" and isinstance(msg_body, dict):
+                    elif msg_name in ["position", "order"] and isinstance(msg_body, dict):
                         if "message" in msg_body:
                             err_msg = str(msg_body.get('message', ''))
                             # Si el activo estándar está suspendido en IQ Option (ej: EURUSD a esta hora), fallback automático e instantáneo a OTC (24/7)
@@ -537,9 +553,10 @@ class IQOptionAdapter:
                                 otc_id = ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC") or ACTIVE_ASSET_IDS.get(f"{clean_sym}OTC")
                                 if otc_id and otc_id != active_id:
                                     req_id_otc = f"tito_otc_{int(time.time() * 1000)}"
-                                    binary_payload["request_id"] = req_id_otc
-                                    binary_payload["msg"]["body"]["active_id"] = otc_id
-                                    ws.send(json.dumps(binary_payload))
+                                    cfd_payload["request_id"] = req_id_otc
+                                    cfd_payload["msg"]["body"]["active_id"] = otc_id
+                                    cfd_payload["msg"]["body"]["instrument_id"] = f"{clean_sym}-OTC"
+                                    ws.send(json.dumps(cfd_payload))
                                     active_id = otc_id
                                     clean_sym = f"{clean_sym}-OTC"
                                     continue
@@ -551,8 +568,9 @@ class IQOptionAdapter:
                                 "success": True,
                                 "order_id": order_id,
                                 "symbol": clean_sym,
-                                "side": side.lower(),
+                                "side": cfd_side,
                                 "amount": order_amount,
+                                "leverage": order_leverage,
                                 "environment": self.environment,
                                 "status": "FILLED"
                             }
@@ -565,9 +583,10 @@ class IQOptionAdapter:
                                 otc_id = ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC") or ACTIVE_ASSET_IDS.get(f"{clean_sym}OTC")
                                 if otc_id and otc_id != active_id:
                                     req_id_otc = f"tito_otc_{int(time.time() * 1000)}"
-                                    binary_payload["request_id"] = req_id_otc
-                                    binary_payload["msg"]["body"]["active_id"] = otc_id
-                                    ws.send(json.dumps(binary_payload))
+                                    cfd_payload["request_id"] = req_id_otc
+                                    cfd_payload["msg"]["body"]["active_id"] = otc_id
+                                    cfd_payload["msg"]["body"]["instrument_id"] = f"{clean_sym}-OTC"
+                                    ws.send(json.dumps(cfd_payload))
                                     active_id = otc_id
                                     clean_sym = f"{clean_sym}-OTC"
                                     continue
@@ -582,10 +601,10 @@ class IQOptionAdapter:
 
         return result
 
-    def close_option(self, option_id: str) -> Dict[str, Any]:
-        """Cierra o vende anticipadamente una opción binaria activa en IQ Option."""
-        if not self.ssid or not option_id or str(option_id).startswith("IQ_PAPER"):
-            return {"success": True, "status": "CLOSED_SIMULATED"}
+    def close_position(self, position_id: str) -> Dict[str, Any]:
+        """Cierra una posición activa de Forex CFD en IQ Option."""
+        if not self.ssid or not position_id or str(position_id).startswith("IQ_PAPER"):
+            return {"success": True, "status": "CLOSED_SIMULATED", "position_id": str(position_id)}
         import websocket
         import json
         import ssl
@@ -595,36 +614,88 @@ class IQOptionAdapter:
                 f"Cookie: ssid={self.ssid}",
                 "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
             ]
-            ws = websocket.create_connection(ws_url, header=headers, timeout=5, sslopt={"cert_reqs": ssl.CERT_NONE})
+            ws = websocket.create_connection(ws_url, header=headers, timeout=6, sslopt={"cert_reqs": ssl.CERT_NONE})
             ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
             
-            req_id = f"sell_{int(time.time() * 1000)}"
-            opt_val = int(option_id) if str(option_id).isdigit() else option_id
-            sell_msg = {
+            # Handshake
+            auth_start = time.time()
+            while time.time() - auth_start < 1.5:
+                raw = ws.recv()
+                if not raw:
+                    continue
+                try:
+                    d = json.loads(raw)
+                    if d.get("name") in ["profile", "timeSync", "front"]:
+                        break
+                except Exception:
+                    pass
+
+            req_id = f"close_{int(time.time() * 1000)}"
+            pos_val = int(position_id) if str(position_id).isdigit() else position_id
+            close_msg = {
                 "name": "sendMessage",
                 "request_id": req_id,
                 "msg": {
-                    "name": "binary-options.sell-option",
+                    "name": "close-position",
                     "version": "1.0",
-                    "body": {"options_ids": [opt_val]}
+                    "body": {"position_id": pos_val}
                 }
             }
-            ws.send(json.dumps(sell_msg))
+            ws.send(json.dumps(close_msg))
+            
+            res = {"success": True, "status": "CLOSED", "position_id": str(pos_val)}
+            start_wait = time.time()
+            while time.time() - start_wait < 4.0:
+                raw_resp = ws.recv()
+                if not raw_resp:
+                    continue
+                try:
+                    data = json.loads(raw_resp)
+                    msg_name = data.get("name", "")
+                    if msg_name in ["position-closed", "close-position", "position-changed"] or data.get("status") == 2000:
+                        res = {"success": True, "status": "CLOSED", "position_id": str(pos_val)}
+                        break
+                    elif "error" in data:
+                        err_text = str(data.get("error", ""))
+                        if "not found" in err_text.lower() or "already" in err_text.lower():
+                            res = {"success": True, "status": "ALREADY_CLOSED", "position_id": str(pos_val)}
+                            break
+                except Exception:
+                    pass
+
             ws.close()
-            return {"success": True, "status": "SOLD_EARLY"}
+            return res
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def submit_order(self, symbol: str, side: str, amount: float, option_id: Optional[str] = None) -> Dict[str, Any]:
+    def close_option(self, option_id: str) -> Dict[str, Any]:
+        """Compatibilidad: Redirige al cierre de posición de Forex CFD."""
+        return self.close_position(option_id)
+
+    def submit_order(
+        self, 
+        symbol: str, 
+        side: str, 
+        amount: float, 
+        position_id: Optional[str] = None, 
+        option_id: Optional[str] = None,
+        leverage: int = 25,
+        stop_loss_pct: Optional[float] = None,
+        take_profit_pct: Optional[float] = None
+    ) -> Dict[str, Any]:
         """
-        Ejecuta o simula una orden en IQ Option según el entorno activo (PAPER o LIVE_REAL).
+        Ejecuta o simula una orden Forex CFD en IQ Option según el entorno activo (PAPER o LIVE_REAL).
         """
-        # En opciones binarias / turbo, 'sell' o 'close' es el CIERRE de la posición existente,
-        # NUNCA debe abrir una orden opuesta (PUT/Baja).
-        if side.lower() in ["sell", "close", "sell_exit"]:
-            if option_id:
-                return self.close_option(option_id)
-            return {"success": True, "status": "CLOSED_AT_EXPIRATION"}
+        pos_id = position_id or option_id
+        # Si se solicita cierre explícito de posición
+        if side.lower() in ["close", "sell_exit"]:
+            if pos_id:
+                return self.close_position(pos_id)
+            return {"success": True, "status": "CLOSED_SIMULATED"}
+
+        # Si se recibe 'sell' con un ID de posición existente, se interpreta como cierre de esa posición
+        if side.lower() == "sell" and pos_id:
+            return self.close_position(pos_id)
 
         if not self.connected or self.environment != "LIVE_REAL":
             order_id = f"IQ_PAPER_{int(time.time() * 1000)}"
@@ -634,6 +705,7 @@ class IQOptionAdapter:
                 "symbol": symbol,
                 "side": side.lower(),
                 "amount": round(amount, 2),
+                "leverage": leverage,
                 "environment": "PAPER",
                 "status": "FILLED_SIMULATED"
             }
@@ -649,8 +721,15 @@ class IQOptionAdapter:
         if self.real_balance_id:
             self.change_balance(self.real_balance_id)
 
-        # Enviar orden real vía WebSocket autenticado de IQ Option
-        return self._execute_real_ws_order(symbol, side, amount)
+        # Enviar orden Forex CFD real vía WebSocket autenticado de IQ Option
+        return self._execute_real_ws_order(
+            symbol=symbol, 
+            side=side, 
+            amount=amount, 
+            leverage=leverage, 
+            stop_loss_pct=stop_loss_pct, 
+            take_profit_pct=take_profit_pct
+        )
 
     def get_candles(self, symbol: str, interval: int = 60, count: int = 40) -> list:
         """Obtiene velas reales en vivo directamente desde IQ Option vía WebSocket."""

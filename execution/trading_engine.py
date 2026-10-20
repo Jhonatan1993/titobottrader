@@ -21,7 +21,11 @@ class RealTimeTradingEngine:
     """
     def __init__(self, initial_balance: Optional[float] = None, max_open_positions: int = 5, execution_environment: Optional[str] = None):
         self.broker_config = load_broker_config()
-        self.operating_mode = self.broker_config.get("operating_mode", "IQ_HYBRID")
+        active_b = self.broker_config.get("active_broker", "IQOPTION").upper()
+        if active_b == "IQOPTION":
+            self.operating_mode = "IQ_CFD"
+        else:
+            self.operating_mode = self.broker_config.get("operating_mode", "IQ_CFD")
         self.execution_environment = execution_environment or self.broker_config.get("execution_environment", "LIVE_REAL")
         
         saved_paper = float(self.broker_config.get("paper_initial_balance", 10000.0))
@@ -59,14 +63,14 @@ class RealTimeTradingEngine:
         self.agent = IntelligentTradingAgent()
         self.journal = TradeJournal()
         self.active_broker = "IQOPTION"
-        iqoption_env = self.broker_config.get("iqoption_environment", "LIVE_REAL")
+        iqoption_env = execution_environment or self.broker_config.get("iqoption_environment", "PAPER")
         iqoption_paper_init = float(self.broker_config.get("iqoption_paper_initial_balance", self.broker_config.get("iqoption_initial_balance", 10000.0)))
         if iqoption_paper_init <= 0.0:
             iqoption_paper_init = 10000.0
 
-        alpaca_env = self.broker_config.get("alpaca_environment", "PAPER")
+        alpaca_env = execution_environment or self.broker_config.get("alpaca_environment", "PAPER")
         alpaca_paper_init = float(self.broker_config.get("alpaca_paper_initial_balance", self.broker_config.get("alpaca_initial_balance", 100000.0)))
-        binance_env = self.broker_config.get("binance_environment", "PAPER")
+        binance_env = execution_environment or self.broker_config.get("binance_environment", "PAPER")
         binance_paper_init = float(self.broker_config.get("binance_paper_initial_balance", self.broker_config.get("paper_initial_balance", 30.0)))
 
         # Arquitectura centrada en IQ Option (Sin Bóveda)
@@ -594,7 +598,7 @@ class RealTimeTradingEngine:
         elif b == "ALPACA":
             self.operating_mode = "TRADFI_WALLSTREET"
         elif b == "IQOPTION":
-            self.operating_mode = "IQOPTION_FOREX"
+            self.operating_mode = "IQ_CFD"
         else:
             self.operating_mode = f"{b}_TRADING"
 
@@ -666,33 +670,16 @@ class RealTimeTradingEngine:
         }
 
     def set_operating_mode(self, mode: str):
-        valid_modes = [
-            "IQ_HYBRID", "HYBRID", "HYBRID_INTELLIGENT",
-            "IQ_BINARY", "BINARY", "BINARY_OPTIONS",
-            "IQ_CFD", "CFD", "FOREX_CFD"
-        ]
-        if mode in valid_modes:
-            if mode in ["HYBRID", "HYBRID_INTELLIGENT"]:
-                mode = "IQ_HYBRID"
-            elif mode in ["BINARY", "BINARY_OPTIONS"]:
-                mode = "IQ_BINARY"
-            elif mode in ["CFD", "FOREX_CFD"]:
-                mode = "IQ_CFD"
-
-            self.operating_mode = mode
-            self.broker_config["operating_mode"] = mode
-            save_broker_config(self.broker_config)
-            
-            mode_names = {
-                "IQ_HYBRID": "🔄 Híbrido Inteligente 24/7 (CFD en Tendencias + Binarias en Rango / OTC)",
-                "IQ_BINARY": "⚡ Opciones Binarias Turbo 60s (Contratos Fijos 1M)",
-                "IQ_CFD": "📈 Forex Tradicional CFD (Stop-Loss y Take-Profit Dinámicos sin Expiración Fija)"
-            }
-            self.agent._add_thought(
-                f"🔀 Modo IQ Option Activado: {mode_names.get(mode, mode)}",
-                "INFO",
-                icon="🎯"
-            )
+        # IQ Option opera EXCLUSIVAMENTE en modo Forex Tradicional CFD con SL/TP
+        mode = "IQ_CFD"
+        self.operating_mode = mode
+        self.broker_config["operating_mode"] = mode
+        save_broker_config(self.broker_config)
+        self.agent._add_thought(
+            "📈 Modo IQ Option Activado: Forex Tradicional CFD (Stop-Loss y Take-Profit Dinámicos sin Expiración Fija)",
+            "INFO",
+            icon="🎯"
+        )
 
     def update_broker_keys(self, alpaca_key: str = "", alpaca_secret: str = "", binance_key: str = "", binance_secret: str = "", iqoption_email: str = "", iqoption_password: str = "", iqoption_ssid: str = ""):
         if alpaca_key or alpaca_secret:
@@ -985,46 +972,57 @@ class RealTimeTradingEngine:
             entry_ts = pos.get("entry_timestamp", 0)
             elapsed = time.time() - entry_ts if entry_ts > 0 else 999
 
-            # GESTIÓN DUAL EXCLUSIVA IQ OPTION: BINARIAS 60S VS FOREX CFD CON SL/TP
+            # GESTIÓN EXCLUSIVA IQ OPTION: FOREX CFD CON STOP-LOSS Y TAKE-PROFIT AUTOMÁTICOS
             if pos_b == "IQOPTION":
-                is_cfd = pos.get("is_cfd", False)
-                if not is_cfd:
-                    # MODO BINARIAS 60S:
-                    duration_sec = pos.get("duration_sec", 60)
-                    if elapsed < duration_sec:
-                        continue  # Esperar expiración natural del contrato binario
-                    else:
-                        self._execute_sell(sym, asset, {"decision": "SELL_EXPIRATION", "reason_simple": f"Expiración de opción binaria ({duration_sec}s cumplidos)"})
-                        continue
+                decision_data = self.agent.evaluate_asset(asset, self.open_positions)
+                pos_side = pos.get("side", "BUY_LONG").upper()
+                cur_price = asset["price"]
+                entry_p = pos.get("entry_price", cur_price)
+                initial_sl = pos.get("initial_stop_loss", pos.get("stop_loss", entry_p))
+                risk_r = abs(entry_p - initial_sl) if abs(entry_p - initial_sl) > 0 else (entry_p * 0.005)
+
+                # Dynamic Break-Even & Trailing Stop:
+                if pos_side in ["BUY", "BUY_LONG", "CALL"]:
+                    favorable_dist = cur_price - entry_p
+                    if favorable_dist >= risk_r and not pos.get("is_break_even"):
+                        pos["stop_loss"] = entry_p
+                        pos["is_break_even"] = True
+                        self.agent._add_thought(f"🛡️ Break-Even Activado en {sym}: Stop-Loss ajustado a precio de entrada ({entry_p}) para blindar la operación a CERO RIESGO.", "INFO", sym, "🛡️")
+                    elif favorable_dist >= 1.5 * risk_r:
+                        trail_sl = round(entry_p + 0.5 * risk_r, 4)
+                        if trail_sl > pos.get("stop_loss", 0):
+                            pos["stop_loss"] = trail_sl
+                    is_hard_sl = cur_price <= pos.get("stop_loss", 0)
+                    is_hard_tp = cur_price >= pos.get("take_profit", 999999)
                 else:
-                    # MODO FOREX CFD CON STOP-LOSS Y TAKE-PROFIT AUTOMÁTICOS:
-                    decision_data = self.agent.evaluate_asset(asset, self.open_positions)
-                    pos_side = pos.get("side", "BUY_LONG").upper()
-                    cur_price = asset["price"]
+                    favorable_dist = entry_p - cur_price
+                    if favorable_dist >= risk_r and not pos.get("is_break_even"):
+                        pos["stop_loss"] = entry_p
+                        pos["is_break_even"] = True
+                        self.agent._add_thought(f"🛡️ Break-Even Activado en {sym}: Stop-Loss ajustado a precio de entrada ({entry_p}) para blindar la operación a CERO RIESGO.", "INFO", sym, "🛡️")
+                    elif favorable_dist >= 1.5 * risk_r:
+                        trail_sl = round(entry_p - 0.5 * risk_r, 4)
+                        if trail_sl < pos.get("stop_loss", 999999):
+                            pos["stop_loss"] = trail_sl
+                    is_hard_sl = cur_price >= pos.get("stop_loss", 999999)
+                    is_hard_tp = cur_price <= pos.get("take_profit", 0)
 
-                    if pos_side in ["BUY", "BUY_LONG", "CALL"]:
-                        is_hard_sl = cur_price <= pos.get("stop_loss", 0)
-                        is_hard_tp = cur_price >= pos.get("take_profit", 999999)
-                    else:
-                        is_hard_sl = cur_price >= pos.get("stop_loss", 999999)
-                        is_hard_tp = cur_price <= pos.get("take_profit", 0)
+                # Margen mínimo de 10s para maduración de la posición
+                if elapsed < 10.0 and not is_hard_sl and not is_hard_tp:
+                    continue
 
-                    # Espera mínima de 15s para dar margen de desarrollo a la posición
-                    if elapsed < 15.0 and not is_hard_sl and not is_hard_tp:
-                        continue
-
-                    if is_hard_tp:
-                        self._execute_sell(sym, asset, {"decision": "SELL_TAKE_PROFIT", "reason_simple": f"🎯 Take-Profit alcanzado en {sym}: Objetivo de beneficio cumplido."})
-                        continue
-                    elif is_hard_sl:
-                        self._execute_sell(sym, asset, {"decision": "SELL_STOP_LOSS", "reason_simple": f"🛡️ Stop-Loss defensivo en {sym}: Preservando capital."})
-                        continue
-                    elif decision_data.get("decision") in ["SELL", "PUT"] and pos_side in ["BUY", "BUY_LONG", "CALL"] and decision_data.get("confidence", 0) >= 85:
-                        self._execute_sell(sym, asset, {"decision": "SELL_REVERSAL", "reason_simple": f"⚡ Reversión técnica en {sym}: Asegurando rendimiento."})
-                        continue
-                    elif decision_data.get("decision") in ["BUY", "CALL"] and pos_side in ["SELL", "PUT"] and decision_data.get("confidence", 0) >= 85:
-                        self._execute_sell(sym, asset, {"decision": "SELL_REVERSAL", "reason_simple": f"⚡ Reversión técnica en {sym}: Asegurando rendimiento."})
-                        continue
+                if is_hard_tp:
+                    self._execute_sell(sym, asset, {"decision": "SELL_TAKE_PROFIT", "reason_simple": f"🎯 Take-Profit alcanzado en {sym}: Objetivo de beneficio cumplido."})
+                    continue
+                elif is_hard_sl:
+                    self._execute_sell(sym, asset, {"decision": "SELL_STOP_LOSS", "reason_simple": f"🛡️ Stop-Loss defensivo en {sym}: Preservando capital."})
+                    continue
+                elif decision_data.get("decision") in ["SELL", "PUT"] and pos_side in ["BUY", "BUY_LONG", "CALL"] and decision_data.get("confidence", 0) >= 85:
+                    self._execute_sell(sym, asset, {"decision": "SELL_REVERSAL", "reason_simple": f"⚡ Reversión técnica en {sym}: Asegurando rendimiento."})
+                    continue
+                elif decision_data.get("decision") in ["BUY", "CALL"] and pos_side in ["SELL", "PUT"] and decision_data.get("confidence", 0) >= 85:
+                    self._execute_sell(sym, asset, {"decision": "SELL_REVERSAL", "reason_simple": f"⚡ Reversión técnica en {sym}: Asegurando rendimiento."})
+                    continue
             else:
                 cur_price = asset["price"]
                 pos_side = pos.get("side", "BUY_LONG").upper()
@@ -1084,40 +1082,14 @@ class RealTimeTradingEngine:
                 if asset.get("category") == "FOREX" and is_weekend and "-OTC" not in sym:
                     continue
 
-                # LÓGICA DE MODOS OPERATIVOS IQ OPTION (BINARIAS, CFD, HÍBRIDO):
+                # MODELO EXCLUSIVO IQ OPTION: FOREX TRADICIONAL CFD
                 if b_id == "IQOPTION":
-                    cur_mode = self.operating_mode
-                    if cur_mode == "IQ_CFD":
-                        op_trade_type = "CFD"
-                    elif cur_mode == "IQ_BINARY" or is_weekend or "-OTC" in sym:
-                        op_trade_type = "BINARY"
-                    else: # IQ_HYBRID
-                        # En Híbrido: Los pares OTC son estrictamente opciones binarias (en IQ Option no existe CFD OTC)
-                        if "-OTC" in sym:
-                            op_trade_type = "BINARY"
-                        else:
-                            regime_info = self.agent.regime_detector.detect_regime(asset)
-                            regime = regime_info.get("regime", "")
-                            if regime in ["TRENDING_BULL", "TRENDING_BEAR"]:
-                                op_trade_type = "CFD"
-                            else:
-                                op_trade_type = "BINARY"
-
-                    # En Binarias 60s, sincronizamos con apertura de vela y payout >= 80%
-                    if op_trade_type == "BINARY":
-                        sec_in_min = int(time.time()) % 60
-                        is_gate_open = (sec_in_min >= 45 or sec_in_min <= 15)
-                        if not getattr(self, "_override_timing_gate_for_test", False) and not is_gate_open:
-                            continue
-
-                        payout_val = getattr(self.feed.iqoption, "get_payout", lambda s: 0.88)(sym)
-                        if payout_val < 0.80:
-                            continue
+                    op_trade_type = "CFD"
                 else:
                     op_trade_type = "SPOT"
                 
-                # Descartar activos en enfriamiento del agente o en enfriamiento post-salida reciente (60s en binarias, 180s en spot)
-                cooldown_dur = 60.0 if b_id == "IQOPTION" else 180.0
+                # Descartar activos en enfriamiento del agente o en enfriamiento post-salida reciente (120s en Forex CFD, 180s en spot)
+                cooldown_dur = 120.0 if b_id == "IQOPTION" else 180.0
                 if self.agent.learner.is_asset_in_cooldown(sym):
                     continue
                 if (time.time() - self.last_exit_times.get(sym, 0)) < cooldown_dur:
@@ -1224,9 +1196,9 @@ class RealTimeTradingEngine:
             "highest_price": price,
             "take_profit": take_profit,
             "side": "PUT" if ("SELL" in str(decision_data.get("decision", "")) or "PUT" in str(decision_data.get("action_type", "")) or "BAJISTA" in str(decision_data.get("action_type", ""))) else "CALL",
-            "is_cfd": (decision_data.get("op_trade_type") == "CFD"),
-            "trade_type": "CFD" if (decision_data.get("op_trade_type") == "CFD") else "BINARY",
-            "duration_sec": 0 if (decision_data.get("op_trade_type") == "CFD") else 60,
+            "is_cfd": True,
+            "trade_type": "CFD" if (broker_id == "IQOPTION") else "SPOT",
+            "duration_sec": 0,
             "entry_time": datetime.datetime.now().strftime("%H:%M:%S"),
             "entry_timestamp": time.time(),
             "entry_confidence": decision_data["confidence"],
@@ -1279,11 +1251,23 @@ class RealTimeTradingEngine:
                         self.cash_balance = wallet["cash"]
                     return
 
-        # Enrutamiento de orden en IQ Option (Paper o Real)
+        # Enrutamiento de orden en IQ Option (Paper o Real) - Forex CFD
         if broker_id == "IQOPTION" and hasattr(self.feed, "iqoption"):
-            pos_side = position.get("side", "CALL")
-            option_dir = "put" if pos_side == "PUT" else "buy"
-            iq_res = self.feed.iqoption.submit_order(symbol, option_dir, actual_investment)
+            pos_side = position.get("side", "BUY_LONG")
+            cfd_side = "sell" if pos_side in ["PUT", "SELL", "SELL_SHORT"] else "buy"
+            sl_pct = 1.5
+            tp_pct = 3.0
+            if price > 0 and stop_loss > 0 and take_profit > 0:
+                sl_pct = round(abs(price - stop_loss) / price * 100, 2)
+                tp_pct = round(abs(take_profit - price) / price * 100, 2)
+            iq_res = self.feed.iqoption.submit_order(
+                symbol=symbol,
+                side=cfd_side,
+                amount=actual_investment,
+                leverage=25,
+                stop_loss_pct=sl_pct,
+                take_profit_pct=tp_pct
+            )
             if iq_res.get("success"):
                 oid = iq_res.get("order_id", "")
                 position["broker_order_id"] = oid
@@ -1292,8 +1276,8 @@ class RealTimeTradingEngine:
                 position["name"] = self.feed.assets.get(actual_sym, {}).get("name", position["name"])
                 symbol = actual_sym
                 mode_str = "REAL" if is_broker_live else "DEMO/PRACTICE"
-                dir_label = "🔻 BAJA (PUT)" if pos_side == "PUT" else "🟢 SUBE (CALL)"
-                self.agent._add_thought(f"📈 ORDEN IQ OPTION ({mode_str}): {dir_label} en {symbol} (ID: {oid}).", "INFO", symbol, "⚡")
+                dir_label = "🔻 CORTO (SELL)" if cfd_side == "sell" else "🟢 LARGO (BUY)"
+                self.agent._add_thought(f"📈 ORDEN FOREX CFD IQ OPTION ({mode_str}): {dir_label} en {symbol} (ID: {oid}) x25. SL: {sl_pct}% | TP: {tp_pct}%.", "INFO", symbol, "⚡")
             else:
                 err_msg = str(iq_res.get('error', 'Error desconocido'))
                 is_closed_or_suspended = any(k in err_msg.lower() for k in ["not available", "suspended", "not found", "closed"])
@@ -1342,40 +1326,18 @@ class RealTimeTradingEngine:
         broker_id = pos.get("broker", self.active_broker)
 
         if broker_id == "IQOPTION":
-            is_cfd = pos.get("is_cfd", False)
             pos_side = pos.get("side", "BUY_LONG").upper()
-
-            if is_cfd:
-                # MODO FOREX CFD CON STOP-LOSS Y TAKE-PROFIT AUTOMÁTICOS:
-                if pos_side in ["BUY", "BUY_LONG", "CALL"]:
-                    diff_pct = ((exit_price - entry_p) / entry_p) if entry_p > 0 else 0.0
-                else:
-                    diff_pct = ((entry_p - exit_price) / entry_p) if entry_p > 0 else 0.0
-
-                # Multiplicador CFD controlado con apalancamiento estándar (x10)
-                cfd_return = max(-1.0, min(2.5, diff_pct * 10.0))
-                pnl = round(invested * cfd_return, 2)
-                exit_value = round(max(0.0, invested + pnl), 2)
-                pnl_pct = round(cfd_return * 100, 2)
+            # MODO FOREX CFD CON STOP-LOSS Y TAKE-PROFIT AUTOMÁTICOS:
+            if pos_side in ["BUY", "BUY_LONG", "CALL"]:
+                diff_pct = ((exit_price - entry_p) / entry_p) if entry_p > 0 else 0.0
             else:
-                # MODO BINARIAS TURBO 60S:
-                payout_rate = 0.88
-                if hasattr(self, "feed") and hasattr(self.feed, "iqoption"):
-                    payout_rate = getattr(self.feed.iqoption, "get_payout", lambda s: 0.88)(symbol)
-                is_tie = (exit_price == entry_p)
-                is_win = (exit_price > entry_p) if pos_side in ["BUY", "BUY_LONG", "CALL"] else (exit_price < entry_p)
-                if is_win:
-                    pnl = round(invested * payout_rate, 2)
-                    exit_value = round(invested + pnl, 2)
-                    pnl_pct = round(payout_rate * 100, 2)
-                elif is_tie:
-                    pnl = 0.0
-                    exit_value = invested
-                    pnl_pct = 0.0
-                else:
-                    pnl = round(-invested, 2)
-                    exit_value = 0.0
-                    pnl_pct = -100.0
+                diff_pct = ((entry_p - exit_price) / entry_p) if entry_p > 0 else 0.0
+
+            # Multiplicador CFD controlado con apalancamiento estándar (x10)
+            cfd_return = max(-1.0, min(2.5, diff_pct * 10.0))
+            pnl = round(invested * cfd_return, 2)
+            exit_value = round(max(0.0, invested + pnl), 2)
+            pnl_pct = round(cfd_return * 100, 2)
         else:
             exit_value = round(quantity * exit_price, 2)
             pnl = round(exit_value - invested, 2)
@@ -1463,10 +1425,10 @@ class RealTimeTradingEngine:
                         self.cash_balance = wallet["cash"]
                     return
 
-        # Enrutamiento de venta / cierre en IQ Option (Venta anticipada o liquidación en expiración)
+        # Enrutamiento de venta / cierre en IQ Option (Forex CFD cierre de posición)
         if broker_id == "IQOPTION" and hasattr(self.feed, "iqoption"):
-            opt_id = pos.get("broker_order_id")
-            iq_res = self.feed.iqoption.submit_order(symbol, "sell", exit_value, option_id=opt_id)
+            pos_id = pos.get("broker_order_id")
+            iq_res = self.feed.iqoption.close_position(pos_id)
             if not iq_res.get("success"):
                 self.agent._add_thought(f"ℹ️ Cierre registrado en IQ Option: {iq_res.get('error', 'Completado')}", "INFO", symbol, "📈")
 
@@ -1486,6 +1448,7 @@ class RealTimeTradingEngine:
             "pnl_percent": pnl_pct,
             "entry_time": pos.get("entry_time", datetime.datetime.now().strftime("%H:%M:%S")),
             "exit_time": datetime.datetime.now().strftime("%H:%M:%S"),
+            "reason": decision_data.get("reason_simple", "Venta ejecutada"),
             "exit_reason": decision_data.get("reason_simple", "Venta ejecutada"),
             "exit_type": decision_data.get("decision", "SELL"),
             "success": pnl > 0
@@ -1497,10 +1460,10 @@ class RealTimeTradingEngine:
             self.risk_manager.register_trade_close(pnl, symbol=symbol, is_intraday=True, broker_id=broker_id)
 
         b_curr = "COP" if (broker_id == "IQOPTION" and getattr(self.feed.iqoption, "currency", "USD") == "COP") else "USD"
-        trade_label = "CFD (SL/TP)" if pos.get("is_cfd") else "Binarias 60s"
+        trade_label = "Forex CFD (SL/TP)" if broker_id == "IQOPTION" else "Spot"
         if pnl > 0:
             self.agent._add_thought(
-                f"💰 ¡OPERACIÓN GANADA [{broker_badge} - {trade_label}]! {symbol} cerrado a ${exit_price:,.2f}. Retorno: +{b_curr} {pnl:,.2f} (+{pnl_pct:.2f}%). Saldo acreditado directamente a tu cuenta de IQ Option.",
+                f"💰 ¡OPERACIÓN GANADA [{broker_badge} - {trade_label}]! {symbol} cerrado a ${exit_price:,.2f}. Retorno: +{b_curr} {pnl:,.2f} (+{pnl_pct:.2f}%). Saldo acreditado directamente a tu cuenta.",
                 "TRADE_WIN",
                 symbol,
                 icon="💵"
@@ -1513,20 +1476,12 @@ class RealTimeTradingEngine:
                 icon="⚖️"
             )
         else:
-            if pos.get("is_cfd"):
-                self.agent._add_thought(
-                    f"🛡️ CIERRE DEFENSIVO STOP-LOSS [{broker_badge} - CFD]: {symbol} cerrado a ${exit_price:,.2f}. Pérdida controlada: -{b_curr} {abs(pnl):,.2f} ({pnl_pct:.2f}%).",
-                    "TRADE_LOSS",
-                    symbol,
-                    icon="🛑"
-                )
-            else:
-                self.agent._add_thought(
-                    f"🛑 CONTRATO NO CUMPLIDO [{broker_badge} - Binarias 60s]: {symbol} expiró a ${exit_price:,.2f}. Pérdida de contrato: -{b_curr} {abs(pnl):,.2f}.",
-                    "TRADE_LOSS",
-                    symbol,
-                    icon="🛑"
-                )
+            self.agent._add_thought(
+                f"🛡️ CIERRE DEFENSIVO STOP-LOSS [{broker_badge} - {trade_label}]: {symbol} cerrado a ${exit_price:,.2f}. Pérdida controlada: -{b_curr} {abs(pnl):,.2f} ({pnl_pct:.2f}%).",
+                "TRADE_LOSS",
+                symbol,
+                icon="🛑"
+            )
 
     def emergency_close_all(self, broker: Optional[str] = None):
         target_b = broker.upper() if broker else None
@@ -1572,9 +1527,8 @@ class RealTimeTradingEngine:
 
     def toggle_pause(self, broker: Optional[str] = None) -> bool:
         target_b = (broker or self.active_broker).upper()
-        target_b = "IQOPTION"
-        b_wal = self.broker_wallets.get("IQOPTION", {})
-        b_name = b_wal.get("name", "IQ Option")
+        b_wal = self.broker_wallets.get(target_b, self.broker_wallets.get("IQOPTION", {}))
+        b_name = b_wal.get("name", target_b)
 
         currently_running = b_wal.get("is_running", True)
         new_running_state = not currently_running

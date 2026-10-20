@@ -34,6 +34,7 @@ def test_market_feed_modes():
     
     feed.set_mode("SIMULATION")
     assert feed.mode == "SIMULATION"
+    feed.set_mode("IQ_CFD")
 
 def test_crypto_assets_in_feed():
     feed = MultiAssetMarketFeed()

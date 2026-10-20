@@ -1,41 +1,30 @@
 # TitoBotTrader - Memoria Central de Configuración y Auditoría del Sistema
-**Última Actualización:** 2026-10-19 16:55 COT
-**Objetivo del Sistema:** Operación 100% enfocada y optimizada en **IQ Option**, eliminando intermediarios, brokers secundarios (Alpaca, Binance) y lógicas redundantes (como la Bóveda de ganancias).
+**Última Actualización:** 2026-10-20 13:30 COT
+**Objetivo del Sistema:** Operación 100% enfocada y optimizada en **Forex Tradicional (CFD) en IQ Option**, eliminando intermediarios, brokers secundarios (Alpaca, Binance), y erradicando completamente las opciones binarias y lógicas redundantes (como la Bóveda de ganancias).
 
 ---
 
 ## 1. Reglas Maestras de Operación
 1. **Broker Único Exclusivo:** **IQ Option**. Todos los módulos de Alpaca y Binance quedan deshabilitados y eliminados del flujo operativo y de la interfaz visual para garantizar máximo rendimiento, cero latencia y cero confusión de saldo.
-2. **Saldo Directo y Transparente:** Se elimina completamente el concepto de "Bóveda de Ganancias" (Profit Vault) y sus botones en la interfaz. El saldo operativo es directamente el saldo real de la cuenta de IQ Option (`real_amount` en COP).
-3. **Persistencia y Memoria del Agente:** Toda configuración, lección técnica aprendida y estado del motor se persiste en este archivo y en la base de datos para que ningún reinicio o actualización borre el contexto.
-4. **Pares OTC Son Exclusivamente Opciones Binarias:** En IQ Option los pares terminados en `-OTC` son contratos binarios digitales. Nunca se deben tratar como CFDs ni aplicarles Stop-Loss anticipado.
+2. **Modelo Único Exclusivo: Forex Tradicional (CFD):**
+   - **PROHIBICIÓN TOTAL DE OPCIONES BINARIAS:** Se eliminan de raíz las opciones binarias (`IQ_BINARY`, `IQ_HYBRID`, expiraciones de 60 segundos, payouts binarios y compuertas de tiempo de vela). El análisis de pérdidas reales del 19 de octubre demostró que la asimetría de binarias destruye el capital.
+   - Toda operación en IQ Option se ejecuta como **Forex CFD** con Stop-Loss matemático, Take-Profit garantizado (R:R mínimo 1:2.0), Break-Even automático a +1R y Trailing Stop dinámico a partir de +1.5R.
+3. **Saldo Directo y Transparente:** Se elimina completamente el concepto de "Bóveda de Ganancias" (Profit Vault) y sus botones en la interfaz. El saldo operativo es directamente el saldo real de la cuenta de IQ Option (`real_amount` en COP).
+4. **Política Estricta de Despliegue a VPS:**
+   - **NUNCA** realizar despliegues automáticos, `git push` o reinicios en el VPS sin antes explicar detallada y concisamente los cambios al usuario y obtener su aprobación explícita o permitir que él mismo ejecute los comandos en la consola del servidor.
+5. **Persistencia y Memoria del Agente:** Toda configuración, directiva del usuario, lección técnica y bitácora de chat se persiste en `data/PROJECT_CONVERSATION_LOG.md`, en este archivo y en la base de datos para que ningún reinicio o corte de sesión borre el contexto.
 
 ---
 
-## 2. Modos Operativos de IQ Option
-El usuario dispone de 3 modos seleccionables dinámicamente desde el dashboard o la API:
-
-### Modo 1: `IQ_BINARY` (Opciones Binarias Turbo 60s)
-* **Mecánica:** Contratos de expiración fija de 60 segundos ejecutados vía WebSocket oficial (`binary-options.open-option`).
-* **Horarios:** Pares estándar durante sesión bancaria de lunes a viernes; pares OTC en horarios extendidos y 24/7.
-* **Control de Salida:** Expiración por tiempo natural de 60 segundos. No admite cierres manuales ni Stop-Loss anticipado que mutile el contrato.
-* **Gestión de Empate:** En caso de empate (`exit_price == entry_price`), el capital se reembolsa al 100% (`pnl = 0.0`).
-* **Etiqueta en Bitácora:** En ganancias: `💰 ¡OPERACIÓN GANADA!`. En pérdidas: `🛑 CONTRATO NO CUMPLIDO`. En empates: `⚖️ EMPATE`.
-
-### Modo 2: `IQ_CFD` (Forex Tradicional con Stop-Loss y Take-Profit)
-* **Mecánica:** Operaciones de compra (`CALL/BUY`) y venta (`PUT/SELL`) sin tiempo de expiración fija sobre pares estándar bancarios.
-* **Control de Salida:** La posición se mantiene abierta y es gestionada activamente por el motor cuantitativo segundo a segundo con:
-  * **Take-Profit (TP):** Cierre automático al alcanzar el objetivo matemático de beneficio.
-  * **Stop-Loss (SL):** Cierre defensivo si el precio toca el umbral de riesgo máximo (`🛡️ CIERRE DEFENSIVO STOP-LOSS`).
-  * **Trailing Stop Dinámico:** Si la posición entra en ganancia, el Stop-Loss se desplaza protegiendo beneficios (Break-Even garantizado).
-
-### Modo 3: `IQ_HYBRID` (Híbrido Inteligente Autónomo - Recomendado)
-* **Pares OTC (`-OTC`):** Siempre se operan como **Opciones Binarias 60s**, ya que IQ Option no ofrece CFD para OTC.
-* **Pares Estándar de Lunes a Viernes:**
-  * Si el régimen detectado por la IA es de **Tendencia Fuerte** (`TRENDING_BULL` o `TRENDING_BEAR`): El bot entra en modo **Forex CFD** con Stop-Loss y Take-Profit para capturar movimientos largos sin el riesgo de expiración de 60 segundos.
-  * Si el mercado está en **Consolidación / Rango Lateral** (`RANGING_SIDEWAYS`): El bot opera en **Opciones Binarias 60s** aprovechando rebotes en soportes y resistencias.
-* **Fines de Semana (Bolsas Cerradas):**
-  * Conmuta 100% de forma automática a **Binarias OTC 24/7** (`EURUSD-OTC`, `EURGBP-OTC`, `GBPUSD-OTC`, etc.) para seguir operando sin interrupción.
+## 2. Mecánica Operativa: Forex CFD en IQ Option
+* **Mecánica:** Operaciones de compra (`CALL/BUY`) y venta (`PUT/SELL`) basadas en confluencia técnica (EMA 20/50, RSI, soportes y resistencias, régimen de mercado) sin expiración forzada de 60s.
+* **Relación Riesgo / Beneficio (R:R):** Mínimo 1:2.0 o 1:2.5 a favor. Solo se requiere ~35% de Win Rate para ser rentable.
+* **Control de Salida Dinámico:**
+  * **Take-Profit (TP):** Cierre automático garantizado al alcanzar el objetivo de beneficio matemático.
+  * **Stop-Loss (SL):** Cierre defensivo estricto para preservar capital si el precio se mueve en contra.
+  * **Break-Even Automático (+1R):** Al avanzar el precio a +1R de ganancia favorable, el Stop-Loss se mueve de inmediato al precio de entrada (`entry_price`), blindando la operación a CERO RIESGO.
+  * **Trailing Stop (+1.5R):** Acompaña la tendencia asegurando al menos +0.5R de beneficio acumulado ante cualquier retroceso.
+* **Filtro de Horarios de Mercado:** El bot opera pares Forex disponibles durante sesiones activas de mercado. Si un activo se encuentra cerrado, se aplica enfriamiento inteligente para no saturar la API.
 
 ---
 
@@ -53,3 +42,6 @@ El usuario dispone de 3 modos seleccionables dinámicamente desde el dashboard o
 | **`Active %!s(MISSING) not found`** | IDs de activos OTC no existentes enviados a IQ Option. | Mapeo restringido exclusivamente a pares OTC oficiales y verificados. |
 | **`the asset is not available at the moment`** | Pares Forex estándar intentando operarse fuera de su horario de mercado en IQ Option. | Enfriamiento preventivo inteligente de 10 minutos (`600s`) en activos cerrados y fallback inmediato a pares OTC activos. |
 | **Pérdida en empates (Tie)** | Al cerrar con el mismo precio de entrada se declaraba -100%. | Soporte explícito de empate (`is_tie`): reembolso del 100% del capital invertido con `pnl = 0.0`. |
+| **Sobrescritura de `operating_mode` al cambiar de broker activo** | `set_active_broker("IQOPTION")` forzaba `operating_mode = "IQOPTION_FOREX"`, sobrescribiendo el modo configurado (`IQ_CFD`, `IQ_BINARY`, `IQ_HYBRID`) y alterando la lógica de evaluación en pruebas y ejecución. | Se preserva el modo operativo configurado en `set_active_broker()` y se aisló la suite `test_forex_cfd_strict_guarantees.py` garantizando el contexto exclusivo `IQ_CFD`. |
+| **Disparo encubierto de Opciones Binarias en Modo Real (Causa Raíz de Pérdidas)** | En `execution/iqoption_adapter.py`, el método `_execute_real_ws_order` enviaba `binary-options.open-option` con expiración de 60 segundos y `close_option` enviaba `binary-options.sell-option`. Aunque el motor gestionaba posiciones como CFD, a IQ Option se le enviaban órdenes reales de binarias turbo de 60s, liquidando capital por ruido de corto plazo. | Migración integral de la capa WebSocket a Forex CFD oficial: apertura mediante `place-order-temp` (v4.0, `instrument_type="forex"`, leverage x25, Stop-Loss y Take-Profit automáticos) y cierre mediante `close-position` (v1.0). Cero invocaciones a `binary-options` en todo el adaptador. |
+

@@ -1794,15 +1794,15 @@
             <div class="summary-stat-col" style="border-left: 2px solid rgba(56, 189, 248, 0.35);">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <span class="stat-label" style="color:var(--accent-cyan); font-weight:700;">🎯 MODO IQ OPTION</span>
-                    <span class="stat-badge mono" id="operating-mode-badge" style="background:rgba(56,189,248,0.15); color:var(--accent-cyan); font-size:9.5px; padding:1px 5px;">HÍBRIDO</span>
+                    <span class="stat-badge mono" id="operating-mode-badge" style="background:rgba(56,189,248,0.15); color:var(--accent-cyan); font-size:9.5px; padding:1px 5px;">FOREX CFD</span>
                 </div>
                 <div class="stat-value-row" style="margin-top:2px;">
-                    <span class="stat-primary-val mono" id="top-operating-mode-val" style="color:#FFF; font-size:14px; font-weight:700;">Híbrido Inteligente</span>
-                    <button class="btn-xs-reinvest" onclick="openSettingsModal()" title="Configurar modo operativo (Binarias 60s, CFD SL/TP o Híbrido)">
+                    <span class="stat-primary-val mono" id="top-operating-mode-val" style="color:#FFF; font-size:14px; font-weight:700;">Forex CFD (SL/TP)</span>
+                    <button class="btn-xs-reinvest" onclick="openSettingsModal()" title="Configurar parámetros operativos (Forex CFD con SL/TP)">
                         ⚙️ Modo
                     </button>
                 </div>
-                <span class="stat-subtext mono" id="operating-mode-desc" style="color:var(--text-muted); font-size:9.5px;">CFD en tendencia · Binarias en rango</span>
+                <span class="stat-subtext mono" id="operating-mode-desc" style="color:var(--text-muted); font-size:9.5px;">CFD con Stop-Loss defensivo y Trailing Stop</span>
             </div>
 
             <div class="summary-stat-col">
@@ -2211,21 +2211,15 @@
                 <!-- Custom Dropdown Elegante -->
                 <div class="custom-select-container" id="custom-mode-dropdown">
                     <div class="custom-select-trigger" onclick="toggleCustomDropdown('custom-mode-dropdown')">
-                        <span id="custom-mode-label">⚡ Modo Híbrido Inteligente (Recomendado)</span>
+                        <span id="custom-mode-label">📈 Modo Forex Tradicional CFD (SL / TP Dinámicos)</span>
                         <span class="arrow">▼</span>
                     </div>
                     <div class="custom-select-menu">
-                        <div class="custom-option selected" data-value="IQ_HYBRID" onclick="selectCustomOption('custom-mode-dropdown', 'IQ_HYBRID', '⚡ Modo Híbrido Inteligente (Recomendado)')">
-                            <span>⚡ Modo Híbrido Inteligente (CFD + Binarias + OTC)</span>
-                        </div>
-                        <div class="custom-option" data-value="IQ_BINARY" onclick="selectCustomOption('custom-mode-dropdown', 'IQ_BINARY', '⏱️ Modo Opciones Binarias Turbo (60s)')">
-                            <span>⏱️ Modo Opciones Binarias Turbo (Contratos fijos 60s)</span>
-                        </div>
-                        <div class="custom-option" data-value="IQ_CFD" onclick="selectCustomOption('custom-mode-dropdown', 'IQ_CFD', '📈 Modo Forex Tradicional CFD (SL / TP)')">
-                            <span>📈 Modo Forex Tradicional CFD (SL / TP sin expiración)</span>
+                        <div class="custom-option selected" data-value="IQ_CFD" onclick="selectCustomOption('custom-mode-dropdown', 'IQ_CFD', '📈 Modo Forex Tradicional CFD (SL / TP Dinámicos)')">
+                            <span>📈 Modo Forex Tradicional CFD (SL / TP sin expiración fija)</span>
                         </div>
                     </div>
-                    <input type="hidden" id="modal-operating-mode" value="IQ_HYBRID">
+                    <input type="hidden" id="modal-operating-mode" value="IQ_CFD">
                 </div>
             </div>
             <div class="form-group" style="margin-top:12px;">
@@ -2443,7 +2437,7 @@
                     <option value="BINANCE">🪙 Binance Spot (Criptomonedas 24/7)</option>
                     <option value="BYBIT">⚡ Bybit (Cripto & Derivados)</option>
                     <option value="IBKR">🌐 Interactive Brokers (Acciones & Opciones Globales)</option>
-                    <option value="IQOPTION">📊 IQ Option (Forex & Binarias)</option>
+                    <option value="IQOPTION">📊 IQ Option (Forex CFD Tradicional)</option>
                     <option value="OKX">💎 OKX Exchange (Cripto Spot)</option>
                 </select>
             </div>
@@ -3426,24 +3420,13 @@
             }
             document.getElementById('cash-available').innerHTML = cashSubtext;
 
-            const opMode = sys.operating_mode || 'IQ_HYBRID';
             const modeEl = document.getElementById('top-operating-mode-val');
             const modeBadgeEl = document.getElementById('operating-mode-badge');
             const modeDescEl = document.getElementById('operating-mode-desc');
             if (modeEl) {
-                if (opMode === 'IQ_BINARY') {
-                    modeEl.innerText = 'Opciones Binarias';
-                    if (modeBadgeEl) modeBadgeEl.innerText = 'TURBO 60S';
-                    if (modeDescEl) modeDescEl.innerText = 'Contratos fijos de 60s';
-                } else if (opMode === 'IQ_CFD') {
-                    modeEl.innerText = 'Forex CFD';
-                    if (modeBadgeEl) modeBadgeEl.innerText = 'SL / TP';
-                    if (modeDescEl) modeDescEl.innerText = 'SL / TP dinámicos sin expiración';
-                } else {
-                    modeEl.innerText = 'Híbrido Inteligente';
-                    if (modeBadgeEl) modeBadgeEl.innerText = 'RECOMENDADO';
-                    if (modeDescEl) modeDescEl.innerText = 'CFD en tendencia · Binarias en rango';
-                }
+                modeEl.innerText = 'Forex CFD';
+                if (modeBadgeEl) modeBadgeEl.innerText = 'SL / TP';
+                if (modeDescEl) modeDescEl.innerText = 'SL / TP dinámicos sin expiración';
             }
 
             const pnlUsd = fin.total_profit_usd || 0;
@@ -4078,17 +4061,8 @@
                 if (sys.max_loss_amount !== undefined) {
                     document.getElementById('modal-max-loss').value = (!sys.max_loss_enabled || sys.max_loss_amount === 0) ? 0 : sys.max_loss_amount;
                 }
-                if (sys.operating_mode) {
-                    const modeLabels = {
-                        'IQ_HYBRID': '⚡ Modo Híbrido Inteligente (CFD + Binarias + OTC)',
-                        'IQ_BINARY': '⏱️ Modo Opciones Binarias Turbo (Contratos fijos 60s)',
-                        'IQ_CFD': '📈 Modo Forex Tradicional CFD (SL / TP sin expiración)',
-                        'UNIFIED_TRADFI_CRYPTO': '⚡ Modo Híbrido Inteligente (Recomendado)',
-                        'IQOPTION_FOREX': '⚡ Modo Híbrido Inteligente'
-                    };
-                    const lbl = modeLabels[sys.operating_mode] || `📈 ${sys.operating_mode}`;
-                    selectCustomOption('custom-mode-dropdown', sys.operating_mode, lbl);
-                }
+                selectCustomOption('custom-mode-dropdown', 'IQ_CFD', '📈 Modo Forex Tradicional CFD (SL / TP Dinámicos)');
+            }
 
                 // Generar dinámicamente las opciones del selector de Entorno para este broker
                 const currentEnv = brokerInfo.environment || sys.execution_environment || 'PAPER';
