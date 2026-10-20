@@ -2208,19 +2208,14 @@
             </div>
             <div class="form-group">
                 <label>Modo Operativo IQ Option</label>
-                <!-- Custom Dropdown Elegante -->
-                <div class="custom-select-container" id="custom-mode-dropdown">
-                    <div class="custom-select-trigger" onclick="toggleCustomDropdown('custom-mode-dropdown')">
-                        <span id="custom-mode-label">📈 Modo Forex Tradicional CFD (SL / TP Dinámicos)</span>
-                        <span class="arrow">▼</span>
+                <div style="background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.3); border-radius:6px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-size:16px;">📈</span>
+                        <span style="color:#FFF; font-weight:600; font-size:13px;">Forex Tradicional CFD (SL / TP sin expiración)</span>
                     </div>
-                    <div class="custom-select-menu">
-                        <div class="custom-option selected" data-value="IQ_CFD" onclick="selectCustomOption('custom-mode-dropdown', 'IQ_CFD', '📈 Modo Forex Tradicional CFD (SL / TP Dinámicos)')">
-                            <span>📈 Modo Forex Tradicional CFD (SL / TP sin expiración fija)</span>
-                        </div>
-                    </div>
-                    <input type="hidden" id="modal-operating-mode" value="IQ_CFD">
+                    <span style="background:var(--accent-cyan); color:#0B0E17; font-weight:700; font-size:10px; padding:2px 8px; border-radius:12px;">ACTIVO</span>
                 </div>
+                <input type="hidden" id="modal-operating-mode" value="IQ_CFD">
             </div>
             <div class="form-group" style="margin-top:12px;">
                 <label>Entorno de Ejecución (Real / Simulación)</label>

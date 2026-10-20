@@ -130,6 +130,13 @@ def check_authentication():
     g.current_user = user
     return None
 
+@app.after_request
+def add_cache_headers(response):
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     client_ip = get_client_ip()
