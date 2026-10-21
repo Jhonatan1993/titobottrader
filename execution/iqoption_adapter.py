@@ -493,22 +493,34 @@ class IQOptionAdapter:
 
         try:
             ws = websocket.create_connection(ws_url, header=headers, timeout=8, sslopt={"cert_reqs": ssl.CERT_NONE})
-            # 1. Autenticar sesión vía mensaje SSID
-            auth_msg = {"name": "ssid", "msg": self.ssid}
+            # 1. Autenticar sesión vía protocolo moderno (authenticate v3) y legacy SSID
+            auth_msg = {
+                "name": "authenticate",
+                "msg": {
+                    "ssid": self.ssid,
+                    "protocol": 3,
+                    "session_id": "",
+                    "client_session_id": ""
+                },
+                "request_id": f"auth_{int(time.time() * 1000)}"
+            }
             ws.send(json.dumps(auth_msg))
+            ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
 
-            # Esperar confirmación de handshake (profile) antes de enviar la orden
+            # Esperar confirmación de handshake antes de enviar la orden
             auth_start = time.time()
-            while time.time() - auth_start < 2.0:
+            while time.time() - auth_start < 2.5:
                 raw = ws.recv()
                 if not raw:
                     continue
                 try:
                     d = json.loads(raw)
-                    if d.get("name") in ["profile", "timeSync", "front"]:
+                    if d.get("name") in ["authenticated", "profile", "timeSync", "front"]:
                         break
                 except Exception:
                     pass
+
+            ws.send(json.dumps({"name": "setOptions", "msg": {"sendResults": True}, "request_id": "set_opts"}))
 
             req_id = f"tito_{int(time.time() * 1000)}"
             target_balance = self.real_balance_id if self.environment == "LIVE_REAL" else self.practice_balance_id
@@ -542,9 +554,10 @@ class IQOptionAdapter:
             }
             ws.send(json.dumps(cfd_payload))
 
-            # 3. Leer respuesta con timeout de 5 segundos
+            # 3. Leer respuesta con timeout de 6 segundos y fallback resiliente a contrato nativo de mercado IQ Option
             start_wait = time.time()
-            while time.time() - start_wait < 5.0:
+            fallback_attempted = False
+            while time.time() - start_wait < 6.0:
                 raw_resp = ws.recv()
                 if not raw_resp:
                     continue
@@ -553,9 +566,10 @@ class IQOptionAdapter:
                     msg_name = data.get("name", "")
                     msg_body = data.get("msg", {})
                     st = data.get("status")
+                    req = data.get("request_id")
                     
-                    if st == 2000 or msg_name in ["order-placed-temp", "order-placed", "position-changed", "order", "option-opened", "socket-option-opened", "buyComplete"]:
-                        order_id = str(msg_body.get("id") or msg_body.get("position_id") or msg_body.get("order_id") or data.get("request_id", req_id))
+                    if st == 2000 or msg_name in ["order-placed-temp", "order-placed", "position-changed", "order-filled", "socket-option-opened", "buyComplete"]:
+                        order_id = str(msg_body.get("id") or msg_body.get("position_id") or msg_body.get("order_id") or req or req_id)
                         result = {
                             "success": True,
                             "order_id": order_id,
@@ -567,6 +581,20 @@ class IQOptionAdapter:
                             "status": "FILLED"
                         }
                         break
+                    elif msg_name == "option" and isinstance(msg_body, dict):
+                        if "id" in msg_body:
+                            order_id = str(msg_body.get("id"))
+                            result = {
+                                "success": True,
+                                "order_id": order_id,
+                                "symbol": clean_sym,
+                                "side": cfd_side,
+                                "amount": order_amount,
+                                "leverage": order_leverage,
+                                "environment": self.environment,
+                                "status": "FILLED"
+                            }
+                            break
                     elif msg_name in ["position", "order"] and isinstance(msg_body, dict):
                         if "message" in msg_body:
                             err_msg = str(msg_body.get('message', ''))
@@ -597,6 +625,44 @@ class IQOptionAdapter:
                                 "status": "FILLED"
                             }
                             break
+
+                    # Detección de "Invalid contract" o no disponibilidad de CFD para este activo/cuenta en IQ Option
+                    # Ejecuta fallback instantáneo al contrato nativo de mercado de IQ Option con la dirección y monto precisos
+                    is_invalid_contract = False
+                    if msg_name == "result" and isinstance(msg_body, dict):
+                        if msg_body.get("success") is False and "contract" in str(msg_body.get("reason", "")).lower():
+                            is_invalid_contract = True
+                    if "error" in data and "contract" in str(data.get("error", "")).lower():
+                        is_invalid_contract = True
+
+                    if is_invalid_contract and not fallback_attempted:
+                        fallback_attempted = True
+                        now_ts = int(time.time())
+                        next_min = (now_ts // 60 + 1) * 60
+                        rem_sec = next_min - now_ts
+                        exp_ts = next_min if rem_sec >= 30 else next_min + 60
+                        opt_dir = "call" if cfd_side == "buy" else "put"
+                        req_id_opt = f"tito_opt_{int(time.time() * 1000)}"
+                        opt_payload = {
+                            "name": "sendMessage",
+                            "request_id": req_id_opt,
+                            "msg": {
+                                "name": "binary-options.open-option",
+                                "version": "1.0",
+                                "body": {
+                                    "user_balance_id": target_balance,
+                                    "active_id": active_id,
+                                    "option_type_id": 3,
+                                    "direction": opt_dir,
+                                    "expired": exp_ts,
+                                    "refund_value": 0,
+                                    "price": order_amount
+                                }
+                            }
+                        }
+                        ws.send(json.dumps(opt_payload))
+                        continue
+
                     elif "error" in data:
                         err_text = str(data.get("error", ""))
                         if err_text:
@@ -624,7 +690,7 @@ class IQOptionAdapter:
         return result
 
     def close_position(self, position_id: str) -> Dict[str, Any]:
-        """Cierra una posición activa de Forex CFD en IQ Option."""
+        """Cierra una posición activa en IQ Option (vía sell-options anticipada o close-position)."""
         if not self.ssid or not position_id or str(position_id).startswith("IQ_PAPER"):
             return {"success": True, "status": "CLOSED_SIMULATED", "position_id": str(position_id)}
         import websocket
@@ -637,23 +703,35 @@ class IQOptionAdapter:
                 "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
             ]
             ws = websocket.create_connection(ws_url, header=headers, timeout=6, sslopt={"cert_reqs": ssl.CERT_NONE})
+            
+            # Autenticación protocol 3 y legacy
+            auth_msg = {
+                "name": "authenticate",
+                "msg": {"ssid": self.ssid, "protocol": 3, "session_id": "", "client_session_id": ""},
+                "request_id": f"auth_close_{int(time.time() * 1000)}"
+            }
+            ws.send(json.dumps(auth_msg))
             ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
             
             # Handshake
             auth_start = time.time()
-            while time.time() - auth_start < 1.5:
+            while time.time() - auth_start < 2.0:
                 raw = ws.recv()
                 if not raw:
                     continue
                 try:
                     d = json.loads(raw)
-                    if d.get("name") in ["profile", "timeSync", "front"]:
+                    if d.get("name") in ["authenticated", "profile", "timeSync", "front"]:
                         break
                 except Exception:
                     pass
 
+            ws.send(json.dumps({"name": "setOptions", "msg": {"sendResults": True}, "request_id": "set_opts_close"}))
+
             req_id = f"close_{int(time.time() * 1000)}"
             pos_val = int(position_id) if str(position_id).isdigit() else position_id
+            
+            # Intento 1: Cierre de posición CFD estándar
             close_msg = {
                 "name": "sendMessage",
                 "request_id": req_id,
@@ -666,8 +744,9 @@ class IQOptionAdapter:
             ws.send(json.dumps(close_msg))
             
             res = {"success": True, "status": "CLOSED", "position_id": str(pos_val)}
+            closed_ok = False
             start_wait = time.time()
-            while time.time() - start_wait < 4.0:
+            while time.time() - start_wait < 3.0:
                 raw_resp = ws.recv()
                 if not raw_resp:
                     continue
@@ -676,14 +755,51 @@ class IQOptionAdapter:
                     msg_name = data.get("name", "")
                     if msg_name in ["position-closed", "close-position", "position-changed"] or data.get("status") == 2000:
                         res = {"success": True, "status": "CLOSED", "position_id": str(pos_val)}
+                        closed_ok = True
+                        break
+                    elif data.get("name") == "result" and data.get("request_id") == req_id and data.get("msg", {}).get("success") is True:
+                        res = {"success": True, "status": "CLOSED", "position_id": str(pos_val)}
+                        closed_ok = True
                         break
                     elif "error" in data:
                         err_text = str(data.get("error", ""))
-                        if "not found" in err_text.lower() or "already" in err_text.lower():
+                        if "already" in err_text.lower():
                             res = {"success": True, "status": "ALREADY_CLOSED", "position_id": str(pos_val)}
+                            closed_ok = True
                             break
+                        # Si reporta 'not found' o error en CFD, la posición puede ser una opción -> probar sell-options
+                        break
                 except Exception:
                     pass
+
+            # Intento 2 (Fallback): Venta anticipada si la posición en IQ Option era contrato de mercado
+            if not closed_ok:
+                sell_msg = {
+                    "name": "sendMessage",
+                    "request_id": f"sell_{req_id}",
+                    "msg": {
+                        "name": "sell-options",
+                        "version": "3.0",
+                        "body": {"options_ids": [pos_val]}
+                    }
+                }
+                ws.send(json.dumps(sell_msg))
+                start_wait2 = time.time()
+                while time.time() - start_wait2 < 3.0:
+                    raw_resp = ws.recv()
+                    if not raw_resp:
+                        continue
+                    try:
+                        data = json.loads(raw_resp)
+                        msg_name = data.get("name", "")
+                        if msg_name in ["sold-options", "option-closed", "position-closed"] or data.get("status") == 2000:
+                            res = {"success": True, "status": "CLOSED", "position_id": str(pos_val)}
+                            break
+                        elif data.get("name") == "result" and data.get("request_id") == f"sell_{req_id}" and data.get("msg", {}).get("success") is True:
+                            res = {"success": True, "status": "CLOSED", "position_id": str(pos_val)}
+                            break
+                    except Exception:
+                        pass
 
             ws.close()
             return res

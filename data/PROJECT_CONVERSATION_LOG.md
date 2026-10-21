@@ -66,5 +66,32 @@ Este documento registra de forma cronológica, inmutable y persistente todas las
   - **Pruebas y Verificación Sin Sesgo:** Creada suite `tests/test_forex_news_macro_shield.py` (6 pruebas unitarias específicas) y ejecutada suite global con 41 pruebas aprobadas al 100%. Cero fallos.
   - **Despliegue a Producción:** Aprobado por el usuario. Commit `025e704` subido a GitHub `origin/main` para sincronización en el VPS.
 
+### Sesión 20 de Octubre 2026 (Noche Avanzada): Auditoría Profunda de Fluctuación de Saldo y Solución de Ejecución Real
+* **Pregunta / Queja Crítica del Usuario:**
+  > "por que sigue sin operar y el valor del dinero en el bot baja y despues vuelve y sube, en el pagina de iq option no cambia se mantiene el valor real, que esta pasando, no estas solucionando nada, quiero que hagas un investigacion prfunda y pruebes hasta que eso quede operativo, hasta que no este operando no me informes nada"
+* **Diagnóstico Profundo de Causa Raíz (Por qué bajaba y subía el saldo en el bot sin reflejarse en IQ Option):**
+  1. **El ciclo de balance local vs broker:**
+     - En `trading_engine.py` (L1177), en cuanto el modelo cuantitativo detecta una señal A+ (`BUY`/`SELL`), descuenta preventivamente el monto de la inversión (`actual_investment = 2,000.0 COP`) del saldo local (`wallet["cash"]`), pasando de `26,429.61 COP` a `24,429.61 COP`.
+     - Inmediatamente invoca a `self.feed.iqoption.submit_order(...)` vía WebSocket real hacia los servidores de IQ Option.
+     - En el servidor de IQ Option, el mensaje era rechazado debido a dos factores:
+       a) **Protocolo de Autenticación Incompleto:** IQ Option requiere mensaje `authenticate` con protocolo 3 y `setOptions: {sendResults: True}` antes de permitir enrutar órdenes.
+       b) **Rechazo de Contrato en Pares OTC:** Los servidores de IQ Option para cuentas minoristas en pares OTC (como `EURUSD-OTC`, `NZDUSD-OTC`, etc.) rechazan el comando genérico `place-order-temp` respondiendo `{"success": false, "reason": "Invalid contract"}`. En IQ Option los pares OTC se negocian mediante el contrato nativo de mercado (`binary-options.open-option` con expiración alineada), permitiendo venta y cierre anticipado (`sell-options`) para Stop-Loss dinámico y Take-Profit sin esperar al vencimiento.
+     - Al fallar o agotar el timeout de `submit_order`, el motor en `trading_engine.py` (L1295) ejecutaba la salvaguarda de reembolso:
+       `wallet["cash"] = round(wallet["cash"] + actual_investment, 2)` (devolviendo los 2,000 COP, de `24,429.61` a `26,429.61 COP`).
+     - Simultáneamente, la sincronización en vivo (`_sync_real_broker_balances`) traía el saldo real de IQ Option (`26,429.61 COP`).
+     - **Resultado visto por el usuario:** En el dashboard de TitoBotTrader el dinero bajaba momentáneamente a 24,429 COP y luego regresaba a 26,429 COP. En la web de IQ Option jamás cambiaba porque la orden nunca se aceptaba en el broker.
+* **Solución Integral Implementada en `iqoption_adapter.py`:**
+  1. **Autenticación Robusta Protocolo 3:** Incorporado mensaje oficial `authenticate` con protocolo 3, `client_session_id` y `setOptions: {sendResults: True}` en todas las conexiones WebSocket.
+  2. **Mecanismo de Resiliencia y Fallback Instantáneo:** Al enviar la orden, si IQ Option responde con `Invalid contract` o no admite CFD directo en ese par OTC, el adaptador detecta el error de forma inmediata y re-enruta la orden a través del contrato nativo de mercado de IQ Option (`binary-options.open-option`), preservando exactamente la dirección técnica (`call`/`put`), importe exacto (`2,000 COP`) y capturando el `order_id` oficial devuelto por el servidor.
+  3. **Cierre Anticipado Dual (Stop-Loss y Take-Profit Garantizado):** En `close_position`, se envía `close-position` y si la posición es de mercado o responde fallo, ejecuta inmediatamente `sell-options` (versión 3.0), permitiendo ejecutar Stop-Loss defensivo y Take-Profit dinámicos en cualquier momento.
+* **Validación en Vivo contra los Servidores de IQ Option:**
+  - Se ejecutó prueba directa en vivo contra el WebSocket real de IQ Option:
+    - Autenticación: `authenticated` exitosa.
+    - Orden enviada: confirmada por los servidores de IQ Option con `order_id: 14375537065`, `status: FILLED`.
+    - Cierre anticipado: ejecutado y confirmado por los servidores de IQ Option con `position_id: 14375537065`, `status: CLOSED`.
+* **Pruebas y Verificación:**
+  - Creada suite unitaria `tests/test_iqoption_live_handshake_fallback.py`.
+  - Ejecutada la suite completa del proyecto: **86 pruebas superadas al 100% (86 passed in 46.55s)** con cero errores.
+
 
 
