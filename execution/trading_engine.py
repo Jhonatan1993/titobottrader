@@ -299,22 +299,33 @@ class RealTimeTradingEngine:
                 entry_q = float(bp.get("open_quote", 0.0))
                 asset_obj = self.feed.assets.get(sym, {})
                 cur_p = asset_obj.get("price", entry_q) if entry_q > 0 else 1.0
+                invested_amt = float(bp.get("invest") or 856.94)
+                pnl_net = float(bp.get("pnl_net", 0.0))
+                pnl_pct = round((pnl_net / invested_amt) * 100, 2) if invested_amt > 0 else 0.0
                 if sym not in self.open_positions:
                     self.open_positions[sym] = {
                         "symbol": sym,
                         "name": asset_obj.get("name", sym),
                         "broker": "IQOPTION",
                         "category": "FOREX",
-                        "invested_amount": float(bp.get("invest") or 2000.0),
+                        "invested_amount": invested_amt,
                         "entry_price": entry_q if entry_q > 0 else cur_p,
                         "current_price": cur_p,
                         "quantity": 1.0,
                         "broker_order_id": str(bp.get("id", "")),
                         "position_id": str(bp.get("external_id") or bp.get("id", "")),
-                        "current_pnl": float(bp.get("pnl_net", 0.0)),
-                        "current_pnl_percent": 0.0,
+                        "current_pnl": pnl_net,
+                        "current_pnl_percent": pnl_pct,
                         "entry_timestamp": time.time()
                     }
+                else:
+                    pos = self.open_positions[sym]
+                    pos["current_pnl"] = pnl_net
+                    pos["current_pnl_percent"] = pnl_pct
+                    if entry_q > 0:
+                        pos["entry_price"] = entry_q
+                    if bp.get("invest"):
+                        pos["invested_amount"] = invested_amt
 
         # 2. Si el broker reporta cero posiciones abiertas, purgar SOLO con confirmación de 3 sondeos consecutivos
         elif len(broker_positions) == 0:
@@ -877,14 +888,21 @@ class RealTimeTradingEngine:
             quantity = pos["quantity"]
             category = asset.get("category", "TRADFI_STOCK")
             
-            current_value = quantity * current_price
-            pnl = current_value - pos["invested_amount"]
-            pnl_pct = ((current_price - entry_price) / entry_price) * 100
-            
-            pos["current_price"] = current_price
-            pos["current_value"] = round(current_value, 2)
-            pos["current_pnl"] = round(pnl, 2)
-            pos["current_pnl_percent"] = round(pnl_pct, 2)
+            if category == "FOREX" or pos.get("broker") == "IQOPTION":
+                pos["current_price"] = current_price
+                # Para Forex CFD en IQ Option, el PnL se sincroniza directamente desde el WebSocket (pnl_net).
+                # No se calcula como stock (quantity * price - invested_amount) que daría pérdidas irreales.
+                pos["current_value"] = round(pos["invested_amount"] + pos.get("current_pnl", 0.0), 2)
+                pnl_pct = pos.get("current_pnl_percent", 0.0)
+            else:
+                current_value = quantity * current_price
+                pnl = current_value - pos["invested_amount"]
+                pnl_pct = ((current_price - entry_price) / entry_price) * 100
+                
+                pos["current_price"] = current_price
+                pos["current_value"] = round(current_value, 2)
+                pos["current_pnl"] = round(pnl, 2)
+                pos["current_pnl_percent"] = round(pnl_pct, 2)
 
             pos["highest_price"] = max(pos.get("highest_price", entry_price), current_price)
             entry_ts = pos.get("entry_timestamp", 0)
