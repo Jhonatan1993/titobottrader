@@ -1,4 +1,24 @@
 id,broker,category,environment,symbol,name,type,quantity,entry_price,exit_price,invested_amount,pnl,pnl_percent,result,reason,opened_at,closed_at,duration
+TR-0716,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,18.43,1.08,1.08,20.0,0.0,0.0,,Parada de Seguridad solicitada exclusivamente para IQ Option,2026-10-21 18:32:30,2026-10-21 18:32:30,2 min
+TR-0715,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,1843.0,1.08,1.08,2000.0,-110.6,-5.53,,🛡️ Stop-Loss defensivo en EURUSD: Preservando capital.,2026-10-21 18:31:59,2026-10-21 18:31:59,2 min
+TR-0714,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,1843.0,1.08,1.09,2000.0,110.6,5.53,,🎯 Take-Profit alcanzado en EURUSD: Objetivo de beneficio cumplido.,2026-10-21 18:31:59,2026-10-21 18:31:59,2 min
+TR-0713,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,1843.0,1.08,1.08,2000.0,-110.6,-5.53,,🛡️ Stop-Loss defensivo en EURUSD: Preservando capital.,2026-10-21 18:31:11,2026-10-21 18:31:11,2 min
+TR-0712,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,1843.0,1.08,1.09,2000.0,110.6,5.53,,🎯 Take-Profit alcanzado en EURUSD: Objetivo de beneficio cumplido.,2026-10-21 18:31:11,2026-10-21 18:31:11,2 min
+TR-0711,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,18.43,1.08,1.08,20.0,0.0,0.0,,Parada de Seguridad solicitada exclusivamente para IQ Option,2026-10-21 18:26:40,2026-10-21 18:26:40,2 min
+TR-0710,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,18.43,1.08,1.08,20.0,0.0,0.0,,Parada de Seguridad solicitada exclusivamente para IQ Option,2026-10-21 14:55:58,2026-10-21 14:55:58,2 min
+TR-0709,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,1843.0,1.08,1.08,2000.0,-110.6,-5.53,,🛡️ Stop-Loss defensivo en EURUSD: Preservando capital.,2026-10-21 14:55:26,2026-10-21 14:55:26,2 min
+TR-0708,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,1843.0,1.08,1.09,2000.0,110.6,5.53,,🎯 Take-Profit alcanzado en EURUSD: Objetivo de beneficio cumplido.,2026-10-21 14:55:26,2026-10-21 14:55:26,2 min
+TR-0707,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,18.43,1.08,1.08,20.0,0.0,0.0,,Parada de Seguridad solicitada exclusivamente para IQ Option,2026-10-21 14:44:26,2026-10-21 14:44:26,2 min
+TR-0706,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,18.43,1.08,1.08,20.0,0.0,0.0,,Parada de Seguridad solicitada exclusivamente para IQ Option,2026-10-21 14:43:08,2026-10-21 14:43:08,2 min
+TR-0705,IQOPTION,FOREX,LIVE_REAL,GBPJPY,GBP / JPY,COMPRA / VENTA,9.4589,211.44,197.8,2000.0,0.0,0.0,,Cierre confirmado en broker IQ Option (Take Profit / Stop Loss),2026-10-21 14:22:21,2026-10-21 14:22:21,2 min
+TR-0704,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,18.43,1.08,1.08,20.0,0.0,0.0,,Parada de Seguridad solicitada exclusivamente para IQ Option,2026-10-21 14:22:19,2026-10-21 14:22:19,2 min
+TR-0703,IQOPTION,FOREX,LIVE_REAL,GBPJPY,GBP / JPY,COMPRA / VENTA,9.4589,211.44,197.8,2000.0,0.0,0.0,,Cierre confirmado en broker IQ Option (Take Profit / Stop Loss),2026-10-21 14:04:31,2026-10-21 14:04:31,2 min
+TR-0702,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,18.43,1.08,1.08,20.0,0.0,0.0,,Parada de Seguridad solicitada exclusivamente para IQ Option,2026-10-21 14:04:29,2026-10-21 14:04:29,2 min
+TR-0701,IQOPTION,FOREX,LIVE_REAL,GBPJPY,GBP / JPY,COMPRA / VENTA,9.4589,211.44,197.8,2000.0,0.0,0.0,,Cierre confirmado en broker IQ Option (Take Profit / Stop Loss),2026-10-21 13:32:11,2026-10-21 13:32:11,2 min
+TR-0700,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,18.43,1.08,1.08,20.0,0.0,0.0,,Parada de Seguridad solicitada exclusivamente para IQ Option,2026-10-21 13:32:09,2026-10-21 13:32:09,2 min
+TR-0699,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,18.43,1.08,1.08,20.0,0.0,0.0,,Parada de Seguridad solicitada exclusivamente para IQ Option,2026-10-21 13:31:07,2026-10-21 13:31:07,2 min
+TR-0698,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,1843.0,1.08,1.08,2000.0,-110.6,-5.53,,🛡️ Stop-Loss defensivo en EURUSD: Preservando capital.,2026-10-21 13:30:35,2026-10-21 13:30:35,2 min
+TR-0697,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,1843.0,1.08,1.09,2000.0,110.6,5.53,,🎯 Take-Profit alcanzado en EURUSD: Objetivo de beneficio cumplido.,2026-10-21 13:30:35,2026-10-21 13:30:35,2 min
 TR-0696,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,18.43,1.08,1.08,20.0,0.0,0.0,,Parada de Seguridad solicitada exclusivamente para IQ Option,2026-10-21 12:59:05,2026-10-21 12:59:05,2 min
 TR-0695,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,1843.0,1.08,1.08,2000.0,-110.6,-5.53,,🛡️ Stop-Loss defensivo en EURUSD: Preservando capital.,2026-10-21 12:58:33,2026-10-21 12:58:33,2 min
 TR-0694,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,1843.0,1.08,1.09,2000.0,110.6,5.53,,🎯 Take-Profit alcanzado en EURUSD: Objetivo de beneficio cumplido.,2026-10-21 12:58:33,2026-10-21 12:58:33,2 min

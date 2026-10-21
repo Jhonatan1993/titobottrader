@@ -8,6 +8,7 @@ from config.broker_config import load_broker_config, save_broker_config
 from execution.alpaca_adapter import AlpacaAdapter
 from execution.binance_adapter import BinanceAdapter
 from risk_management.risk_manager import RiskManager
+from execution.binary_options_engine import BinaryOptionsStrategyEngine
 
 class RealTimeTradingEngine:
     """
@@ -22,8 +23,9 @@ class RealTimeTradingEngine:
     def __init__(self, initial_balance: Optional[float] = None, max_open_positions: int = 5, execution_environment: Optional[str] = None):
         self.broker_config = load_broker_config()
         active_b = self.broker_config.get("active_broker", "IQOPTION").upper()
+        self.iq_mode = self.broker_config.get("iq_mode", "FOREX_CFD").upper()
         if active_b == "IQOPTION":
-            self.operating_mode = "IQ_CFD"
+            self.operating_mode = "IQ_CFD" if self.iq_mode == "FOREX_CFD" else "IQ_BINARY"
         else:
             self.operating_mode = self.broker_config.get("operating_mode", "IQ_CFD")
         self.execution_environment = execution_environment or self.broker_config.get("execution_environment", "LIVE_REAL")
@@ -160,6 +162,12 @@ class RealTimeTradingEngine:
         self.initial_balance = active_wallet["initial_balance"]
         self.execution_environment = active_wallet.get("environment", "PAPER")
 
+        self.binary_engine = BinaryOptionsStrategyEngine(
+            iqoption_adapter=getattr(self.feed, "iqoption", None),
+            journal=self.journal,
+            learner=self.agent.learner,
+            initial_balance=self.initial_balance
+        )
         self.agent.update_learning_from_disk()
         self._record_equity_snapshot()
 
@@ -748,16 +756,44 @@ class RealTimeTradingEngine:
         }
 
     def set_operating_mode(self, mode: str):
-        # IQ Option opera EXCLUSIVAMENTE en modo Forex Tradicional CFD con SL/TP
-        mode = "IQ_CFD"
-        self.operating_mode = mode
-        self.broker_config["operating_mode"] = mode
+        if mode == "IQ_BINARY":
+            self.set_iq_mode("BINARY_OPTIONS")
+        else:
+            self.set_iq_mode("FOREX_CFD")
+
+    def set_iq_mode(self, new_mode: str) -> Dict[str, Any]:
+        """
+        Conmuta entre MODO FOREX CFD y MODO OPCIONES BINARIAS con aislamiento absoluto:
+        - FOREX_CFD: Opera con SL/TP dinámicos, trailing stop y apalancamiento sin expiración.
+        - BINARY_OPTIONS: Opera con expiración fija (1m-5m), payout >= 80% y confluencia A+ (>=85%).
+        """
+        clean_m = new_mode.upper()
+        if clean_m not in ["FOREX_CFD", "BINARY_OPTIONS"]:
+            return {"success": False, "error": f"Modo inválido '{new_mode}'. Debe ser 'FOREX_CFD' o 'BINARY_OPTIONS'."}
+        
+        self.iq_mode = clean_m
+        self.operating_mode = "IQ_CFD" if clean_m == "FOREX_CFD" else "IQ_BINARY"
+        self.broker_config["iq_mode"] = clean_m
+        self.broker_config["operating_mode"] = self.operating_mode
         save_broker_config(self.broker_config)
-        self.agent._add_thought(
-            "📈 Modo IQ Option Activado: Forex Tradicional CFD (Stop-Loss y Take-Profit Dinámicos sin Expiración Fija)",
-            "INFO",
-            icon="🎯"
-        )
+
+        if clean_m == "BINARY_OPTIONS":
+            self.agent._add_thought(
+                "⏱️ MODO IQ OPTION CONMUTADO: OPCIONES BINARIAS TURBO (1m-5m). Aislamiento total de Forex CFD activo (Gatekeeper 1 operación, Payout >= 80%).",
+                "SUCCESS",
+                icon="⚡"
+            )
+        else:
+            self.agent._add_thought(
+                "🌐 MODO IQ OPTION CONMUTADO: FOREX CFD TRADICIONAL. Aislamiento total de Binarias activo (SL/TP dinámico sin expiración).",
+                "SUCCESS",
+                icon="📈"
+            )
+        return {
+            "success": True,
+            "iq_mode": self.iq_mode,
+            "operating_mode": self.operating_mode
+        }
 
     def update_broker_keys(self, alpaca_key: str = "", alpaca_secret: str = "", binance_key: str = "", binance_secret: str = "", iqoption_email: str = "", iqoption_password: str = "", iqoption_ssid: str = ""):
         if alpaca_key or alpaca_secret:
@@ -877,6 +913,20 @@ class RealTimeTradingEngine:
         if hasattr(self, "risk_manager"):
             self.risk_manager.current_open_trades = len(self.open_positions)
         market_state = self.feed.tick()
+
+        # Si el modo activo es BINARIAS: resolver opciones que hayan alcanzado su tiempo de expiración
+        if getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS" and hasattr(self, "binary_engine"):
+            cur_prices = {s: a.get("price", 1.0) for s, a in market_state.items()}
+            bin_resolution = self.binary_engine.check_and_resolve_positions(cur_prices)
+            if bin_resolution:
+                res_type = bin_resolution.get("result", "WIN")
+                res_icon = "🏆" if res_type == "WIN" else ("🤝" if res_type == "TIE" else "🛡️")
+                self.agent._add_thought(
+                    f"{res_icon} {bin_resolution['reason']}",
+                    "SUCCESS" if res_type == "WIN" else "INFO",
+                    bin_resolution.get("symbol"),
+                    res_icon
+                )
 
         # 1. Actualizar posiciones abiertas y gestionar Trailing Stop Adaptativo
         for sym, pos in list(self.open_positions.items()):
@@ -1052,6 +1102,11 @@ class RealTimeTradingEngine:
         self._record_equity_snapshot()
 
     def _evaluate_and_trade(self, market_state: Dict[str, Any]):
+        # AISLAMIENTO TOTAL: Si el modo activo es BINARIAS, delegar 100% al motor de Opciones Binarias
+        if self.active_broker == "IQOPTION" and getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS":
+            self._evaluate_and_trade_binary(market_state)
+            return
+
         # A. Evaluar salidas de posiciones abiertas para TODOS los brokers
         for sym, pos in list(self.open_positions.items()):
             pos_b = pos.get("broker") or ("BINANCE" if pos.get("category") == "CRYPTO" else ("IQOPTION" if pos.get("category") == "FOREX" else "ALPACA"))
@@ -1205,6 +1260,69 @@ class RealTimeTradingEngine:
                 candidates.sort(key=lambda x: x[0], reverse=True)
                 best_score, best_sym, best_asset, best_decision = candidates[0]
                 self._execute_buy(best_sym, best_asset, best_decision, broker_id=b_id)
+
+    def _evaluate_and_trade_binary(self, market_state: Dict[str, Any]):
+        """
+        Lógica 100% aislada para Opciones Binarias Turbo / Blitz:
+        - Gatekeeper estricto: máximo 1 sola posición activa a la vez.
+        - Filtro matemático de Payout >= 80%.
+        - Confluencia A+ (confianza >= 85%) con análisis de mecha y RSI.
+        - Cooldown forzado de 180s en el activo tras cierre.
+        """
+        if not hasattr(self, "binary_engine"):
+            return
+
+        # GATEKEEPER ABSOLUTO: 1 sola operación a la vez
+        if self.binary_engine.has_active_position:
+            return
+
+        wallet = self.broker_wallets.get("IQOPTION", {})
+        if not wallet.get("is_running", True):
+            return
+
+        is_cop = (getattr(self.feed.iqoption, "currency", "USD") == "COP")
+        min_cash = 2000.0 if is_cop else 1.0
+        cash = wallet.get("cash", 0.0)
+        if cash < min_cash:
+            return
+
+        trade_amount = 2000.0 if is_cop else 2.0
+
+        candidates = []
+        for sym, asset in market_state.items():
+            cat = asset.get("category")
+            # Permitir Forex tradicional y pares OTC 24/7 para Opciones Binarias
+            if cat not in ["FOREX", "OPTIONS", "CFD"] and "-OTC" not in sym:
+                continue
+
+            candles = getattr(self.feed, "candles", {}).get(sym, [])
+            eval_res = self.binary_engine.evaluate_asset(asset, candles)
+            dec = eval_res.get("decision")
+            conf = eval_res.get("confidence", 0)
+
+            if dec in ["CALL", "PUT"] and conf >= self.binary_engine.min_confidence:
+                payout = eval_res.get("payout", 0.85)
+                score = conf * payout
+                candidates.append((score, sym, dec, asset, eval_res))
+
+        if candidates:
+            candidates.sort(key=lambda x: x[0], reverse=True)
+            best_score, best_sym, best_dir, best_asset, best_eval = candidates[0]
+            price = best_asset.get("price", 1.0)
+            order_res = self.binary_engine.execute_binary_option(
+                symbol=best_sym,
+                direction=best_dir,
+                amount=trade_amount,
+                duration_minutes=1,
+                entry_price=price
+            )
+            if order_res.get("success"):
+                self.agent._add_thought(
+                    f"⏱️ OPCIÓN BINARIA LANZADA: {best_sym} {best_dir} (${trade_amount:,.2f}) - {best_eval['reason']}",
+                    "SUCCESS",
+                    best_sym,
+                    "🎯"
+                )
 
     def _execute_buy(self, symbol: str, asset: Dict[str, Any], decision_data: Dict[str, Any], broker_id: Optional[str] = None):
         broker_id = (broker_id or self.active_broker).upper()
@@ -1674,8 +1792,34 @@ class RealTimeTradingEngine:
         active_b = "IQOPTION"
         wallet = self.broker_wallets.get("IQOPTION", {})
         
-        # Posiciones activas aisladas por broker
-        active_positions = self.get_broker_positions(active_b)
+        # Posiciones activas aisladas por modo
+        if getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS" and hasattr(self, "binary_engine"):
+            if self.binary_engine.open_position:
+                b_pos = self.binary_engine.open_position
+                rem_s = max(0, int(b_pos["expiration_timestamp"] - time.time()))
+                cur_price = self.feed.assets.get(b_pos["symbol"], {}).get("price", b_pos["entry_price"])
+                payout_pct = int(round(b_pos.get("payout", 0.85) * 100))
+                active_positions = [{
+                    "symbol": b_pos["symbol"],
+                    "name": f"{b_pos['symbol']} [Turbo {b_pos['direction']}]",
+                    "broker": "IQOPTION",
+                    "category": "OPTIONS",
+                    "side": b_pos["direction"],
+                    "invested_amount": b_pos["amount"],
+                    "entry_price": b_pos["entry_price"],
+                    "current_price": cur_price,
+                    "current_pnl": 0.0,
+                    "current_pnl_percent": 0.0,
+                    "icon": "⏱️",
+                    "direction": b_pos["direction"],
+                    "payout": b_pos["payout"],
+                    "potential_profit": b_pos["potential_profit"],
+                    "status_label": f"Expira en {rem_s}s"
+                }]
+            else:
+                active_positions = []
+        else:
+            active_positions = self.get_broker_positions(active_b)
         invested = sum(pos["invested_amount"] for pos in active_positions)
         unrealized_pnl = sum(pos.get("current_pnl", 0.0) for pos in active_positions)
         cash_avail = wallet["cash"]
@@ -1817,6 +1961,7 @@ class RealTimeTradingEngine:
                 "status_text": status_text,
                 "active_broker": "IQOPTION",
                 "operating_mode": self.operating_mode,
+                "iq_mode": getattr(self, "iq_mode", "FOREX_CFD"),
                 "execution_environment": self.execution_environment,
                 "paper_initial_balance": initial_bal,
                 "active_assets_count": len(market_radar),

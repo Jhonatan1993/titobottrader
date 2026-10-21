@@ -902,6 +902,197 @@ class IQOptionAdapter:
             take_profit_pct=take_profit_pct
         )
 
+    def submit_binary_option(
+        self, 
+        symbol: str, 
+        direction: str, 
+        amount: float, 
+        duration_minutes: int = 1
+    ) -> Dict[str, Any]:
+        """
+        Ejecuta una opción binaria (Turbo 1-5m o Blitz) en IQ Option según el entorno activo (PAPER o LIVE_REAL).
+        Mantiene aislamiento total respecto a las órdenes de Forex CFD.
+        """
+        dir_clean = direction.lower()
+        if dir_clean not in ["call", "put"]:
+            return {"success": False, "error": f"Dirección inválida {direction}. Debe ser CALL o PUT."}
+
+        min_amount = 2000.0 if self.currency == "COP" else 1.0
+        order_amount = max(min_amount, round(float(amount), 2))
+
+        if not self.connected or self.environment != "LIVE_REAL":
+            order_id = f"BIN_PAPER_{int(time.time() * 1000)}"
+            return {
+                "success": True,
+                "order_id": order_id,
+                "symbol": symbol,
+                "direction": dir_clean,
+                "amount": order_amount,
+                "duration_minutes": duration_minutes,
+                "environment": "PAPER",
+                "status": "OPENED_SIMULATED"
+            }
+
+        if self.real_amount <= 0.0 and self.balance <= 0.0:
+            return {
+                "success": False,
+                "error": f"Saldo insuficiente en cuenta real de IQ Option (Dispones de {self.real_amount:,.2f} {self.currency})."
+            }
+
+        if order_amount > self.real_amount:
+            return {
+                "success": False,
+                "error": f"Saldo insuficiente: La inversión es de {order_amount:,.2f} {self.currency} y dispones de {self.real_amount:,.2f} {self.currency}."
+            }
+
+        if self.real_balance_id:
+            self.change_balance(self.real_balance_id)
+
+        return self._execute_real_binary_ws_order(
+            symbol=symbol,
+            direction=dir_clean,
+            amount=order_amount,
+            duration_minutes=duration_minutes
+        )
+
+    def _execute_real_binary_ws_order(
+        self, 
+        symbol: str, 
+        direction: str, 
+        amount: float, 
+        duration_minutes: int = 1
+    ) -> Dict[str, Any]:
+        """
+        Envía una orden real de Opción Binaria Turbo al WebSocket oficial de IQ Option.
+        """
+        import websocket
+        import json
+        import ssl
+
+        if not self.ssid:
+            return {"success": False, "error": "No hay SSID de sesión activo para IQ Option"}
+
+        clean_sym = symbol.replace("/", "").replace(" ", "").replace("_", "").upper()
+        active_id = ACTIVE_ASSET_IDS.get(clean_sym, ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC", 1))
+
+        now = time.time()
+        rem_sec = int(now) % 60
+        add_sec = (60 - rem_sec) if rem_sec <= 30 else (120 - rem_sec)
+        expiration_ts = int(now) + add_sec + (max(1, duration_minutes) - 1) * 60
+
+        target_balance = self.real_balance_id if self.environment == "LIVE_REAL" else (self.practice_balance_id or self.active_balance_id)
+        target_bal_id = int(target_balance) if target_balance and str(target_balance).isdigit() else target_balance
+
+        payout = self.get_payout(symbol)
+        profit_percent = int(round(payout * 100))
+
+        ws_url = "wss://iqoption.com/echo/websocket"
+        headers = [
+            f"Cookie: ssid={self.ssid}",
+            "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+        ]
+
+        result = {"success": False, "error": "Tiempo de espera agotado al conectar para opción binaria"}
+
+        try:
+            ws = websocket.create_connection(ws_url, header=headers, timeout=8, sslopt={"cert_reqs": ssl.CERT_NONE})
+            # Handshake
+            ws.send(json.dumps({
+                "name": "authenticate",
+                "msg": {"ssid": self.ssid, "protocol": 3, "session_id": "", "client_session_id": ""},
+                "request_id": f"auth_bin_{int(now * 1000)}"
+            }))
+            ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
+
+            auth_start = time.time()
+            while time.time() - auth_start < 2.0:
+                raw = ws.recv()
+                if not raw:
+                    continue
+                try:
+                    d = json.loads(raw)
+                    if d.get("name") in ["authenticated", "profile"]:
+                        break
+                except Exception:
+                    pass
+
+            # Enviar mensaje oficial binary-options.open-option
+            req_id = f"bin_opt_{int(time.time() * 1000)}"
+            body_payload = {
+                "name": "sendMessage",
+                "request_id": req_id,
+                "msg": {
+                    "name": "binary-options.open-option",
+                    "version": "2.0",
+                    "body": {
+                        "active_id": active_id,
+                        "direction": direction.lower(),
+                        "expired": expiration_ts,
+                        "option_type_id": 3,
+                        "price": amount,
+                        "user_balance_id": target_bal_id,
+                        "profit_percent": profit_percent
+                    }
+                }
+            }
+            ws.send(json.dumps(body_payload))
+
+            order_start = time.time()
+            while time.time() - order_start < 6.0:
+                raw_resp = ws.recv()
+                if not raw_resp:
+                    continue
+                try:
+                    data = json.loads(raw_resp)
+                    msg_name = data.get("name", "")
+                    msg_body = data.get("msg", {})
+                    req = data.get("request_id")
+                    st = data.get("status")
+
+                    if req == req_id:
+                        if isinstance(msg_body, dict) and "id" in msg_body:
+                            real_id = str(msg_body["id"])
+                            result = {
+                                "success": True,
+                                "order_id": real_id,
+                                "symbol": clean_sym,
+                                "direction": direction.upper(),
+                                "amount": amount,
+                                "expiration_timestamp": expiration_ts,
+                                "payout": payout,
+                                "status": "OPENED"
+                            }
+                            break
+                        elif isinstance(msg_body, dict) and ("message" in msg_body or "reason" in msg_body):
+                            err_msg = msg_body.get("message") or msg_body.get("reason")
+                            result = {"success": False, "error": f"Rechazado por IQ Option Binarias: {err_msg}"}
+                            break
+                        elif st and st != 2000:
+                            err_msg = data.get("message") or f"Error status {st}"
+                            result = {"success": False, "error": f"Rechazado por IQ Option: {err_msg}"}
+                            break
+
+                    if msg_name in ["option-opened", "option"] and isinstance(msg_body, dict) and msg_body.get("id"):
+                        result = {
+                            "success": True,
+                            "order_id": str(msg_body.get("id")),
+                            "symbol": clean_sym,
+                            "direction": direction.upper(),
+                            "amount": amount,
+                            "expiration_timestamp": expiration_ts,
+                            "payout": payout,
+                            "status": "OPENED"
+                        }
+                        break
+                except Exception:
+                    pass
+
+            ws.close()
+        except Exception as e:
+            result = {"success": False, "error": f"Error WebSocket Binarias: {str(e)}"}
+
+        return result
+
     def get_candles(self, symbol: str, interval: int = 60, count: int = 40) -> list:
         """Obtiene velas reales en vivo directamente desde IQ Option vía WebSocket."""
         clean_sym = symbol.upper().replace("/", "").replace("_", "")

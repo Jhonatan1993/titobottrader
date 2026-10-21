@@ -325,9 +325,16 @@ def set_profit_target():
 @app.route("/api/control/set-mode", methods=["POST"])
 def set_mode():
     data = request.get_json(silent=True) or {}
-    mode = data.get("mode", "UNIFIED_TRADFI_CRYPTO")
+    mode = data.get("mode", "IQ_CFD")
     ENGINE.set_operating_mode(mode)
-    return jsonify({"success": True, "mode": ENGINE.operating_mode})
+    return jsonify({"success": True, "mode": ENGINE.operating_mode, "iq_mode": getattr(ENGINE, "iq_mode", "FOREX_CFD")})
+
+@app.route("/api/control/set-iqoption-mode", methods=["POST"])
+def set_iqoption_mode():
+    data = request.get_json(silent=True) or {}
+    mode = data.get("mode") or data.get("iq_mode", "FOREX_CFD")
+    res = ENGINE.set_iq_mode(mode)
+    return jsonify(res)
 
 @app.route("/api/control/set-active-broker", methods=["POST"])
 def set_active_broker():

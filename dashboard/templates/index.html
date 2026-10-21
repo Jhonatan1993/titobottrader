@@ -1799,13 +1799,17 @@
                     <span class="stat-label" style="color:var(--accent-cyan); font-weight:700;">🎯 MODO IQ OPTION</span>
                     <span class="stat-badge mono" id="operating-mode-badge" style="background:rgba(56,189,248,0.15); color:var(--accent-cyan); font-size:9.5px; padding:1px 5px;">FOREX CFD</span>
                 </div>
-                <div class="stat-value-row" style="margin-top:2px;">
-                    <span class="stat-primary-val mono" id="top-operating-mode-val" style="color:#FFF; font-size:14px; font-weight:700;">Forex CFD (SL/TP)</span>
-                    <button class="btn-xs-reinvest" onclick="openSettingsModal()" title="Configurar parámetros operativos (Forex CFD con SL/TP)">
-                        ⚙️ Modo
-                    </button>
+                <div class="stat-value-row" style="margin-top:3px; display:flex; align-items:center; gap:5px;">
+                    <div style="display:inline-flex; background:rgba(15,23,42,0.85); border:1px solid rgba(255,255,255,0.12); border-radius:6px; padding:2px; gap:2px;">
+                        <button id="btn-mode-forex" onclick="switchIQOptionTradingMode('FOREX_CFD')" style="border:none; background:var(--accent-cyan); color:#000; font-weight:700; font-size:10.5px; border-radius:4px; padding:3px 8px; cursor:pointer; transition:all 0.2s;" title="Modo Forex CFD: SL / TP Dinámico sin expiración">
+                            🌐 Forex CFD
+                        </button>
+                        <button id="btn-mode-binary" onclick="switchIQOptionTradingMode('BINARY_OPTIONS')" style="border:none; background:transparent; color:var(--text-muted); font-weight:700; font-size:10.5px; border-radius:4px; padding:3px 8px; cursor:pointer; transition:all 0.2s;" title="Modo Opciones Binarias: Turbo 1m-5m · Payout ≥80% · Confluencia A+">
+                            ⏱️ Binarias Turbo
+                        </button>
+                    </div>
                 </div>
-                <span class="stat-subtext mono" id="operating-mode-desc" style="color:var(--text-muted); font-size:9.5px;">CFD con Stop-Loss defensivo y Trailing Stop</span>
+                <span class="stat-subtext mono" id="operating-mode-desc" style="color:var(--text-muted); font-size:9.5px; margin-top:2px;">SL / TP dinámicos sin expiración</span>
             </div>
 
             <div class="summary-stat-col">
@@ -3510,13 +3514,46 @@
             }
             document.getElementById('cash-available').innerHTML = cashSubtext;
 
-            const modeEl = document.getElementById('top-operating-mode-val');
+            const iqMode = sys.iq_mode || (sys.operating_mode === 'IQ_BINARY' ? 'BINARY_OPTIONS' : 'FOREX_CFD');
+            const btnForex = document.getElementById('btn-mode-forex');
+            const btnBinary = document.getElementById('btn-mode-binary');
             const modeBadgeEl = document.getElementById('operating-mode-badge');
             const modeDescEl = document.getElementById('operating-mode-desc');
-            if (modeEl) {
-                modeEl.innerText = 'Forex CFD';
-                if (modeBadgeEl) modeBadgeEl.innerText = 'SL / TP';
-                if (modeDescEl) modeDescEl.innerText = 'SL / TP dinámicos sin expiración';
+
+            if (iqMode === 'BINARY_OPTIONS') {
+                if (btnForex) {
+                    btnForex.style.background = 'transparent';
+                    btnForex.style.color = 'var(--text-muted)';
+                }
+                if (btnBinary) {
+                    btnBinary.style.background = 'var(--binance-yellow)';
+                    btnBinary.style.color = '#000';
+                }
+                if (modeBadgeEl) {
+                    modeBadgeEl.innerText = 'BINARIAS 1M-5M';
+                    modeBadgeEl.style.color = 'var(--binance-yellow)';
+                    modeBadgeEl.style.background = 'rgba(234,179,8,0.15)';
+                }
+                if (modeDescEl) {
+                    modeDescEl.innerText = 'Turbo/Blitz · Payout ≥80% · Confluencia A+ (Exp. fija)';
+                }
+            } else {
+                if (btnForex) {
+                    btnForex.style.background = 'var(--accent-cyan)';
+                    btnForex.style.color = '#000';
+                }
+                if (btnBinary) {
+                    btnBinary.style.background = 'transparent';
+                    btnBinary.style.color = 'var(--text-muted)';
+                }
+                if (modeBadgeEl) {
+                    modeBadgeEl.innerText = 'FOREX CFD';
+                    modeBadgeEl.style.color = 'var(--accent-cyan)';
+                    modeBadgeEl.style.background = 'rgba(56,189,248,0.15)';
+                }
+                if (modeDescEl) {
+                    modeDescEl.innerText = 'SL / TP dinámicos sin expiración';
+                }
             }
 
             const pnlUsd = fin.total_profit_usd || 0;
@@ -4108,6 +4145,27 @@
         async function recalibrateLearner() {
             await fetch('/api/control/recalibrate', { method: 'POST' });
             fetchState();
+        }
+
+        async function switchIQOptionTradingMode(mode) {
+            try {
+                const label = (mode === 'BINARY_OPTIONS') ? '⏱️ Opciones Binarias Turbo' : '🌐 Forex CFD';
+                showToast(`Cambiando modo a ${label}...`, 'info');
+                const resp = await fetch('/api/control/set-iqoption-mode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode: mode })
+                });
+                const res = await resp.json();
+                if (res.success) {
+                    showToast(`Modo cambiado a ${label} con éxito`, 'success');
+                    fetchState();
+                } else {
+                    showToast(`Error al cambiar modo: ${res.error || 'Desconocido'}`, 'error');
+                }
+            } catch (err) {
+                showToast(`Error de conexión: ${err.message}`, 'error');
+            }
         }
 
         async function resetAllCooldowns() {

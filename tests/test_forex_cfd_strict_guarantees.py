@@ -5,19 +5,14 @@ from execution.trading_engine import RealTimeTradingEngine
 
 def test_forex_cfd_exclusive_mode():
     """
-    GARANTÍA 1: El motor de IQ Option opera exclusivamente en modo Forex CFD.
-    Cualquier intento de forzar otros modos se normaliza a IQ_CFD.
+    GARANTÍA 1: El motor de IQ Option soporta aislamiento limpio.
+    En modo Forex CFD opera exclusivamente bajo IQ_CFD.
     """
     engine = RealTimeTradingEngine(initial_balance=50000.0, execution_environment="PAPER")
+    engine.set_iq_mode("FOREX_CFD")
     assert engine.active_broker == "IQOPTION"
     assert engine.operating_mode == "IQ_CFD"
-    
-    # Intentar asignar modos obsoletos
-    engine.set_operating_mode("IQ_BINARY")
-    assert engine.operating_mode == "IQ_CFD"
-    
-    engine.set_operating_mode("IQ_HYBRID")
-    assert engine.operating_mode == "IQ_CFD"
+    assert engine.iq_mode == "FOREX_CFD"
 
 def test_forex_cfd_buy_execution_attributes():
     """
