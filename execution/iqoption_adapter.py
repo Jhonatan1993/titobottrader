@@ -165,16 +165,22 @@ class IQOptionAdapter:
                         parsed_positions = []
                         for p in p_list:
                             ev = p.get("raw_event", {}).get("marginal_forex_position_changed1", {}) if isinstance(p.get("raw_event"), dict) else p
-                            p_id = ev.get("id") or p.get("id")
-                            p_status = ev.get("status") or p.get("status")
+                            ext_id = str(p.get("external_id") or ev.get("id") or p.get("id") or "")
+                            int_id = str(p.get("id") or "")
+                            p_status = p.get("status") or ev.get("status") or "open"
+                            act_id = p.get("active_id") or ev.get("instrument_active_id")
+                            oids = [str(oid) for oid in ev.get("order_ids", [])]
                             if p_status != "closed":
                                 parsed_positions.append({
-                                    "id": str(p_id),
-                                    "order_ids": [str(oid) for oid in ev.get("order_ids", [])],
-                                    "instrument_id": ev.get("instrument_id") or p.get("instrument_id"),
+                                    "external_id": ext_id,
+                                    "id": ext_id,
+                                    "internal_id": int_id,
+                                    "order_ids": oids,
+                                    "active_id": act_id,
                                     "status": p_status,
-                                    "pnl_net": float(ev.get("pnl_net") or 0.0),
-                                    "open_quote": float(ev.get("open_quote_ask") or ev.get("open_quote_bid") or 0.0)
+                                    "pnl_net": float(p.get("pnl") or ev.get("pnl_net") or 0.0),
+                                    "invest": float(p.get("invest") or 0.0),
+                                    "open_quote": float(p.get("open_quote") or ev.get("open_quote_ask") or 0.0)
                                 })
                         self.open_broker_positions = parsed_positions
                     if found_profile and found_positions:
