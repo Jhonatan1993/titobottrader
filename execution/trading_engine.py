@@ -291,65 +291,51 @@ class RealTimeTradingEngine:
 
         # 1. Si en el broker hay posiciones abiertas y en memoria no están, RECONSTRUIR en memoria
         # para bloquear estrictamente los cupos (impidiendo aperturas repetidas)
-        if len(broker_positions) > 0 and len(self.open_positions) == 0:
+        if len(broker_positions) > 0:
+            self._zero_pos_counter = 0
             for bp in broker_positions:
                 act_id = bp.get("active_id")
                 sym = "GBPJPY" if act_id == 3 else ("EURUSD" if act_id == 1 else "EURUSD")
                 entry_q = float(bp.get("open_quote", 0.0))
                 asset_obj = self.feed.assets.get(sym, {})
                 cur_p = asset_obj.get("price", entry_q) if entry_q > 0 else 1.0
-                self.open_positions[sym] = {
-                    "symbol": sym,
-                    "name": asset_obj.get("name", sym),
-                    "broker": "IQOPTION",
-                    "category": "FOREX",
-                    "invested_amount": float(bp.get("invest") or 2000.0),
-                    "entry_price": entry_q if entry_q > 0 else cur_p,
-                    "current_price": cur_p,
-                    "quantity": 1.0,
-                    "broker_order_id": str(bp.get("id", "")),
-                    "position_id": str(bp.get("external_id") or bp.get("id", "")),
-                    "current_pnl": float(bp.get("pnl_net", 0.0)),
-                    "current_pnl_percent": 0.0
-                }
-                break
+                if sym not in self.open_positions:
+                    self.open_positions[sym] = {
+                        "symbol": sym,
+                        "name": asset_obj.get("name", sym),
+                        "broker": "IQOPTION",
+                        "category": "FOREX",
+                        "invested_amount": float(bp.get("invest") or 2000.0),
+                        "entry_price": entry_q if entry_q > 0 else cur_p,
+                        "current_price": cur_p,
+                        "quantity": 1.0,
+                        "broker_order_id": str(bp.get("id", "")),
+                        "position_id": str(bp.get("external_id") or bp.get("id", "")),
+                        "current_pnl": float(bp.get("pnl_net", 0.0)),
+                        "current_pnl_percent": 0.0,
+                        "entry_timestamp": time.time()
+                    }
 
-        # 2. Si el broker reporta cero posiciones abiertas, limpiar cualquier remanente
+        # 2. Si el broker reporta cero posiciones abiertas, purgar SOLO con confirmación de 3 sondeos consecutivos
         elif len(broker_positions) == 0:
-            ghost_symbols = [
-                (sym, pos) for sym, pos in list(self.open_positions.items())
-                if (pos.get("broker") == "IQOPTION" or pos.get("category") == "FOREX")
-            ]
-            for sym, pos in ghost_symbols:
-                del self.open_positions[sym]
-                asset = self.feed.get_asset(sym) or {"price": pos.get("entry_price", 0.0), "name": pos.get("name", sym)}
-                exit_p = asset.get("price", pos.get("entry_price", 0.0))
-                entry_p = pos.get("entry_price", exit_p)
-                invested = pos.get("invested_amount", 2000.0)
-
-                trade_record = {
-                    "symbol": sym,
-                    "name": pos.get("name", sym),
-                    "broker": "IQOPTION",
-                    "environment": self.broker_wallets.get("IQOPTION", {}).get("environment", "LIVE_REAL"),
-                    "category": "FOREX",
-                    "side": pos.get("side", "BUY"),
-                    "entry_price": entry_p,
-                    "exit_price": exit_p,
-                    "quantity": pos.get("quantity", 1),
-                    "invested_amount": invested,
-                    "pnl": round(pos.get("current_pnl", 0.0), 2),
-                    "pnl_percent": round(pos.get("current_pnl_percent", 0.0), 2),
-                    "exit_reason": "Cierre confirmado en broker IQ Option (Take Profit / Stop Loss)",
-                    "exit_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                }
-                self.journal.record_trade(trade_record)
-                self.agent._add_thought(
-                    f"✅ OPERACIÓN CERRADA EN IQ OPTION: {sym} finalizó en el broker. Saldo y cupos 100% sincronizados.",
-                    "INFO",
-                    sym,
-                    "📈"
-                )
+            if not hasattr(self, "_zero_pos_counter"):
+                self._zero_pos_counter = 0
+            self._zero_pos_counter += 1
+            if self._zero_pos_counter >= 3:
+                ghost_symbols = [
+                    (sym, pos) for sym, pos in list(self.open_positions.items())
+                    if (pos.get("broker") == "IQOPTION" or pos.get("category") == "FOREX")
+                ]
+                for sym, pos in ghost_symbols:
+                    del self.open_positions[sym]
+                    # Cooldown forzado de 15 minutos en este símbolo para rotación obligatoria
+                    self.last_exit_times[sym] = time.time() + 900.0
+                    self.agent._add_thought(
+                        f"✅ OPERACIÓN CERRADA EN IQ OPTION: {sym} finalizó en el broker. Saldo y cupos 100% sincronizados.",
+                        "INFO",
+                        sym,
+                        "📈"
+                    )
 
         if hasattr(self, "risk_manager"):
             self.risk_manager.current_open_trades = len(self.open_positions)
@@ -1036,8 +1022,9 @@ class RealTimeTradingEngine:
                                     self.cash_balance = b_wal["cash"]
                                     if self.initial_balance <= 0.0:
                                         self.initial_balance = b_wal["initial_balance"]
-                            broker_positions = acc.get("open_positions", [])
-                            self._sync_iqoption_open_positions(broker_positions)
+                            if acc.get("positions_synced"):
+                                broker_positions = acc.get("open_positions", [])
+                                self._sync_iqoption_open_positions(broker_positions)
 
         # 5. Escaneo y Operación Autónoma Continua 24/7
         if self.is_running:
@@ -1240,16 +1227,18 @@ class RealTimeTradingEngine:
         # CONTROL ESTRICTO DE CUPOS: Para IQ Option, NUNCA abrir más de 1 posición simultánea
         if broker_id == "IQOPTION":
             forex_open = [p for p in self.open_positions.values() if p.get("broker") == "IQOPTION" or p.get("category") == "FOREX"]
-            if len(forex_open) >= self.max_open_positions:
+            if len(forex_open) >= 1:
                 return
             if hasattr(self.feed, "iqoption"):
                 b_open = self.feed.iqoption.get_open_positions()
-                if len(b_open) >= self.max_open_positions:
+                if len(b_open) >= 1:
                     return
             now_t = time.time()
-            if hasattr(self, "_last_iqoption_trade_time") and (now_t - getattr(self, "_last_iqoption_trade_time", 0.0) < 60.0):
+            if hasattr(self, "_last_iqoption_trade_time") and (now_t - getattr(self, "_last_iqoption_trade_time", 0.0) < 120.0):
                 return
             self._last_iqoption_trade_time = now_t
+            # Enfriamiento forzado de 15 minutos en este símbolo para obligar a rotar a otros pares
+            self.last_exit_times[symbol] = now_t + 900.0
 
         price = asset["price"]
         quantity = round(actual_investment / price, 4) if price > 0 else 1.0

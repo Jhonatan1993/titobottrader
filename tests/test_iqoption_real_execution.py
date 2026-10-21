@@ -301,8 +301,9 @@ def test_iqoption_sync_purges_ghost_closed_positions():
     }
 
     assert len(engine.open_positions) == 1
-    # Cuando IQ Option reporta que el portafolio tiene 0 posiciones abiertas (se cerró en broker)
-    engine._sync_iqoption_open_positions([])
+    # Requiere 3 verificaciones consecutivas para blindaje anti-falsos positivos
+    for _ in range(3):
+        engine._sync_iqoption_open_positions([])
 
     # Debe ser purgada de la memoria y cupo liberado
     assert len(engine.open_positions) == 0

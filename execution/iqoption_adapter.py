@@ -133,7 +133,7 @@ class IQOptionAdapter:
             start_t = time.time()
             found_profile = False
             found_positions = False
-            self.open_broker_positions = []
+            parsed_positions = []
 
             while time.time() - start_t < 4.0:
                 raw = ws.recv()
@@ -162,7 +162,6 @@ class IQOptionAdapter:
                     elif msg_name == "positions" or data.get("request_id") == req_pos_id:
                         found_positions = True
                         p_list = data.get("msg", {}).get("positions", [])
-                        parsed_positions = []
                         for p in p_list:
                             ev = p.get("raw_event", {}).get("marginal_forex_position_changed1", {}) if isinstance(p.get("raw_event"), dict) else p
                             ext_id = str(p.get("external_id") or ev.get("id") or p.get("id") or "")
@@ -182,12 +181,16 @@ class IQOptionAdapter:
                                     "invest": float(p.get("invest") or 0.0),
                                     "open_quote": float(p.get("open_quote") or ev.get("open_quote_ask") or 0.0)
                                 })
-                        self.open_broker_positions = parsed_positions
                     if found_profile and found_positions:
                         break
                 except Exception:
                     pass
             ws.close()
+            if found_positions:
+                self.open_broker_positions = parsed_positions
+                self._positions_synced = True
+            else:
+                self._positions_synced = False
             return found_profile
         except Exception:
             return False
@@ -455,7 +458,8 @@ class IQOptionAdapter:
             "real_balance": round(self.real_amount, 2),
             "currency": self.currency,
             "environment": self.environment,
-            "open_positions": getattr(self, "open_broker_positions", [])
+            "open_positions": getattr(self, "open_broker_positions", []),
+            "positions_synced": getattr(self, "_positions_synced", False)
         }
 
     def get_open_positions(self) -> list:
