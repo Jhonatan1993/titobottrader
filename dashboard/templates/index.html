@@ -4060,8 +4060,6 @@
                 if (sys.max_loss_amount !== undefined) {
                     document.getElementById('modal-max-loss').value = (!sys.max_loss_enabled || sys.max_loss_amount === 0) ? 0 : sys.max_loss_amount;
                 }
-                selectCustomOption('custom-mode-dropdown', 'IQ_CFD', '📈 Modo Forex Tradicional CFD (SL / TP Dinámicos)');
-            }
 
                 // Generar dinámicamente las opciones del selector de Entorno para este broker
                 const currentEnv = brokerInfo.environment || sys.execution_environment || 'PAPER';
