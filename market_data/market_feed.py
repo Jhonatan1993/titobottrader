@@ -266,22 +266,12 @@ AVAILABLE_ASSETS = [
         "volatility": 0.0150,
         "trend_bias": 0.0007
     },
-    # === FOREX & DERIVADOS (IQ Option / Multi-Broker) ===
+    # === FOREX MARGEN CFD (IQ Option / Multi-Broker Oficial) ===
     {
         "symbol": "EURUSD",
         "name": "EUR / USD",
         "category": "FOREX",
         "type": "Euro / Dólar Estadounidense",
-        "icon": "💶",
-        "base_price": 1.0850,
-        "volatility": 0.0035,
-        "trend_bias": 0.0001
-    },
-    {
-        "symbol": "EURUSD-OTC",
-        "name": "EUR / USD (OTC 24/7)",
-        "category": "FOREX",
-        "type": "Euro / Dólar OTC (24/7)",
         "icon": "💶",
         "base_price": 1.0850,
         "volatility": 0.0035,
@@ -298,30 +288,10 @@ AVAILABLE_ASSETS = [
         "trend_bias": 0.0001
     },
     {
-        "symbol": "GBPUSD-OTC",
-        "name": "GBP / USD (OTC 24/7)",
-        "category": "FOREX",
-        "type": "Libra / Dólar OTC (24/7)",
-        "icon": "💷",
-        "base_price": 1.2950,
-        "volatility": 0.0040,
-        "trend_bias": 0.0001
-    },
-    {
         "symbol": "USDJPY",
         "name": "USD / JPY",
         "category": "FOREX",
         "type": "Dólar / Yen Japonés",
-        "icon": "💴",
-        "base_price": 152.30,
-        "volatility": 0.0045,
-        "trend_bias": 0.0001
-    },
-    {
-        "symbol": "USDJPY-OTC",
-        "name": "USD / JPY (OTC 24/7)",
-        "category": "FOREX",
-        "type": "Dólar / Yen OTC (24/7)",
         "icon": "💴",
         "base_price": 152.30,
         "volatility": 0.0045,
@@ -338,30 +308,10 @@ AVAILABLE_ASSETS = [
         "trend_bias": 0.0001
     },
     {
-        "symbol": "AUDUSD-OTC",
-        "name": "AUD / USD (OTC 24/7)",
-        "category": "FOREX",
-        "type": "AUD / USD OTC (24/7)",
-        "icon": "🇦🇺",
-        "base_price": 0.6550,
-        "volatility": 0.0038,
-        "trend_bias": 0.0001
-    },
-    {
         "symbol": "USDCAD",
         "name": "USD / CAD",
         "category": "FOREX",
         "type": "Dólar / Dólar Canadiense",
-        "icon": "🇨🇦",
-        "base_price": 1.3850,
-        "volatility": 0.0035,
-        "trend_bias": 0.0001
-    },
-    {
-        "symbol": "USDCAD-OTC",
-        "name": "USD / CAD (OTC 24/7)",
-        "category": "FOREX",
-        "type": "USD / CAD OTC (24/7)",
         "icon": "🇨🇦",
         "base_price": 1.3850,
         "volatility": 0.0035,
@@ -378,30 +328,10 @@ AVAILABLE_ASSETS = [
         "trend_bias": 0.0001
     },
     {
-        "symbol": "USDCHF-OTC",
-        "name": "USD / CHF (OTC 24/7)",
-        "category": "FOREX",
-        "type": "USD / CHF OTC (24/7)",
-        "icon": "🇨🇭",
-        "base_price": 0.8650,
-        "volatility": 0.0034,
-        "trend_bias": 0.0001
-    },
-    {
         "symbol": "NZDUSD",
         "name": "NZD / USD",
         "category": "FOREX",
         "type": "Dólar Neozelandés / USD",
-        "icon": "🇳🇿",
-        "base_price": 0.6050,
-        "volatility": 0.0040,
-        "trend_bias": 0.0001
-    },
-    {
-        "symbol": "NZDUSD-OTC",
-        "name": "NZD / USD (OTC 24/7)",
-        "category": "FOREX",
-        "type": "NZD / USD OTC (24/7)",
         "icon": "🇳🇿",
         "base_price": 0.6050,
         "volatility": 0.0040,
@@ -418,16 +348,6 @@ AVAILABLE_ASSETS = [
         "trend_bias": 0.0001
     },
     {
-        "symbol": "EURGBP-OTC",
-        "name": "EUR / GBP (OTC 24/7)",
-        "category": "FOREX",
-        "type": "EUR / GBP OTC (24/7)",
-        "icon": "🇪🇺",
-        "base_price": 0.8350,
-        "volatility": 0.0028,
-        "trend_bias": 0.0001
-    },
-    {
         "symbol": "EURJPY",
         "name": "EUR / JPY",
         "category": "FOREX",
@@ -438,30 +358,10 @@ AVAILABLE_ASSETS = [
         "trend_bias": 0.0001
     },
     {
-        "symbol": "EURJPY-OTC",
-        "name": "EUR / JPY (OTC 24/7)",
-        "category": "FOREX",
-        "type": "EUR / JPY OTC (24/7)",
-        "icon": "🇯🇵",
-        "base_price": 165.20,
-        "volatility": 0.0050,
-        "trend_bias": 0.0001
-    },
-    {
         "symbol": "GBPJPY",
         "name": "GBP / JPY",
         "category": "FOREX",
         "type": "Libra / Yen Japonés",
-        "icon": "🇬🇧",
-        "base_price": 197.80,
-        "volatility": 0.0065,
-        "trend_bias": 0.0001
-    },
-    {
-        "symbol": "GBPJPY-OTC",
-        "name": "GBP / JPY (OTC 24/7)",
-        "category": "FOREX",
-        "type": "GBP / JPY OTC (24/7)",
         "icon": "🇬🇧",
         "base_price": 197.80,
         "volatility": 0.0065,
@@ -845,24 +745,44 @@ class MultiAssetMarketFeed:
         num_bars = 90
         candles = []
         start_time = (now // 60 - num_bars) * 60
-        dec = 4 if current_p < 1.0 else (2 if current_p < 1000 else 1)
-        p = current_p * (1.0 - (random.uniform(-0.012, 0.015)))
+        
+        # Precisión decimal rigurosa según categoría financiera
+        if item.get("category") == "FOREX":
+            dec = 3 if "JPY" in sym else 5
+            c_volat = 0.00025 if "JPY" not in sym else 0.00035
+            p = current_p * (1.0 - (random.uniform(-0.0015, 0.0020)))
+        elif current_p < 1.0:
+            dec = 4
+            c_volat = volat
+            p = current_p * (1.0 - (random.uniform(-0.012, 0.015)))
+        elif current_p < 20.0:
+            dec = 3
+            c_volat = volat
+            p = current_p * (1.0 - (random.uniform(-0.012, 0.015)))
+        elif current_p < 1000:
+            dec = 2
+            c_volat = volat
+            p = current_p * (1.0 - (random.uniform(-0.012, 0.015)))
+        else:
+            dec = 1
+            c_volat = volat
+            p = current_p * (1.0 - (random.uniform(-0.012, 0.015)))
 
         for i in range(num_bars):
             bar_time = start_time + i * 60
             drift = (current_p - p) / max(1, num_bars - i)
-            ret = random.gauss(drift / max(p, 1e-4), volat * 0.4)
+            ret = random.gauss(drift / max(p, 1e-4), c_volat * 0.4)
             bar_open = round(p, dec)
-            p = max(0.0001, p * (1 + ret))
+            p = max(0.00001, p * (1 + ret))
             if i == num_bars - 1:
                 p = current_p
             bar_close = round(p, dec)
 
-            high_wiggle = abs(random.gauss(0, volat * 0.35)) * max(bar_open, bar_close)
-            low_wiggle = abs(random.gauss(0, volat * 0.35)) * min(bar_open, bar_close)
+            high_wiggle = abs(random.gauss(0, c_volat * 0.35)) * max(bar_open, bar_close)
+            low_wiggle = abs(random.gauss(0, c_volat * 0.35)) * min(bar_open, bar_close)
             bar_high = round(max(bar_open, bar_close) + high_wiggle, dec)
-            bar_low = round(max(0.0001, min(bar_open, bar_close) - low_wiggle), dec)
-            bar_vol = round(random.uniform(500, 15000) * (current_p if current_p < 5 else 1.0), 2)
+            bar_low = round(max(0.00001, min(bar_open, bar_close) - low_wiggle), dec)
+            bar_vol = round(random.uniform(500, 15000), 1)
 
             candles.append({
                 "time": bar_time,
@@ -970,9 +890,7 @@ class MultiAssetMarketFeed:
     def get_all_assets(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
         is_weekend = datetime.datetime.now(datetime.timezone.utc).weekday() >= 5
         all_items = list(self.assets.values())
-        if is_weekend:
-            # En fin de semana, Forex bancario mundial cerrado; operar exclusivamente pares OTC 24/7
-            all_items = [a for a in all_items if not (a.get("category") == "FOREX" and "-OTC" not in a.get("symbol", ""))]
+
         if not category or category == "ALL":
             return all_items
         if category == "TRADFI":

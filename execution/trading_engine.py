@@ -1265,7 +1265,7 @@ class RealTimeTradingEngine:
                 symbol=symbol,
                 side=cfd_side,
                 amount=actual_investment,
-                leverage=25,
+                leverage=50,
                 stop_loss_pct=sl_pct,
                 take_profit_pct=tp_pct
             )
@@ -1278,7 +1278,7 @@ class RealTimeTradingEngine:
                 symbol = actual_sym
                 mode_str = "REAL" if is_broker_live else "DEMO/PRACTICE"
                 dir_label = "🔻 CORTO (SELL)" if cfd_side == "sell" else "🟢 LARGO (BUY)"
-                self.agent._add_thought(f"📈 ORDEN FOREX CFD IQ OPTION ({mode_str}): {dir_label} en {symbol} (ID: {oid}) x25. SL: {sl_pct}% | TP: {tp_pct}%.", "INFO", symbol, "⚡")
+                self.agent._add_thought(f"📈 ORDEN FOREX CFD IQ OPTION ({mode_str}): {dir_label} en {symbol} (ID: {oid}) x50. SL: {sl_pct}% | TP: {tp_pct}%.", "INFO", symbol, "⚡")
             else:
                 err_msg = str(iq_res.get('error', 'Error desconocido'))
                 is_closed_or_suspended = any(k in err_msg.lower() for k in ["not available", "suspended", "not found", "closed"])

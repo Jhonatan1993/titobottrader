@@ -1859,11 +1859,11 @@
                     <div class="view-nav-tabs">
                         <button class="view-tab-btn active" id="view-tab-chart" onclick="switchMainView('chart')">
                             <span>📈 Gráfica en Vivo</span>
-                            <span class="view-tab-badge mono" id="ws-badge-chart">BTC · 1m</span>
+                            <span class="view-tab-badge mono" id="ws-badge-chart">EURUSD · 1m</span>
                         </button>
                         <button class="view-tab-btn" id="view-tab-radar" onclick="switchMainView('radar')">
                             <span>🏢 Radar de Activos IA</span>
-                            <span class="view-tab-badge mono" id="ws-badge-radar">24 Activos</span>
+                            <span class="view-tab-badge mono" id="ws-badge-radar">20 Activos</span>
                         </button>
                         <button class="view-tab-btn" id="view-tab-macro" onclick="switchMainView('macro')">
                             <span>🌐 Macro & Noticias en Vivo</span>
@@ -1891,14 +1891,14 @@
                         <div class="chart-top-bar">
                             <div class="chart-asset-info">
                                 <div style="display:flex; align-items:center; gap:8px;">
-                                    <span id="chart-asset-icon" style="font-size:24px;">🪙</span>
+                                    <span id="chart-asset-icon" style="font-size:24px;">💶</span>
                                     <div>
                                         <div style="display:flex; align-items:center; gap:6px;">
-                                            <span id="chart-asset-symbol" style="font-size:16px; font-weight:800; font-family:var(--font-mono); letter-spacing:0.5px;">BTC</span>
-                                            <span id="chart-asset-badge" class="cat-chip cat-crypto">🪙 Cripto</span>
+                                            <span id="chart-asset-symbol" style="font-size:16px; font-weight:800; font-family:var(--font-mono); letter-spacing:0.5px;">EURUSD</span>
+                                            <span id="chart-asset-badge" class="cat-chip cat-forex">💱 Forex</span>
                                             <span id="chart-feed-badge" class="mono" style="font-size:9.5px; padding:1px 6px; border-radius:3px; background:rgba(16,185,129,0.15); color:var(--emerald-win); border:1px solid rgba(16,185,129,0.3);">● EN VIVO</span>
                                         </div>
-                                        <div id="chart-asset-name" style="font-size:11px; color:var(--text-muted); font-weight:500;">Bitcoin / USD</div>
+                                        <div id="chart-asset-name" style="font-size:11px; color:var(--text-muted); font-weight:500;">EUR / USD</div>
                                     </div>
                                 </div>
                                 
@@ -1987,7 +1987,7 @@
                             </div>
 
                             <div class="filter-controls" style="display:flex; align-items:center; gap:8px;">
-                                <input type="text" id="radar-search" class="search-input" placeholder="🔍 Buscar empresa (ej: Apple, Nvidia, BTC)..." oninput="renderMarketTable()" style="background:#080D1A; border:1px solid rgba(255,255,255,0.12); border-radius:6px; color:#F8FAFC; padding:6px 12px; font-size:11px; width:250px;">
+                                <input type="text" id="radar-search" class="search-input" placeholder="🔍 Buscar activo (ej: EURUSD, GBPUSD, NVDA)..." oninput="renderMarketTable()" style="background:#080D1A; border:1px solid rgba(255,255,255,0.12); border-radius:6px; color:#F8FAFC; padding:6px 12px; font-size:11px; width:250px;">
                                 <button class="btn-action btn-ghost" onclick="recalibrateLearner()" style="padding:6px 12px; font-size:11px;">🧠 Recalibrar IA</button>
                             </div>
                         </div>
@@ -2517,12 +2517,12 @@
         <div class="modal-card" style="width:95vw; max-width:1440px; height:88vh; display:flex; flex-direction:column; padding:16px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--border-subtle); padding-bottom:10px;">
                 <div style="display:flex; align-items:center; gap:12px;">
-                    <span id="fs-chart-icon" style="font-size:26px;">🪙</span>
+                    <span id="fs-chart-icon" style="font-size:26px;">💶</span>
                     <div>
                         <div style="display:flex; align-items:center; gap:8px;">
-                            <span id="fs-chart-symbol" style="font-size:18px; font-weight:800; font-family:var(--font-mono);">BTC</span>
-                            <span id="fs-chart-name" style="font-size:12px; color:var(--text-muted);">Bitcoin / USD</span>
-                            <span id="fs-chart-badge" class="cat-chip cat-crypto">🪙 Cripto</span>
+                            <span id="fs-chart-symbol" style="font-size:18px; font-weight:800; font-family:var(--font-mono);">EURUSD</span>
+                            <span id="fs-chart-name" style="font-size:12px; color:var(--text-muted);">EUR / USD</span>
+                            <span id="fs-chart-badge" class="cat-chip cat-forex">💱 Forex</span>
                         </div>
                     </div>
                     <div style="display:flex; align-items:baseline; gap:8px; margin-left:14px;">
@@ -2785,7 +2785,9 @@
         }
 
         function updateOHLCLegend(open, high, low, close, vol) {
-            const dec = close < 1 ? 4 : 2;
+            const isForex = ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD', 'EURGBP', 'EURJPY', 'GBPJPY'].includes(currentCandleSymbol) || currentCandleSymbol.includes('USD') || currentCandleSymbol.includes('EUR') || currentCandleSymbol.includes('GBP');
+            const isJpy = currentCandleSymbol.includes('JPY');
+            const dec = isForex ? (isJpy ? 3 : 5) : (close < 1 ? 4 : 2);
             const fmt = v => typeof v === 'number' ? `$${v.toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec})}` : '$0.00';
             
             const oEl = document.getElementById('ohlc-open');
@@ -2827,7 +2829,30 @@
                 const posStripEl = document.getElementById('chart-position-strip');
                 const posLegendEl = document.getElementById('chart-position-legend');
 
-                const dec = data.price < 1 ? 4 : 2;
+                const isForex = (data.category === 'FOREX') || ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD', 'EURGBP', 'EURJPY', 'GBPJPY'].includes(data.symbol);
+                const isJpy = data.symbol && data.symbol.includes('JPY');
+                const dec = isForex ? (isJpy ? 3 : 5) : (data.price < 1 ? 4 : 2);
+                const minMove = isForex ? (isJpy ? 0.001 : 0.00001) : 0.01;
+
+                if (candleSeries && typeof candleSeries.applyOptions === 'function') {
+                    candleSeries.applyOptions({
+                        priceFormat: {
+                            type: 'price',
+                            precision: dec,
+                            minMove: minMove
+                        }
+                    });
+                }
+                if (fsCandleSeries && typeof fsCandleSeries.applyOptions === 'function') {
+                    fsCandleSeries.applyOptions({
+                        priceFormat: {
+                            type: 'price',
+                            precision: dec,
+                            minMove: minMove
+                        }
+                    });
+                }
+
                 if (symEl) symEl.innerText = data.symbol;
                 if (nameEl) nameEl.innerText = data.name;
                 if (iconEl) iconEl.innerText = data.icon || '📈';
@@ -3021,7 +3046,9 @@
             if (!asset) return;
 
             const p = asset.price;
-            const dec = p < 1 ? 4 : 2;
+            const isForex = (asset.category === 'FOREX') || ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD', 'EURGBP', 'EURJPY', 'GBPJPY'].includes(currentCandleSymbol);
+            const isJpy = currentCandleSymbol.includes('JPY');
+            const dec = isForex ? (isJpy ? 3 : 5) : (p < 1 ? 4 : 2);
 
             const priceEl = document.getElementById('chart-current-price');
             const chgEl = document.getElementById('chart-change-pill');
@@ -3290,12 +3317,26 @@
             const priceEl = document.getElementById('fs-chart-price');
             const chgEl = document.getElementById('fs-chart-change');
 
-            const dec = data.price < 1 ? 4 : 2;
+            const isForex = (data.category === 'FOREX') || ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD', 'EURGBP', 'EURJPY', 'GBPJPY'].includes(data.symbol);
+            const isJpy = data.symbol && data.symbol.includes('JPY');
+            const dec = isForex ? (isJpy ? 3 : 5) : (data.price < 1 ? 4 : 2);
             if (iconEl) iconEl.innerText = data.icon || '📈';
             if (symEl) symEl.innerText = data.symbol;
             if (nameEl) nameEl.innerText = data.name;
             if (badgeEl) {
-                badgeEl.innerText = (data.category === 'CRYPTO') ? '🪙 Cripto' : (data.category === 'ETF' ? '📊 ETF' : '🏛️ TradFi');
+                if (data.category === 'FOREX') {
+                    badgeEl.className = 'cat-chip cat-forex';
+                    badgeEl.innerText = '💱 Forex';
+                } else if (data.category === 'CRYPTO') {
+                    badgeEl.className = 'cat-chip cat-crypto';
+                    badgeEl.innerText = '🪙 Cripto';
+                } else if (data.category === 'ETF') {
+                    badgeEl.className = 'cat-chip cat-etf';
+                    badgeEl.innerText = '📊 ETF';
+                } else {
+                    badgeEl.className = 'cat-chip cat-tradfi';
+                    badgeEl.innerText = '🏛️ TradFi';
+                }
             }
             if (priceEl) priceEl.innerText = `$${(data.price || 0).toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec})}`;
             if (chgEl) {

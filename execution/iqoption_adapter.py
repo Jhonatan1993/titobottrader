@@ -496,15 +496,33 @@ class IQOptionAdapter:
             ws.send(json.dumps(auth_msg))
             ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
 
-            # Esperar confirmación de handshake antes de enviar la orden
+            # Esperar confirmación de handshake y perfil antes de enviar la orden
             auth_start = time.time()
+            pending_order_data = None
             while time.time() - auth_start < 2.5:
                 raw = ws.recv()
                 if not raw:
                     continue
                 try:
                     d = json.loads(raw)
-                    if d.get("name") in ["authenticated", "profile", "timeSync", "front"]:
+                    d_name = d.get("name")
+                    if d_name == "profile":
+                        msg = d.get("msg", {})
+                        if isinstance(msg, dict):
+                            self.profile_data.update(msg)
+                            self.currency = msg.get("currency", self.currency)
+                            for b in msg.get("balances", []):
+                                if b.get("type") == 1:
+                                    self.real_balance_id = b.get("id")
+                                    self.real_amount = round(float(b.get("amount", 0.0)) + float(b.get("bonus_amount", 0.0)), 2)
+                                elif b.get("type") == 4:
+                                    self.practice_balance_id = b.get("id")
+                                    self.practice_amount = round(float(b.get("amount", 0.0)) + float(b.get("bonus_amount", 0.0)), 2)
+                        break
+                    elif d_name in ["authenticated", "timeSync", "front"]:
+                        break
+                    elif d_name in ["order-placed-temp", "order-placed", "position-changed"]:
+                        pending_order_data = d
                         break
                 except Exception:
                     pass
@@ -512,9 +530,16 @@ class IQOptionAdapter:
             ws.send(json.dumps({"name": "setOptions", "msg": {"sendResults": True}, "request_id": "set_opts"}))
 
             req_id = f"tito_{int(time.time() * 1000)}"
-            target_balance = self.real_balance_id if self.environment == "LIVE_REAL" else self.practice_balance_id
+            if self.environment == "LIVE_REAL":
+                target_balance = self.real_balance_id or self.active_balance_id
+            else:
+                target_balance = self.practice_balance_id or self.active_balance_id
 
-            # Enviar place-order-temp para Forex Margen CFD (100% Forex sin expiración de tiempo, con Stop-Loss y Take-Profit)
+            order_leverage = int(leverage) if leverage else 25
+
+            # Enviar place-order-temp para Forex Margen CFD (100% Forex sin expiración de tiempo)
+            # En IQ Option CFD, stop_lose_value = 95 representa parada de protección de margen al 95% de la inversión,
+            # mientras que el motor de TitoBot gestiona activamente la salida en pips en tiempo real.
             cfd_payload = {
                 "name": "sendMessage",
                 "request_id": req_id,
@@ -545,16 +570,34 @@ class IQOptionAdapter:
             # 3. Leer respuesta con timeout de 6 segundos
             start_wait = time.time()
             while time.time() - start_wait < 6.0:
-                raw_resp = ws.recv()
-                if not raw_resp:
-                    continue
+                if pending_order_data:
+                    data = pending_order_data
+                    pending_order_data = None
+                else:
+                    raw_resp = ws.recv()
+                    if not raw_resp:
+                        continue
+                    try:
+                        data = json.loads(raw_resp)
+                    except Exception:
+                        continue
+
                 try:
-                    data = json.loads(raw_resp)
                     msg_name = data.get("name", "")
                     msg_body = data.get("msg", {})
                     st = data.get("status")
                     req = data.get("request_id")
                     
+                    # Detección explícita de rechazo / error por parte de IQ Option
+                    if (st and st != 2000) or (isinstance(msg_body, dict) and ("message" in msg_body or "reason" in msg_body or msg_body.get("is_successful") is False)):
+                        err_text = ""
+                        if isinstance(msg_body, dict):
+                            err_text = msg_body.get("message") or msg_body.get("reason") or msg_body.get("error")
+                        if not err_text:
+                            err_text = data.get("message") or data.get("error") or f"Error status {st}"
+                        result = {"success": False, "error": f"Rechazado por IQ Option Margen CFD: {err_text}"}
+                        break
+
                     if st == 2000 or msg_name in ["order-placed-temp", "order-placed", "position-changed", "order-filled"]:
                         order_id = str(msg_body.get("id") or msg_body.get("position_id") or msg_body.get("order_id") or req or req_id)
                         result = {
@@ -775,16 +818,21 @@ class IQOptionAdapter:
                 "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
             ]
             ws = websocket.create_connection(ws_url, header=headers, timeout=5, sslopt={"cert_reqs": ssl.CERT_NONE})
+            ws.send(json.dumps({
+                "name": "authenticate",
+                "msg": {"ssid": self.ssid, "protocol": 3, "session_id": "", "client_session_id": ""},
+                "request_id": f"auth_candles_{int(time.time() * 1000)}"
+            }))
             ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
             
             auth_start = time.time()
-            while time.time() - auth_start < 1.5:
+            while time.time() - auth_start < 2.0:
                 raw = ws.recv()
                 if not raw:
                     continue
                 try:
                     d = json.loads(raw)
-                    if d.get("name") in ["profile", "timeSync", "front"]:
+                    if d.get("name") in ["authenticated", "profile", "timeSync", "front"]:
                         break
                 except Exception:
                     pass
