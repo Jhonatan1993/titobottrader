@@ -128,6 +128,7 @@ class RealTimeTradingEngine:
         self.open_positions: Dict[str, Dict[str, Any]] = {}
         self.equity_history: List[Dict[str, Any]] = []
         self.last_exit_times: Dict[str, float] = {}
+        self._broker_order_failure_cooldown: Dict[str, float] = {}
 
         # Sincronización exclusiva con IQ Option según entorno (Paper vs Real)
         if hasattr(self.feed, "iqoption"):
@@ -1059,11 +1060,15 @@ class RealTimeTradingEngine:
             min_cash = 2000.0 if is_cop else 1.0
 
             allowed_categories = wallet.get("allowed_categories", ["FOREX", "OPTIONS", "CFD"])
-            # Máximo 1 sola operación concurrente en IQ Option (Elimina el riesgo de abrir 3 o 4 operaciones a la vez)
-            max_positions = 1 if b_id == "IQOPTION" else 3
+            # Límite estricto de exposición: máximo 1 sola posición activa a la vez
+            max_positions = 1
             broker_positions = self.get_broker_positions(b_id)
 
             if len(broker_positions) >= max_positions or wallet.get("cash", 0.0) < min_cash:
+                continue
+
+            # Pausa de enfriamiento preventiva si hubo un fallo reciente de orden en este broker
+            if time.time() < self._broker_order_failure_cooldown.get(b_id, 0.0):
                 continue
 
             candidates = []
@@ -1173,10 +1178,6 @@ class RealTimeTradingEngine:
                     self.agent._add_thought(f"🛡️ Gestión de riesgo: Entrada en {symbol} pausada por límites operativos.", "INFO", symbol, "🛡️")
                 return
 
-        wallet["cash"] = round(wallet["cash"] - actual_investment, 2)
-        if broker_id == self.active_broker:
-            self.cash_balance = wallet["cash"]
-
         stop_loss = decision_data.get("stop_loss", round(price * 0.975, 2))
         take_profit = decision_data.get("take_profit", round(price * 1.045, 2))
 
@@ -1229,12 +1230,12 @@ class RealTimeTradingEngine:
                     tp_ratio = (take_profit / price) if price > 0 else 1.020
                     position["stop_loss"] = round(real_fill_price * sl_ratio, 2)
                     position["take_profit"] = round(real_fill_price * tp_ratio, 2)
+                wallet["cash"] = round(wallet["cash"] - actual_investment, 2)
+                if broker_id == self.active_broker:
+                    self.cash_balance = wallet["cash"]
                 self.agent._add_thought(f"🔥 ORDEN REAL BINANCE: Compra ejecutada en Spot de {position['quantity']} {symbol} por ${position['invested_amount']:.2f} USDT.", "WARNING", symbol, "⚡")
             else:
                 self.agent._add_thought(f"⚠️ Error orden real Binance: {real_res.get('error')}", "WARNING", symbol, "🛑")
-                wallet["cash"] = round(wallet["cash"] + actual_investment, 2)
-                if broker_id == self.active_broker:
-                    self.cash_balance = wallet["cash"]
                 return
 
         # Enrutamiento de orden en Alpaca (Paper o Real) con idempotencia client_order_id
@@ -1243,21 +1244,20 @@ class RealTimeTradingEngine:
             if order_res.get("success"):
                 cid = order_res.get("client_order_id", "")
                 position["broker_order_id"] = cid
+                wallet["cash"] = round(wallet["cash"] - actual_investment, 2)
+                if broker_id == self.active_broker:
+                    self.cash_balance = wallet["cash"]
                 self.agent._add_thought(f"🏛️ ORDEN ALPACA ENVIADA: Compra de {quantity} {symbol} en Wall Street (ID: {cid}).", "INFO", symbol, "⚡")
             else:
                 self.agent._add_thought(f"⚠️ Error orden Alpaca: {order_res.get('error')}", "WARNING", symbol, "🛑")
-                if self.broker_wallets.get("ALPACA", {}).get("environment") == "LIVE_REAL":
-                    wallet["cash"] = round(wallet["cash"] + actual_investment, 2)
-                    if broker_id == self.active_broker:
-                        self.cash_balance = wallet["cash"]
-                    return
+                return
 
         # Enrutamiento de orden en IQ Option (Paper o Real) - Forex CFD
         if broker_id == "IQOPTION" and hasattr(self.feed, "iqoption"):
             pos_side = position.get("side", "BUY_LONG")
             cfd_side = "sell" if pos_side in ["PUT", "SELL", "SELL_SHORT"] else "buy"
-            sl_pct = 1.5
-            tp_pct = 3.0
+            sl_pct = 95.0
+            tp_pct = 200.0
             if price > 0 and stop_loss > 0 and take_profit > 0:
                 sl_pct = round(abs(price - stop_loss) / price * 100, 2)
                 tp_pct = round(abs(take_profit - price) / price * 100, 2)
@@ -1278,12 +1278,17 @@ class RealTimeTradingEngine:
                 symbol = actual_sym
                 mode_str = "REAL" if is_broker_live else "DEMO/PRACTICE"
                 dir_label = "🔻 CORTO (SELL)" if cfd_side == "sell" else "🟢 LARGO (BUY)"
+                # Deducir saldo ÚNICAMENTE tras confirmación real del broker
+                wallet["cash"] = round(wallet["cash"] - actual_investment, 2)
+                if broker_id == self.active_broker:
+                    self.cash_balance = wallet["cash"]
                 self.agent._add_thought(f"📈 ORDEN FOREX CFD IQ OPTION ({mode_str}): {dir_label} en {symbol} (ID: {oid}) x50. SL: {sl_pct}% | TP: {tp_pct}%.", "INFO", symbol, "⚡")
             else:
                 err_msg = str(iq_res.get('error', 'Error desconocido'))
                 is_closed_or_suspended = any(k in err_msg.lower() for k in ["not available", "suspended", "not found", "closed"])
                 cooldown_dur = 600.0 if is_closed_or_suspended else 120.0
                 self.last_exit_times[symbol] = time.time() + cooldown_dur
+                self._broker_order_failure_cooldown[broker_id] = time.time() + 30.0
                 self.agent.learner.penalize(symbol, penalty=30.0)
 
                 if is_closed_or_suspended:
@@ -1291,10 +1296,14 @@ class RealTimeTradingEngine:
                 else:
                     self.agent._add_thought(f"🛑 Error en broker IQ Option: {err_msg}. Operación abortada.", "WARNING", symbol, "🛑")
 
-                wallet["cash"] = round(wallet["cash"] + actual_investment, 2)
-                if broker_id == self.active_broker:
-                    self.cash_balance = wallet["cash"]
+                # Cero saldo restado previamente: no hay necesidad de reembolsos que alteren la vista del usuario
                 return
+
+        # Deducción para brokers puramente simulados
+        if broker_id not in ["BINANCE", "ALPACA", "IQOPTION"]:
+            wallet["cash"] = round(wallet["cash"] - actual_investment, 2)
+            if broker_id == self.active_broker:
+                self.cash_balance = wallet["cash"]
 
         self.open_positions[symbol] = position
         if hasattr(self, "risk_manager"):

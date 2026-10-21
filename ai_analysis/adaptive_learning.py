@@ -245,6 +245,12 @@ class AdaptiveLearningEngine:
                 del self.cooldowns[symbol]
         return False
 
+    def penalize(self, symbol: str, penalty: float = 30.0, cooldown_seconds: float = 120.0):
+        """Aplica una penalización temporal de enfriamiento y ajuste a un activo en falla."""
+        self.cooldowns[symbol] = time.time() + cooldown_seconds
+        if symbol in self.asset_stats:
+            self.asset_stats[symbol]["safe_kelly_pct"] = max(5.0, self.asset_stats[symbol].get("safe_kelly_pct", 20.0) * 0.8)
+
     def clear_cooldown(self, symbol: Optional[str] = None):
         """Permite limpiar el cooldown manualmente o para todos los activos."""
         if symbol:

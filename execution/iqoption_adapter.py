@@ -536,6 +536,7 @@ class IQOptionAdapter:
                 target_balance = self.practice_balance_id or self.active_balance_id
 
             order_leverage = int(leverage) if leverage else 25
+            target_bal_id = int(target_balance) if target_balance and str(target_balance).isdigit() else target_balance
 
             # Enviar place-order-temp para Forex Margen CFD (100% Forex sin expiración de tiempo)
             # En IQ Option CFD, stop_lose_value = 95 representa parada de protección de margen al 95% de la inversión,
@@ -547,8 +548,8 @@ class IQOptionAdapter:
                     "name": "place-order-temp",
                     "version": "4.0",
                     "body": {
-                        "user_balance_id": target_balance,
-                        "client_platform_id": "9",
+                        "user_balance_id": target_bal_id,
+                        "client_platform_id": 9,
                         "instrument_type": "forex",
                         "instrument_id": clean_sym,
                         "side": cfd_side,
@@ -556,9 +557,9 @@ class IQOptionAdapter:
                         "amount": order_amount,
                         "leverage": order_leverage,
                         "stop_lose_kind": "percent",
-                        "stop_lose_value": float(stop_loss_pct) if stop_loss_pct is not None else 1.5,
+                        "stop_lose_value": float(stop_loss_pct) if stop_loss_pct is not None else 95.0,
                         "take_profit_kind": "percent",
-                        "take_profit_value": float(take_profit_pct) if take_profit_pct is not None else 3.0,
+                        "take_profit_value": float(take_profit_pct) if take_profit_pct is not None else 200.0,
                         "use_trail_stop": False,
                         "auto_margin_call": False,
                         "use_token_for_commission": False
@@ -588,8 +589,12 @@ class IQOptionAdapter:
                     st = data.get("status")
                     req = data.get("request_id")
                     
-                    # Detección explícita de rechazo / error por parte de IQ Option
-                    if (st and st != 2000) or (isinstance(msg_body, dict) and ("message" in msg_body or "reason" in msg_body or msg_body.get("is_successful") is False)):
+                    # 1. Ignorar respuestas de handshake y opciones generales (NO confundir con confirmación de orden)
+                    if req == "set_opts" or msg_name in ["setOptions", "timeSync", "heartbeat", "front"]:
+                        continue
+
+                    # 2. Detección explícita de rechazo / error por parte de IQ Option
+                    if (req == req_id and st and st != 2000) or msg_name in ["order-rejected", "order-error"]:
                         err_text = ""
                         if isinstance(msg_body, dict):
                             err_text = msg_body.get("message") or msg_body.get("reason") or msg_body.get("error")
@@ -598,8 +603,44 @@ class IQOptionAdapter:
                         result = {"success": False, "error": f"Rechazado por IQ Option Margen CFD: {err_text}"}
                         break
 
-                    if st == 2000 or msg_name in ["order-placed-temp", "order-placed", "position-changed", "order-filled"]:
-                        order_id = str(msg_body.get("id") or msg_body.get("position_id") or msg_body.get("order_id") or req or req_id)
+                    if isinstance(msg_body, dict) and (msg_body.get("is_successful") is False or "message" in msg_body or "reason" in msg_body):
+                        err_text = msg_body.get("message") or msg_body.get("reason") or msg_body.get("error")
+                        if err_text:
+                            result = {"success": False, "error": f"Rechazado por IQ Option: {err_text}"}
+                            break
+
+                    if msg_name == "result" and isinstance(msg_body, dict) and msg_body.get("success") is False:
+                        err_reason = str(msg_body.get("reason", "Orden CFD no completada"))
+                        result = {"success": False, "error": f"Rechazado por IQ Option Margen CFD: {err_reason}"}
+                        break
+
+                    if "error" in data:
+                        err_text = str(data.get("error", ""))
+                        if err_text:
+                            result = {"success": False, "error": f"Rechazado por IQ Option: {err_text}"}
+                            break
+
+                    # 3. Confirmación exitosa verificada (con ID de orden real de IQ Option)
+                    real_oid = None
+                    if isinstance(msg_body, dict):
+                        real_oid = msg_body.get("id") or msg_body.get("position_id") or msg_body.get("order_id")
+                    elif isinstance(data.get("data"), dict):
+                        real_oid = data["data"].get("id") or data["data"].get("position_id")
+
+                    if msg_name in ["order-placed-temp", "order-placed", "position-changed", "order-filled"] and real_oid:
+                        result = {
+                            "success": True,
+                            "order_id": str(real_oid),
+                            "symbol": clean_sym,
+                            "side": cfd_side,
+                            "amount": order_amount,
+                            "leverage": order_leverage,
+                            "environment": self.environment,
+                            "status": "FILLED"
+                        }
+                        break
+                    elif req == req_id and st == 2000:
+                        order_id = str(real_oid or req_id)
                         result = {
                             "success": True,
                             "order_id": order_id,
@@ -611,36 +652,19 @@ class IQOptionAdapter:
                             "status": "FILLED"
                         }
                         break
-                    elif msg_name in ["position", "order"] and isinstance(msg_body, dict):
-                        if "message" in msg_body:
-                            err_msg = str(msg_body.get('message', ''))
-                            result = {"success": False, "error": f"Rechazado por IQ Option: {err_msg}"}
-                            break
-                        elif "id" in msg_body:
-                            order_id = str(msg_body.get("id"))
-                            result = {
-                                "success": True,
-                                "order_id": order_id,
-                                "symbol": clean_sym,
-                                "side": cfd_side,
-                                "amount": order_amount,
-                                "leverage": order_leverage,
-                                "environment": self.environment,
-                                "status": "FILLED"
-                            }
-                            break
-
-                    elif msg_name == "result" and isinstance(msg_body, dict):
-                        if msg_body.get("success") is False:
-                            err_reason = str(msg_body.get("reason", "Orden CFD no completada"))
-                            result = {"success": False, "error": f"Rechazado por IQ Option Margen CFD: {err_reason}"}
-                            break
-
-                    elif "error" in data:
-                        err_text = str(data.get("error", ""))
-                        if err_text:
-                            result = {"success": False, "error": f"Rechazado por IQ Option: {err_text}"}
-                            break
+                    elif msg_name in ["position", "order"] and isinstance(msg_body, dict) and msg_body.get("id"):
+                        order_id = str(msg_body.get("id"))
+                        result = {
+                            "success": True,
+                            "order_id": order_id,
+                            "symbol": clean_sym,
+                            "side": cfd_side,
+                            "amount": order_amount,
+                            "leverage": order_leverage,
+                            "environment": self.environment,
+                            "status": "FILLED"
+                        }
+                        break
                 except Exception:
                     pass
 

@@ -75,3 +75,50 @@ def test_iqoption_close_position_cfd():
         # Blindaje: CERO sell-options
         all_names = [m["msg"].get("name") for m in sent_messages if isinstance(m.get("msg"), dict)]
         assert "sell-options" not in all_names
+
+def test_iqoption_set_options_ack_does_not_trigger_false_order_fill():
+    """Verifica que la confirmación de setOptions (status 2000) no sea confundida con una orden ejecutada."""
+    adapter = IQOptionAdapter(ssid="test_ssid_valid", environment="LIVE_REAL")
+    adapter.connected = True
+    adapter.real_amount = 50000.0
+    adapter.balance = 50000.0
+    adapter.real_balance_id = 999123
+
+    mock_ws = MagicMock()
+    mock_ws.recv.side_effect = [
+        '{"name": "authenticated", "msg": true}',
+        '{"name": "setOptions", "request_id": "set_opts", "status": 2000}',
+        '{"name": "order-placed-temp", "request_id": "tito_123", "msg": {"id": 987654321, "status": "filled"}}'
+    ]
+
+    with patch("websocket.create_connection", return_value=mock_ws):
+        res = adapter.submit_order("EURUSD", "BUY", 2000.0, leverage=50)
+        assert res["success"] is True
+        # Debe haber tomado el ID real de la orden (987654321), NUNCA 'set_opts'
+        assert res["order_id"] == "987654321"
+
+def test_trading_engine_failure_cooldown_and_zero_balance_fluctuation():
+    """Verifica que si la orden es rechazada por el broker, el saldo local no sufre deducciones fantasma."""
+    from execution.trading_engine import RealTimeTradingEngine
+
+    engine = RealTimeTradingEngine(initial_balance=26429.61)
+    engine.broker_wallets["IQOPTION"]["cash"] = 26429.61
+    engine.broker_wallets["IQOPTION"]["environment"] = "LIVE_REAL"
+    engine.broker_wallets["IQOPTION"]["cash"] = 26429.61
+    engine.broker_wallets["IQOPTION"]["environment"] = "LIVE_REAL"
+
+    # Simular fallo en IQ Option (ej. mercado cerrado o contrato suspendido)
+    engine.feed.iqoption.submit_order = MagicMock(return_value={"success": False, "error": "Market is closed"})
+
+    asset = {"symbol": "EURUSD", "name": "EUR/USD", "price": 1.0850, "category": "FOREX"}
+    decision = {"decision": "BUY", "confidence": 92, "reason_simple": "Señal fuerte"}
+
+    # Ejecutar compra
+    engine._execute_buy("EURUSD", asset, decision, broker_id="IQOPTION")
+
+    # El saldo NUNCA debió haber bajado ni fluctuado
+    assert engine.broker_wallets["IQOPTION"]["cash"] == 26429.61
+    assert "EURUSD" not in engine.open_positions
+    # El broker debe haber entrado en cooldown de 30s
+    assert engine._broker_order_failure_cooldown.get("IQOPTION", 0) > 0
+

@@ -1820,10 +1820,10 @@
             <div class="summary-stat-col">
                 <span class="stat-label">POSICIONES EN CARTERA</span>
                 <div class="stat-value-row">
-                    <span class="stat-primary-val mono" id="open-pos-count">0 / 5</span>
+                    <span class="stat-primary-val mono" id="open-pos-count">0 / 1</span>
                     <span class="stat-badge mono" style="color:var(--text-secondary); background:rgba(255,255,255,0.06);" id="cooldown-counter">0 Cooldowns</span>
                 </div>
-                <span class="stat-subtext" id="slots-helper-text">0 activas · 5 cupos libres</span>
+                <span class="stat-subtext" id="slots-helper-text">0 activas · 1 cupo libre</span>
             </div>
 
             <div class="summary-stat-col">
@@ -2150,10 +2150,10 @@
                         <div>
                             <div class="panel-title" style="font-size:12.5px; display:flex; align-items:center; gap:6px;">
                                 <span>💼 Posiciones en Cartera</span>
-                                <span class="mono pos-slots-badge" id="rail-open-pos-count">0 / 5 Cupos</span>
+                                <span class="mono pos-slots-badge" id="rail-open-pos-count">0 / 1 Cupo</span>
                             </div>
                             <div style="font-size:9.5px; color:var(--text-muted); margin-top:2px;" id="rail-slots-helper-text">
-                                0 activas · 5 cupos libres (Máx. 5 simultáneas)
+                                0 activas · 1 cupo libre (Máx. 1 controlada)
                             </div>
                         </div>
                             <div style="display:flex; align-items:center; gap:6px;">
@@ -2163,13 +2163,9 @@
                         </div>
                     </div>
 
-                    <!-- Indicador visual de 5 cupos de riesgo simultáneos -->
-                    <div class="slots-visual-bar" id="slots-visual-bar" title="5 cupos de riesgo simultáneo permitidos para proteger el capital">
+                    <!-- Indicador visual de 1 cupo de riesgo controlado -->
+                    <div class="slots-visual-bar" id="slots-visual-bar" title="Máximo 1 operación de riesgo simultáneo permitida para proteger el capital">
                         <div class="slot-pill" title="Cupo 1: Libre"></div>
-                        <div class="slot-pill" title="Cupo 2: Libre"></div>
-                        <div class="slot-pill" title="Cupo 3: Libre"></div>
-                        <div class="slot-pill" title="Cupo 4: Libre"></div>
-                        <div class="slot-pill" title="Cupo 5: Libre"></div>
                     </div>
 
                     <div id="positions-list">
@@ -3858,7 +3854,7 @@
             positions = (positions || []).filter(p => (p.broker || '').toUpperCase() === activeBroker.toUpperCase());
 
             const list = document.getElementById('positions-list');
-            const totalMaxSlots = 5;
+            const totalMaxSlots = 1;
             const openCount = positions.length;
             const freeCount = Math.max(0, totalMaxSlots - openCount);
 
@@ -3876,12 +3872,12 @@
             // Actualizar badge del panel lateral derecho
             const railCountEl = document.getElementById('rail-open-pos-count');
             if (railCountEl) {
-                railCountEl.innerText = `${openCount} / ${totalMaxSlots} Cupos`;
+                railCountEl.innerText = `${openCount} / ${totalMaxSlots} Cupo`;
             }
 
             const railHelperEl = document.getElementById('rail-slots-helper-text');
             if (railHelperEl) {
-                railHelperEl.innerText = `${openCount} activa${openCount === 1 ? '' : 's'} · ${freeCount} cupo${freeCount === 1 ? '' : 's'} libre${freeCount === 1 ? '' : 's'} (Máx. ${totalMaxSlots} simultáneas)`;
+                railHelperEl.innerText = `${openCount} activa${openCount === 1 ? '' : 's'} · ${freeCount} cupo libre (Máx. 1 controlada)`;
             }
 
             // Actualizar barra visual de slots
