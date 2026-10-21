@@ -1,4 +1,10 @@
 id,broker,category,environment,symbol,name,type,quantity,entry_price,exit_price,invested_amount,pnl,pnl_percent,result,reason,opened_at,closed_at,duration
+TR-0696,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,18.43,1.08,1.08,20.0,0.0,0.0,,Parada de Seguridad solicitada exclusivamente para IQ Option,2026-10-21 12:59:05,2026-10-21 12:59:05,2 min
+TR-0695,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,1843.0,1.08,1.08,2000.0,-110.6,-5.53,,🛡️ Stop-Loss defensivo en EURUSD: Preservando capital.,2026-10-21 12:58:33,2026-10-21 12:58:33,2 min
+TR-0694,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,1843.0,1.08,1.09,2000.0,110.6,5.53,,🎯 Take-Profit alcanzado en EURUSD: Objetivo de beneficio cumplido.,2026-10-21 12:58:33,2026-10-21 12:58:33,2 min
+TR-0693,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,18.43,1.08,1.08,20.0,0.0,0.0,,Parada de Seguridad solicitada exclusivamente para IQ Option,2026-10-21 12:57:20,2026-10-21 12:57:20,2 min
+TR-0692,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,1843.0,1.08,1.08,2000.0,-110.6,-5.53,,🛡️ Stop-Loss defensivo en EURUSD: Preservando capital.,2026-10-21 12:56:48,2026-10-21 12:56:48,2 min
+TR-0691,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,1843.0,1.08,1.09,2000.0,110.6,5.53,,🎯 Take-Profit alcanzado en EURUSD: Objetivo de beneficio cumplido.,2026-10-21 12:56:48,2026-10-21 12:56:48,2 min
 TR-0690,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,1843.0,1.08,1.08,2000.0,-110.6,-5.53,,🛡️ Stop-Loss defensivo en EURUSD: Preservando capital.,2026-10-20 16:57:23,2026-10-20 16:57:23,2 min
 TR-0689,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,1843.0,1.08,1.09,2000.0,110.6,5.53,,🎯 Take-Profit alcanzado en EURUSD: Objetivo de beneficio cumplido.,2026-10-20 16:57:23,2026-10-20 16:57:23,2 min
 TR-0688,IQOPTION,FOREX,PAPER,EURUSD,EUR / USD,COMPRA / VENTA,18.43,1.08,1.08,20.0,0.0,0.0,,Parada de Seguridad solicitada exclusivamente para IQ Option,2026-10-20 16:57:21,2026-10-20 16:57:21,2 min

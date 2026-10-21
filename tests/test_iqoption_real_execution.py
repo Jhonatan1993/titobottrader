@@ -234,15 +234,14 @@ def test_iqoption_forex_cfd_websocket_payload_structure():
         msg_body = cfd_msg["msg"]["body"]
 
         # Verificaciones estrictas de Forex CFD:
-        assert cfd_msg["msg"]["name"] == "place-order-temp"
-        assert msg_body["instrument_type"] == "forex"
+        assert cfd_msg["msg"]["name"] == "marginal-forex.place-market-order"
+        assert msg_body["instrument_id"] == "mf.1"
+        assert msg_body["instrument_active_id"] == 1
         assert msg_body["side"] == "buy"
-        assert msg_body["amount"] == 5000.0
-        assert msg_body["leverage"] == 25
-        assert msg_body["stop_lose_kind"] == "percent"
-        assert msg_body["stop_lose_value"] == 1.2
-        assert msg_body["take_profit_kind"] == "percent"
-        assert msg_body["take_profit_value"] == 3.5
+        assert msg_body["count"] == "100"
+        assert msg_body["leverage"] == "25"
+        assert msg_body["stop_loss"]["value"] == "1.2"
+        assert msg_body["take_profit"]["value"] == "3.5"
 
         # PROHIBICIÓN ABSOLUTA: Verificar ausencia de cualquier vestigio de binarias
         raw_dump = json.dumps(sent_messages)
@@ -273,7 +272,7 @@ def test_iqoption_close_position_websocket_payload():
         assert res["position_id"] == "999111"
 
         close_msg = next(m for m in sent_messages if m.get("name") == "sendMessage")
-        assert close_msg["msg"]["name"] == "close-position"
+        assert close_msg["msg"]["name"] == "marginal-forex.close-position"
         assert close_msg["msg"]["body"]["position_id"] == 999111
 
         # PROHIBICIÓN ABSOLUTA:

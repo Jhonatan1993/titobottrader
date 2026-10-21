@@ -538,32 +538,31 @@ class IQOptionAdapter:
             order_leverage = int(leverage) if leverage else 25
             target_bal_id = int(target_balance) if target_balance and str(target_balance).isdigit() else target_balance
 
-            # Enviar place-order-temp para Forex Margen CFD (100% Forex sin expiración de tiempo)
-            # En IQ Option CFD, stop_lose_value = 95 representa parada de protección de margen al 95% de la inversión,
-            # mientras que el motor de TitoBot gestiona activamente la salida en pips en tiempo real.
+            # Enviar orden de mercado oficial Quadcode Margen Forex CFD (100% Forex sin expiración de tiempo)
+            # Instrument ID sigue el esquema mf.{active_id} (ej. mf.1 para EURUSD)
+            count_units = "100" # Lote micro mínimo 0.001 (100 unidades de divisa base)
+            order_leverage_str = str(min(order_leverage, 500)) if order_leverage else "500"
+            
+            body_payload = {
+                "side": cfd_side,
+                "user_balance_id": target_bal_id,
+                "count": count_units,
+                "instrument_id": f"mf.{active_id}",
+                "instrument_active_id": active_id,
+                "leverage": order_leverage_str
+            }
+            if stop_loss_pct is not None:
+                body_payload["stop_loss"] = {"value": str(round(float(stop_loss_pct), 2)), "type": "pnl"}
+            if take_profit_pct is not None:
+                body_payload["take_profit"] = {"value": str(round(float(take_profit_pct), 2)), "type": "pnl"}
+
             cfd_payload = {
                 "name": "sendMessage",
                 "request_id": req_id,
                 "msg": {
-                    "name": "place-order-temp",
-                    "version": "4.0",
-                    "body": {
-                        "user_balance_id": target_bal_id,
-                        "client_platform_id": 9,
-                        "instrument_type": "forex",
-                        "instrument_id": clean_sym,
-                        "side": cfd_side,
-                        "type": "market",
-                        "amount": order_amount,
-                        "leverage": order_leverage,
-                        "stop_lose_kind": "percent",
-                        "stop_lose_value": float(stop_loss_pct) if stop_loss_pct is not None else 95.0,
-                        "take_profit_kind": "percent",
-                        "take_profit_value": float(take_profit_pct) if take_profit_pct is not None else 200.0,
-                        "use_trail_stop": False,
-                        "auto_margin_call": False,
-                        "use_token_for_commission": False
-                    }
+                    "name": "marginal-forex.place-market-order",
+                    "version": "1.0",
+                    "body": body_payload
                 }
             }
             ws.send(json.dumps(cfd_payload))
@@ -594,6 +593,26 @@ class IQOptionAdapter:
                         continue
 
                     # 2. Detección explícita de rechazo / error por parte de IQ Option
+                    if msg_name == "market-order-placed" and req == req_id:
+                        if isinstance(msg_body, dict):
+                            if "id" in msg_body:
+                                real_oid = msg_body["id"]
+                                result = {
+                                    "success": True,
+                                    "order_id": str(real_oid),
+                                    "symbol": clean_sym,
+                                    "side": cfd_side,
+                                    "amount": order_amount,
+                                    "leverage": int(order_leverage_str),
+                                    "environment": self.environment,
+                                    "status": "FILLED"
+                                }
+                                break
+                            elif "message" in msg_body:
+                                err_msg = msg_body.get("message", "Error al colocar orden de mercado")
+                                result = {"success": False, "error": f"Rechazado por IQ Option Margen Forex: {err_msg}"}
+                                break
+
                     if (req == req_id and st and st != 2000) or msg_name in ["order-rejected", "order-error"]:
                         err_text = ""
                         if isinstance(msg_body, dict):
@@ -627,27 +646,27 @@ class IQOptionAdapter:
                     elif isinstance(data.get("data"), dict):
                         real_oid = data["data"].get("id") or data["data"].get("position_id")
 
-                    if msg_name in ["order-placed-temp", "order-placed", "position-changed", "order-filled"] and real_oid:
+                    if msg_name in ["market-order-placed", "order-placed-temp", "order-placed", "position-changed", "order-filled"] and real_oid:
                         result = {
                             "success": True,
                             "order_id": str(real_oid),
                             "symbol": clean_sym,
                             "side": cfd_side,
                             "amount": order_amount,
-                            "leverage": order_leverage,
+                            "leverage": int(order_leverage_str),
                             "environment": self.environment,
                             "status": "FILLED"
                         }
                         break
-                    elif req == req_id and st == 2000:
-                        order_id = str(real_oid or req_id)
+                    elif req == req_id and st == 2000 and real_oid:
+                        order_id = str(real_oid)
                         result = {
                             "success": True,
                             "order_id": order_id,
                             "symbol": clean_sym,
                             "side": cfd_side,
                             "amount": order_amount,
-                            "leverage": order_leverage,
+                            "leverage": int(order_leverage_str),
                             "environment": self.environment,
                             "status": "FILLED"
                         }
@@ -716,12 +735,12 @@ class IQOptionAdapter:
             req_id = f"close_{int(time.time() * 1000)}"
             pos_val = int(position_id) if str(position_id).isdigit() else position_id
             
-            # Intento 1: Cierre de posición CFD estándar
+            # Envío de solicitud oficial Quadcode de cierre de posición Forex Margen
             close_msg = {
                 "name": "sendMessage",
                 "request_id": req_id,
                 "msg": {
-                    "name": "close-position",
+                    "name": "marginal-forex.close-position",
                     "version": "1.0",
                     "body": {"position_id": pos_val}
                 }

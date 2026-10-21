@@ -34,20 +34,20 @@ def test_iqoption_protocol3_handshake_and_forex_cfd_order():
         assert len(auth_msgs) == 1
         assert auth_msgs[0]["msg"]["protocol"] == 3
 
-        # Verificar que se envió place-order-temp para forex
-        cfd_msgs = [m for m in sent_messages if isinstance(m.get("msg"), dict) and m["msg"].get("name") == "place-order-temp"]
+        # Verificar que se envió marginal-forex.place-market-order para forex CFD
+        cfd_msgs = [m for m in sent_messages if isinstance(m.get("msg"), dict) and m["msg"].get("name") == "marginal-forex.place-market-order"]
         assert len(cfd_msgs) == 1
         body = cfd_msgs[0]["msg"]["body"]
-        assert body["instrument_type"] == "forex"
-        assert body["instrument_id"] == "EURUSD"
-        assert body["amount"] == 2000.0
+        assert body["instrument_id"] == "mf.1"
+        assert body["instrument_active_id"] == 1
+        assert body["count"] == "100"
 
         # Blindaje: NUNCA debe contener binary-options
         all_names = [m["msg"].get("name") for m in sent_messages if isinstance(m.get("msg"), dict)]
         assert "binary-options.open-option" not in all_names
 
 def test_iqoption_close_position_cfd():
-    """Verifica que close_position utilice el comando oficial close-position sin binarias."""
+    """Verifica que close_position utilice el comando oficial marginal-forex.close-position sin binarias."""
     adapter = IQOptionAdapter(ssid="test_ssid_valid", environment="LIVE_REAL")
     adapter.connected = True
 
@@ -67,8 +67,8 @@ def test_iqoption_close_position_cfd():
         assert res["success"] is True
         assert res["status"] == "CLOSED"
 
-        # Verificar que se envió close-position v1.0
-        close_msgs = [m for m in sent_messages if isinstance(m.get("msg"), dict) and m["msg"].get("name") == "close-position"]
+        # Verificar que se envió marginal-forex.close-position v1.0
+        close_msgs = [m for m in sent_messages if isinstance(m.get("msg"), dict) and m["msg"].get("name") == "marginal-forex.close-position"]
         assert len(close_msgs) == 1
         assert close_msgs[0]["msg"]["body"]["position_id"] == 1499201928
 
