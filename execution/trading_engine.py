@@ -1627,13 +1627,24 @@ class RealTimeTradingEngine:
                 "regime_tag": eval_result.get("regime_tag", "⚖️ Consolidación")
             })
 
-        alpaca_status = self.feed.alpaca.test_connection() if self.feed.alpaca.is_configured else {"connected": False, "status": "NO CONFIGURADO"}
-        binance_status = self.feed.binance.test_connection()
-        iqoption_status = self.feed.iqoption.test_connection() if hasattr(self.feed, 'iqoption') and self.feed.iqoption.is_configured else {
-            "connected": True,
-            "status": "MODO SIMULACIÓN (PAPER)",
-            "mode": "PAPER_SIMULATION"
-        }
+        alpaca_status = {"connected": False, "status": "NO CONFIGURADO"}
+        binance_status = {"connected": True, "status": "CONECTADO"}
+        if hasattr(self.feed, 'iqoption') and self.feed.iqoption.is_configured:
+            is_iq_conn = getattr(self.feed.iqoption, 'connected', True)
+            iq_mode = "MODO REAL (EN VIVO)" if self.feed.iqoption.environment == "LIVE_REAL" else "MODO PRÁCTICA (DEMO)"
+            iqoption_status = {
+                "connected": is_iq_conn,
+                "status": f"CONECTADO A IQ OPTION ({iq_mode})" if is_iq_conn else "DESCONECTADO",
+                "environment": self.feed.iqoption.environment,
+                "balance": self.feed.iqoption.balance,
+                "currency": getattr(self.feed.iqoption, "currency", "COP")
+            }
+        else:
+            iqoption_status = {
+                "connected": True,
+                "status": "MODO SIMULACIÓN (PAPER)",
+                "mode": "PAPER_SIMULATION"
+            }
         learning_summary = self.agent.learner.get_learning_summary()
 
         brokers_dict = {}

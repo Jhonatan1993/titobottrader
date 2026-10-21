@@ -339,7 +339,7 @@ class IQOptionAdapter:
         return False
 
     def test_connection(self) -> Dict[str, Any]:
-        """Prueba la conexión y reporta el estado actual del broker."""
+        """Prueba la conexión y reporta el estado actual del broker sin bloquear el servidor."""
         if not self.is_configured:
             return {
                 "connected": True,
@@ -349,6 +349,27 @@ class IQOptionAdapter:
                 "balance": self.balance
             }
         
+        # Si ya está conectado, responder de inmediato sin llamadas HTTP bloqueantes
+        if self.connected:
+            mode_lbl = "MODO REAL (EN VIVO)" if self.environment == "LIVE_REAL" else "MODO PRÁCTICA (DEMO)"
+            return {
+                "connected": True,
+                "status": f"CONECTADO A IQ OPTION ({mode_lbl})",
+                "environment": self.environment,
+                "balance": self.balance,
+                "currency": self.currency
+            }
+
+        # Control de frecuencia: reintentar conexión como máximo cada 30 segundos
+        now = time.time()
+        if hasattr(self, "_last_connect_time") and (now - self._last_connect_time < 30.0):
+            return {
+                "connected": False,
+                "status": "RECONECTANDO...",
+                "error": getattr(self, "_last_connect_err", "Esperando reintento...")
+            }
+        self._last_connect_time = now
+
         login_res = self.connect()
         if login_res.get("connected"):
             mode_lbl = "MODO REAL (EN VIVO)" if self.environment == "LIVE_REAL" else "MODO PRÁCTICA (DEMO)"
@@ -359,10 +380,11 @@ class IQOptionAdapter:
                 "balance": self.balance,
                 "currency": self.currency
             }
+        self._last_connect_err = login_res.get("error", "Error de conexión")
         return {
             "connected": False,
             "status": "ERROR DE CONEXIÓN",
-            "error": login_res.get("error", "No se pudo conectar a IQ Option")
+            "error": self._last_connect_err
         }
 
     def get_account_balances(self) -> Dict[str, Any]:

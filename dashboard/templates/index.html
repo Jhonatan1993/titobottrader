@@ -2585,7 +2585,7 @@
         let currentActiveBroker = null;
 
         // ==================== ESTADO DEL TERMINAL DE VELAS EN TIEMPO REAL ====================
-        let currentCandleSymbol = 'BTC';
+        let currentCandleSymbol = 'EURUSD';
         let currentCandleTimeframe = '1m';
         let candleChart = null;
         let candleSeries = null;
@@ -3067,6 +3067,8 @@
             if (!assetSymbols.includes(currentCandleSymbol)) {
                 if (currentBroker === 'ALPACA') {
                     currentCandleSymbol = assetSymbols.includes('NVDA') ? 'NVDA' : assetSymbols[0];
+                } else if (currentBroker === 'IQOPTION') {
+                    currentCandleSymbol = assetSymbols.includes('EURUSD') ? 'EURUSD' : assetSymbols[0];
                 } else {
                     currentCandleSymbol = assetSymbols.includes('BTC') ? 'BTC' : assetSymbols[0];
                 }
@@ -3078,7 +3080,9 @@
                 // Activos prioritarios estrictos por broker (CERO mezcla)
                 const brokerPills = (currentBroker === 'ALPACA') 
                     ? ['NVDA', 'TSLA', 'AAPL', 'META', 'AMZN', 'GOOGL', 'MSFT', 'AMD', 'SPY', 'QQQ', 'INTC', 'MU']
-                    : ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA', 'AVAX', 'LINK', 'NEAR'];
+                    : ((currentBroker === 'IQOPTION')
+                        ? ['EURUSD', 'GBPUSD', 'USDJPY', 'EURJPY', 'GBPJPY', 'AUDUSD', 'USDCAD', 'EURGBP']
+                        : ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA', 'AVAX', 'LINK', 'NEAR']);
                 
                 let pillsHtml = '';
                 brokerPills.forEach(sym => {
