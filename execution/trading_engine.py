@@ -329,6 +329,9 @@ class RealTimeTradingEngine:
                 "📈"
             )
 
+        if hasattr(self, "risk_manager"):
+            self.risk_manager.current_open_trades = len(self.open_positions)
+
 
 
     def set_execution_environment(self, env: str, custom_balance: Optional[float] = None, broker: Optional[str] = None) -> Dict[str, Any]:
@@ -852,6 +855,8 @@ class RealTimeTradingEngine:
         self.agent._add_thought(f"🔄 {msg}", "INFO", icon="✨")
 
     def step(self):
+        if hasattr(self, "risk_manager"):
+            self.risk_manager.current_open_trades = len(self.open_positions)
         market_state = self.feed.tick()
 
         # 1. Actualizar posiciones abiertas y gestionar Trailing Stop Adaptativo
@@ -1227,7 +1232,8 @@ class RealTimeTradingEngine:
                 broker_id=broker_id,
                 broker_initial_balance=wallet.get("initial_balance", equity_now),
                 max_loss_amount=b_max_loss,
-                max_loss_enabled=b_loss_enabled
+                max_loss_enabled=b_loss_enabled,
+                current_open_count=len(self.open_positions)
             ):
                 if is_tradfi and self.risk_manager.is_pdt_restricted(current_equity=equity_now):
                     self.agent._add_thought(f"🛡️ ESCUDO FINRA 4210 (PDT): Entrada en {symbol} prevenida para proteger la cuenta de suspensión por Pattern Day Trader (< $25k USD).", "WARNING", symbol, "⚠️")
@@ -1322,7 +1328,7 @@ class RealTimeTradingEngine:
                 symbol=symbol,
                 side=cfd_side,
                 amount=actual_investment,
-                leverage=50,
+                leverage=500,
                 stop_loss_pct=sl_pct,
                 take_profit_pct=tp_pct
             )

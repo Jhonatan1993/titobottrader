@@ -41,10 +41,12 @@ class RiskManager:
         broker_id: Optional[str] = None,
         broker_initial_balance: Optional[float] = None,
         max_loss_amount: Optional[float] = None,
-        max_loss_enabled: bool = False
+        max_loss_enabled: bool = False,
+        current_open_count: Optional[int] = None
     ) -> bool:
-        # 1. Límite de cupos simultáneos
-        if self.current_open_trades >= self.max_open_trades:
+        # 1. Límite de cupos simultáneos (usando el conteo real en memoria si se proporciona)
+        open_count = current_open_count if current_open_count is not None else self.current_open_trades
+        if open_count >= self.max_open_trades:
             return False
             
         # 2. Circuit Breaker de pérdida diaria (aislado por divisa y broker)
