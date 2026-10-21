@@ -275,6 +275,61 @@ class RealTimeTradingEngine:
                 if self.active_broker == "BINANCE":
                     self.initial_balance = base_capital
 
+    def _sync_iqoption_open_positions(self, broker_positions: List[Dict[str, Any]]):
+        """
+        Reconcilia posiciones abiertas en IQ Option para eliminar posiciones fantasma
+        cuando el broker las cierra automáticamente (por Take Profit o Stop Loss).
+        """
+        active_ids = set()
+        active_order_ids = set()
+        for bp in broker_positions:
+            if bp.get("id"):
+                active_ids.add(str(bp["id"]))
+            for oid in bp.get("order_ids", []):
+                active_order_ids.add(str(oid))
+
+        ghost_symbols = []
+        for sym, pos in list(self.open_positions.items()):
+            pos_b = pos.get("broker") or ("IQOPTION" if pos.get("category") == "FOREX" else "")
+            if pos_b == "IQOPTION":
+                pos_id = str(pos.get("broker_order_id") or pos.get("position_id") or "")
+                # Si el broker reporta 0 posiciones abiertas, o este ID no está en las abiertas del broker
+                is_open = (pos_id in active_ids or pos_id in active_order_ids) if len(broker_positions) > 0 else False
+                if not is_open:
+                    ghost_symbols.append((sym, pos))
+
+        for sym, pos in ghost_symbols:
+            del self.open_positions[sym]
+            asset = self.feed.get_asset(sym) or {"price": pos.get("entry_price", 0.0), "name": pos.get("name", sym)}
+            exit_p = asset.get("price", pos.get("entry_price", 0.0))
+            entry_p = pos.get("entry_price", exit_p)
+            invested = pos.get("invested_amount", 2000.0)
+
+            trade_record = {
+                "symbol": sym,
+                "name": pos.get("name", sym),
+                "broker": "IQOPTION",
+                "environment": self.broker_wallets.get("IQOPTION", {}).get("environment", "LIVE_REAL"),
+                "category": "FOREX",
+                "side": pos.get("side", "BUY"),
+                "entry_price": entry_p,
+                "exit_price": exit_p,
+                "quantity": pos.get("quantity", 1),
+                "invested_amount": invested,
+                "pnl": round(pos.get("current_pnl", 0.0), 2),
+                "pnl_percent": round(pos.get("current_pnl_percent", 0.0), 2),
+                "exit_reason": "Cierre confirmado en broker IQ Option (Take Profit / Stop Loss)",
+                "exit_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+            self.journal.record_trade(trade_record)
+            self.agent._add_thought(
+                f"✅ OPERACIÓN CERRADA EN IQ OPTION: {sym} finalizó en el broker. Saldo y cupos 100% sincronizados.",
+                "INFO",
+                sym,
+                "📈"
+            )
+
+
 
     def set_execution_environment(self, env: str, custom_balance: Optional[float] = None, broker: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -553,7 +608,7 @@ class RealTimeTradingEngine:
         b = broker.upper()
         return [
             p for p in self.open_positions.values()
-            if p.get("broker", "BINANCE" if p.get("category") == "CRYPTO" else "ALPACA").upper() == b
+            if (p.get("broker") or ("BINANCE" if p.get("category") == "CRYPTO" else ("IQOPTION" if p.get("category") == "FOREX" else "ALPACA"))).upper() == b
         ]
 
     def get_broker_cash(self, broker: str) -> float:
@@ -941,7 +996,7 @@ class RealTimeTradingEngine:
                             total_eq = float(acc.get("equity", b_wal["initial_balance"]))
                             b_wal["initial_balance"] = max(0.0, round(total_eq - alp_vault, 2))
                 elif b_id == "IQOPTION" and hasattr(self.feed, 'iqoption') and self.feed.iqoption.is_configured:
-                    if (now_sync - self._last_broker_sync.get("IQOPTION", 0.0)) > 10.0:
+                    if (now_sync - self._last_broker_sync.get("IQOPTION", 0.0)) > 4.0:
                         self._last_broker_sync["IQOPTION"] = now_sync
                         acc = self.feed.iqoption.get_account_balances()
                         if acc.get("authenticated"):
@@ -954,6 +1009,8 @@ class RealTimeTradingEngine:
                                     self.cash_balance = b_wal["cash"]
                                     if self.initial_balance <= 0.0:
                                         self.initial_balance = b_wal["initial_balance"]
+                            broker_positions = acc.get("open_positions", [])
+                            self._sync_iqoption_open_positions(broker_positions)
 
         # 5. Escaneo y Operación Autónoma Continua 24/7
         if self.is_running:

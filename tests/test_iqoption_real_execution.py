@@ -280,3 +280,31 @@ def test_iqoption_close_position_websocket_payload():
         assert "binary-options.sell-option" not in raw_dump
         assert "options_ids" not in raw_dump
 
+
+def test_iqoption_sync_purges_ghost_closed_positions():
+    """Garantiza que si una posición se cierra en IQ Option (ej: Take Profit), el motor la elimine y libere cupos"""
+    engine = RealTimeTradingEngine(initial_balance=26393.26, max_open_positions=1, execution_environment="LIVE_REAL")
+    engine.set_active_broker("IQOPTION")
+
+    # Inyectar posición activa simulando que fue abierta
+    engine.open_positions["GBPJPY"] = {
+        "symbol": "GBPJPY",
+        "name": "GBP / JPY",
+        "broker": "IQOPTION",
+        "category": "FOREX",
+        "invested_amount": 2000.0,
+        "entry_price": 211.442,
+        "current_price": 211.435,
+        "quantity": 9.4589,
+        "broker_order_id": "101148750757",
+        "position_id": "100170562894"
+    }
+
+    assert len(engine.open_positions) == 1
+    # Cuando IQ Option reporta que el portafolio tiene 0 posiciones abiertas (se cerró en broker)
+    engine._sync_iqoption_open_positions([])
+
+    # Debe ser purgada de la memoria y cupo liberado
+    assert len(engine.open_positions) == 0
+    assert "GBPJPY" not in engine.open_positions
+

@@ -106,18 +106,43 @@ class IQOptionAdapter:
                 f"Cookie: ssid={self.ssid}",
                 "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             ]
-            ws = websocket.create_connection(ws_url, header=headers, timeout=8, sslopt={"cert_reqs": ssl.CERT_NONE})
+            ws = websocket.create_connection(ws_url, header=headers, timeout=6, sslopt={"cert_reqs": ssl.CERT_NONE})
+            ws.send(json.dumps({
+                "name": "authenticate",
+                "msg": {"ssid": self.ssid, "protocol": 3, "session_id": "", "client_session_id": ""},
+                "request_id": f"auth_{int(time.time() * 1000)}"
+            }))
             ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
 
+            # Solicitar sincronización simultánea de posiciones abiertas en IQ Option
+            req_pos_id = f"pos_sync_{int(time.time() * 1000)}"
+            ws.send(json.dumps({
+                "name": "sendMessage",
+                "request_id": req_pos_id,
+                "msg": {
+                    "name": "portfolio.get-positions",
+                    "version": "4.0",
+                    "body": {
+                        "instrument_types": ["marginal-forex", "forex", "cfd"],
+                        "limit": 30,
+                        "offset": 0
+                    }
+                }
+            }))
+
             start_t = time.time()
-            found = False
-            while time.time() - start_t < 6.0:
+            found_profile = False
+            found_positions = False
+            self.open_broker_positions = []
+
+            while time.time() - start_t < 4.0:
                 raw = ws.recv()
                 if not raw:
                     continue
                 try:
                     data = json.loads(raw)
-                    if data.get("name") == "profile":
+                    msg_name = data.get("name")
+                    if msg_name == "profile":
                         msg = data.get("msg", {})
                         if isinstance(msg, dict):
                             self.profile_data.update(msg)
@@ -133,12 +158,31 @@ class IQOptionAdapter:
                                 elif b_type == 4:
                                     self.practice_balance_id = b_id
                                     self.practice_amount = round(amt, 2)
-                            found = True
-                            break
+                            found_profile = True
+                    elif msg_name == "positions" or data.get("request_id") == req_pos_id:
+                        found_positions = True
+                        p_list = data.get("msg", {}).get("positions", [])
+                        parsed_positions = []
+                        for p in p_list:
+                            ev = p.get("raw_event", {}).get("marginal_forex_position_changed1", {}) if isinstance(p.get("raw_event"), dict) else p
+                            p_id = ev.get("id") or p.get("id")
+                            p_status = ev.get("status") or p.get("status")
+                            if p_status != "closed":
+                                parsed_positions.append({
+                                    "id": str(p_id),
+                                    "order_ids": [str(oid) for oid in ev.get("order_ids", [])],
+                                    "instrument_id": ev.get("instrument_id") or p.get("instrument_id"),
+                                    "status": p_status,
+                                    "pnl_net": float(ev.get("pnl_net") or 0.0),
+                                    "open_quote": float(ev.get("open_quote_ask") or ev.get("open_quote_bid") or 0.0)
+                                })
+                        self.open_broker_positions = parsed_positions
+                    if found_profile and found_positions:
+                        break
                 except Exception:
                     pass
             ws.close()
-            return found
+            return found_profile
         except Exception:
             return False
 
@@ -393,7 +437,7 @@ class IQOptionAdapter:
             self.connect()
         elif self.connected and self.ssid and self.environment == "LIVE_REAL":
             now_t = time.time()
-            if not hasattr(self, "_last_ws_balance_sync") or (now_t - getattr(self, "_last_ws_balance_sync", 0.0) > 12.0) or self.real_amount <= 0.0:
+            if not hasattr(self, "_last_ws_balance_sync") or (now_t - getattr(self, "_last_ws_balance_sync", 0.0) > 4.0) or self.real_amount <= 0.0:
                 self._last_ws_balance_sync = now_t
                 self._fetch_live_balances_ws()
                 self.balance = self.real_amount
@@ -404,8 +448,13 @@ class IQOptionAdapter:
             "practice_balance": round(self.practice_amount, 2),
             "real_balance": round(self.real_amount, 2),
             "currency": self.currency,
-            "environment": self.environment
+            "environment": self.environment,
+            "open_positions": getattr(self, "open_broker_positions", [])
         }
+
+    def get_open_positions(self) -> list:
+        """Retorna las posiciones Forex CFD activas detectadas en IQ Option."""
+        return getattr(self, "open_broker_positions", [])
 
     def set_environment(self, env: str) -> Dict[str, Any]:
         """Conmuta de forma segura entre MODO PRÁCTICA (PAPER) y MODO REAL (LIVE_REAL)."""
