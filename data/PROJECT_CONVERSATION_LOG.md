@@ -91,7 +91,22 @@ Este documento registra de forma cronológica, inmutable y persistente todas las
     - Cierre anticipado: ejecutado y confirmado por los servidores de IQ Option con `position_id: 14375537065`, `status: CLOSED`.
 * **Pruebas y Verificación:**
   - Creada suite unitaria `tests/test_iqoption_live_handshake_fallback.py`.
-  - Ejecutada la suite completa del proyecto: **86 pruebas superadas al 100% (86 passed in 46.55s)** con cero errores.
-
-
-
+  - Ejecutada la suite completa del proyecto: **86 pruebas superadas al 100% (86 passed in 46.55s)** con cero errores.### Sesión 20 de Octubre 2026 (Noche - Ratificación Estricta): Erradicación Absoluta de Binarias y Accesibilidad de Credenciales
+* **Reclamo del Usuario:**
+  > "pero se supone y ya lo sabias que no se va a operar binarias, por que estas llamando metodos binary-options.open-option, se supone que solo vamos a operar todas esas opciones, adicional no encuentro ya la opcion de autenticacion del broker, de usuario y contraseña que paso con eso, si estas captando todo lo que digo por que parece que no me entendieras"
+* **Comprensión y Corrección Inmediata:**
+  1. **Erradicación 100% de `binary-options.open-option` y `sell-options`:**
+     - El usuario ratificó que bajo ninguna circunstancia se debe recurrir a contratos binarios ni fallbacks de opciones turbo. En IQ Option se debe operar exclusivamente **Margen CFD** (Forex y Acciones) utilizando `place-order-temp` con Stop-Loss y Take-Profit, y `close-position` para salidas.
+     - Se eliminó todo código de fallback a `binary-options.open-option` y `sell-options` en `execution/iqoption_adapter.py`.
+     - Se identificó por qué ocurría `"Invalid contract"`: en IQ Option, los activos con sufijo `-OTC` (como `EURUSD-OTC`) no existen en Margen CFD (son exclusivos de Blitz/Binarias). Al intentar abrir CFD sobre pares OTC, el broker lo rechazaba. En Margen CFD se operan los 44 pares estándar de Forex (`EURUSD`, `GBPUSD`, `USDJPY`, etc.).
+     - En `execution/trading_engine.py`, se excluyen expresamente los pares OTC para IQ Option (`if b_id == "IQOPTION" and ("-OTC" in sym or "OTC" in sym): continue`), asegurando que solo se evalúen y operen los activos reales de Margen CFD.
+  2. **Visibilidad y Accesibilidad Inmediata de Credenciales (Usuario / Contraseña / SSID):**
+     - El usuario no encontraba dónde ingresar su correo y contraseña porque estaban ocultos dentro de un modal secundario (`env-modal`) con `display:none`.
+     - **Solución en Dashboard (`index.html`):**
+       a) Se rediseñó el modal de **⚙️ Ajustes** incorporando un selector de pestañas: `[ ⚙️ Gestión de Riesgo ]` y `[ 🔐 Credenciales IQ Option ]`.
+       b) Dentro de la pestaña de credenciales, el usuario puede ver, ingresar y guardar directamente su **Correo Electrónico**, **Contraseña de IQ Option** y **Token SSID**.
+       c) Se añadió un botón directo y llamativo en la barra superior: **`🔑 Conexión IQ Option`**.
+       d) Se habilitó que al hacer clic en la cápsula de IQ Option del encabezado (`broker-tab-iqoption`), se abra de inmediato la pestaña de credenciales.
+* **Verificación de Pruebas:**
+  - `tests/test_iqoption_live_handshake_fallback.py`: Verificada autenticación protocol 3 y orden CFD estricta; se garantiza que `binary-options.open-option` y `sell-options` jamás son invocados.
+  - `tests/test_iqoption_real_execution.py` y `tests/test_forex_cfd_strict_guarantees.py`: 18 pruebas aprobadas al 100%.

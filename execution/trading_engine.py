@@ -1078,10 +1078,9 @@ class RealTimeTradingEngine:
                 if allowed_categories and asset.get("category") not in allowed_categories:
                     continue
                 
-                # Filtrado de mercado Forex según calendario:
-                # - En fin de semana: el mercado Forex bancario está cerrado -> solo pares OTC 24/7
-                # - En días de semana: permite operar tanto pares estándar como pares OTC 24/7
-                if asset.get("category") == "FOREX" and is_weekend and "-OTC" not in sym:
+                # En IQ Option Margen CFD, se operan exclusivamente los pares Forex estándar (EURUSD, GBPUSD, etc.) y Acciones.
+                # Se excluyen pares OTC porque en IQ Option los OTC corresponden a opciones binarias/blitz.
+                if b_id == "IQOPTION" and ("-OTC" in sym or "OTC" in sym):
                     continue
 
                 # MODELO EXCLUSIVO IQ OPTION: FOREX TRADICIONAL CFD

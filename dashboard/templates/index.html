@@ -1735,7 +1735,7 @@
 
             <!-- Segmented Broker Capsule (IQ Option Exclusivo) -->
             <div class="broker-segmented-pill" id="broker-segmented-pill">
-                <button class="broker-pill-btn active" id="broker-tab-iqoption" onclick="selectActiveBroker('IQOPTION')" title="Operaciones IQ Option Forex & Derivados">
+                <button class="broker-pill-btn active" id="broker-tab-iqoption" onclick="openCredentialsModal()" title="Click para ver credenciales y conexión de IQ Option">
                     <span class="broker-pill-icon">📈</span>
                     <div class="broker-pill-meta">
                         <span class="broker-pill-name">IQ Option</span>
@@ -1752,7 +1752,10 @@
                 <button class="btn-action btn-primary" id="btn-toggle" onclick="toggleEngine()">
                     ⏸️ Pausar
                 </button>
-                <button class="btn-action btn-ghost" onclick="openSettingsModal()" title="Límites de Riesgo">
+                <button class="btn-action btn-ghost" onclick="openCredentialsModal()" title="Configurar Usuario, Contraseña y Token SSID de IQ Option" style="border: 1px solid rgba(0, 240, 255, 0.45); color: var(--cyber-cyan-bright); display: inline-flex; align-items: center; gap: 5px; font-weight: 600;">
+                    🔑 Conexión IQ Option
+                </button>
+                <button class="btn-action btn-ghost" onclick="openSettingsModal()" title="Límites de Riesgo y Parámetros">
                     ⚙️ Ajustes
                 </button>
                 <button class="btn-action btn-ghost" onclick="openExportModal()" title="Exportar histórico diario de transacciones con todas sus métricas" style="border: 1px solid rgba(56, 189, 248, 0.35); color: var(--accent-cyan); display: inline-flex; align-items: center; gap: 5px;">
@@ -2192,52 +2195,103 @@
         </div>
     </div>
 
-    <!-- ==================== MODAL DE AJUSTES (CON CUSTOM DROPDOWN) ==================== -->
+    <!-- ==================== MODAL DE AJUSTES (CON TABS: RIESGO Y CREDENCIALES IQ OPTION) ==================== -->
     <div class="modal-overlay" id="settings-modal" onclick="handleBackdropClick(event, 'settings-modal')">
-        <div class="modal-card">
-            <h3 id="settings-modal-title" style="margin-bottom:12px; font-size:16px;">⚙️ Circuit Breakers & Gestión de Riesgo</h3>
-            <div id="settings-modal-user-info" style="display:none; margin-bottom:12px; font-size:11.5px; padding:8px 12px; background:rgba(0,240,255,0.06); border:1px solid rgba(0,240,255,0.25); border-radius:6px; color:var(--cyber-cyan-bright);"></div>
-            <div class="form-group">
-                <label>Meta de Ganancia Automática (USD)</label>
-                <input type="number" id="modal-profit-target" class="form-control" value="500">
+        <div class="modal-card" style="max-width: 520px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--border-subtle); padding-bottom:8px;">
+                <h3 id="settings-modal-title" style="margin:0; font-size:16px;">⚙️ Ajustes & Configuración</h3>
+                <button class="btn-action btn-ghost" onclick="closeModals()" style="padding:2px 8px; font-size:14px;">✕</button>
             </div>
-            <div class="form-group">
-                <label>Límite Máximo de Pérdida de Seguridad (USD)</label>
-                <input type="number" id="modal-max-loss" class="form-control" value="0" min="0" step="any">
-                <div style="font-size:10px; color:var(--text-muted); margin-top:3px;">(0 = Tolerancia Cero: no se permite perder ni un solo dólar; o define el límite máximo en USD)</div>
+            
+            <!-- Selector de Pestañas en Ajustes -->
+            <div style="display:flex; gap:8px; margin-bottom:14px; background:rgba(255,255,255,0.03); padding:4px; border-radius:8px; border:1px solid var(--border-subtle);">
+                <button type="button" class="btn-action active" id="tab-btn-risk" onclick="switchSettingsTab('risk')" style="flex:1; font-size:12px; padding:6px; font-weight:600;">
+                    ⚙️ Gestión de Riesgo
+                </button>
+                <button type="button" class="btn-action btn-ghost" id="tab-btn-credentials" onclick="switchSettingsTab('credentials')" style="flex:1; font-size:12px; padding:6px; font-weight:600; color:var(--cyber-cyan-bright);">
+                    🔐 Credenciales IQ Option
+                </button>
             </div>
-            <div class="form-group">
-                <label>Modo Operativo IQ Option</label>
-                <div style="background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.3); border-radius:6px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between;">
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <span style="font-size:16px;">📈</span>
-                        <span style="color:#FFF; font-weight:600; font-size:13px;">Forex Tradicional CFD (SL / TP sin expiración)</span>
-                    </div>
-                    <span style="background:var(--accent-cyan); color:#0B0E17; font-weight:700; font-size:10px; padding:2px 8px; border-radius:12px;">ACTIVO</span>
+
+            <!-- Tab 1: Riesgo & Circuit Breakers -->
+            <div id="settings-tab-risk">
+                <div id="settings-modal-user-info" style="display:none; margin-bottom:12px; font-size:11.5px; padding:8px 12px; background:rgba(0,240,255,0.06); border:1px solid rgba(0,240,255,0.25); border-radius:6px; color:var(--cyber-cyan-bright);"></div>
+                <div class="form-group">
+                    <label>Meta de Ganancia Automática (USD)</label>
+                    <input type="number" id="modal-profit-target" class="form-control" value="500">
                 </div>
-                <input type="hidden" id="modal-operating-mode" value="IQ_CFD">
-            </div>
-            <div class="form-group" style="margin-top:12px;">
-                <label>Entorno de Ejecución (Real / Simulación)</label>
-                <div class="custom-select-container" id="settings-env-dropdown">
-                    <div class="custom-select-trigger" onclick="toggleCustomDropdown('settings-env-dropdown')">
-                        <span id="settings-env-label">🔥 Modo Dinero Real (Binance Spot)</span>
-                        <span class="arrow">▼</span>
-                    </div>
-                    <div class="custom-select-menu">
-                        <div class="custom-option selected" data-value="LIVE_REAL" onclick="selectSettingsEnvOption('LIVE_REAL', '🔥 Modo Dinero Real (Binance Spot)')">
-                            <span>🔥 Modo Dinero Real (Binance Spot)</span>
+                <div class="form-group">
+                    <label>Límite Máximo de Pérdida de Seguridad (USD)</label>
+                    <input type="number" id="modal-max-loss" class="form-control" value="0" min="0" step="any">
+                    <div style="font-size:10px; color:var(--text-muted); margin-top:3px;">(0 = Tolerancia Cero: no se permite perder ni un solo dólar; o define el límite máximo en USD)</div>
+                </div>
+                <div class="form-group">
+                    <label>Modo Operativo IQ Option</label>
+                    <div style="background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.3); border-radius:6px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:16px;">📈</span>
+                            <span style="color:#FFF; font-weight:600; font-size:13px;">Forex Tradicional CFD (SL / TP sin expiración)</span>
                         </div>
-                        <div class="custom-option" data-value="PAPER" onclick="selectSettingsEnvOption('PAPER', '🛡️ Modo Práctica Seguro (Paper Trading)')">
-                            <span>🛡️ Modo Práctica Seguro (Paper Trading)</span>
-                        </div>
+                        <span style="background:var(--accent-cyan); color:#0B0E17; font-weight:700; font-size:10px; padding:2px 8px; border-radius:12px;">ACTIVO</span>
                     </div>
-                    <input type="hidden" id="modal-settings-env" value="LIVE_REAL">
+                    <input type="hidden" id="modal-operating-mode" value="IQ_CFD">
+                </div>
+                <div class="form-group" style="margin-top:12px;">
+                    <label>Entorno de Ejecución (Real / Simulación)</label>
+                    <div class="custom-select-container" id="settings-env-dropdown">
+                        <div class="custom-select-trigger" onclick="toggleCustomDropdown('settings-env-dropdown')">
+                            <span id="settings-env-label">🔥 Modo Dinero Real (IQ Option Cuenta Real)</span>
+                            <span class="arrow">▼</span>
+                        </div>
+                        <div class="custom-select-menu">
+                            <div class="custom-option selected" data-value="LIVE_REAL" onclick="selectSettingsEnvOption('LIVE_REAL', '🔥 Modo Dinero Real (IQ Option Cuenta Real)')">
+                                <span>🔥 Modo Dinero Real (IQ Option Cuenta Real)</span>
+                            </div>
+                            <div class="custom-option" data-value="PAPER" onclick="selectSettingsEnvOption('PAPER', '🛡️ Modo Práctica / Demo (IQ Option $10,000 USD)')">
+                                <span>🛡️ Modo Práctica / Demo (IQ Option $10,000 USD)</span>
+                            </div>
+                        </div>
+                        <input type="hidden" id="modal-settings-env" value="LIVE_REAL">
+                    </div>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+                    <button class="btn-action btn-ghost" onclick="closeModals()">Cancelar</button>
+                    <button class="btn-action btn-primary" onclick="saveSettings()">Guardar Parámetros</button>
                 </div>
             </div>
-            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
-                <button class="btn-action btn-ghost" onclick="closeModals()">Cancelar</button>
-                <button class="btn-action btn-primary" onclick="saveSettings()">Guardar Parámetros</button>
+
+            <!-- Tab 2: Credenciales de IQ Option (Email, Contraseña, Token SSID) -->
+            <div id="settings-tab-credentials" style="display:none;">
+                <div style="background:rgba(0,240,255,0.04); border:1px solid rgba(0,240,255,0.2); border-radius:8px; padding:14px; margin-bottom:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <span style="font-size:12px; font-weight:700; color:var(--cyber-cyan-bright); display:flex; align-items:center; gap:6px;">
+                            🔐 Autenticación de IQ Option
+                        </span>
+                        <span class="mono" style="font-size:10px; color:var(--emerald-win);" id="settings-iqoption-badge">CONEXIÓN CONFIGURABLE</span>
+                    </div>
+                    <p style="font-size:11px; color:#94A3B8; margin-bottom:12px; line-height:1.4;">
+                        Ingresa tu correo y contraseña de IQ Option, o directamente tu Token SSID de sesión para conectar en vivo sin bloqueos de firewall en el VPS.
+                    </p>
+                    <div class="form-group" style="margin-bottom:10px;">
+                        <label style="font-size:11px; color:#FFF; font-weight:600;">📧 Correo Electrónico (Email de tu cuenta IQ Option)</label>
+                        <input type="email" id="modal-iqoption-email-settings" class="form-control" placeholder="tu_correo@gmail.com">
+                    </div>
+                    <div class="form-group" style="margin-bottom:10px;">
+                        <label style="font-size:11px; color:#FFF; font-weight:600;">🔑 Contraseña de IQ Option</label>
+                        <input type="password" id="modal-iqoption-password-settings" class="form-control" placeholder="Tu contraseña de IQ Option">
+                    </div>
+                    <div class="form-group" style="margin-bottom:4px;">
+                        <label style="font-size:11px; color:#FFF; font-weight:600; display:flex; justify-content:space-between; align-items:center;">
+                            <span>🎟️ Token SSID de Sesión <strong style="color:var(--cyber-cyan-bright);">(Recomendado para VPS)</strong></span>
+                            <span onclick="alert('🔑 Cómo obtener tu Token SSID en 10 segundos:\n\n1. Inicia sesión en iqoption.com en tu navegador.\n2. Presiona F12 (o Clic derecho > Inspeccionar) e ingresa a la pestaña \'Consola\'.\n3. Escribe o pega:\n   copy(document.cookie.match(/ssid=([^;]+)/)[1])\n   y presiona Enter.\n4. ¡Listo! Ya quedó copiado en tu portapapeles. Pégalo aquí en este campo.')" style="color:var(--cyber-cyan-bright); cursor:pointer; text-decoration:underline; font-size:10px;">¿Cómo obtenerlo?</span>
+                        </label>
+                        <input type="password" id="modal-iqoption-ssid-settings" class="form-control" placeholder="Pega tu Token SSID (Bypassea cualquier firewall del VPS)">
+                    </div>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+                    <button class="btn-action btn-ghost" onclick="closeModals()">Cancelar</button>
+                    <button class="btn-action btn-primary" onclick="saveIQOptionCredentialsFromSettings()">💾 Guardar y Conectar IQ Option</button>
+                </div>
             </div>
         </div>
     </div>
@@ -4030,18 +4084,97 @@
             fetchState();
         }
 
+        // Funciones de Pestañas y Credenciales IQ Option en Ajustes
+        function switchSettingsTab(tabName) {
+            const riskTab = document.getElementById('settings-tab-risk');
+            const credTab = document.getElementById('settings-tab-credentials');
+            const riskBtn = document.getElementById('tab-btn-risk');
+            const credBtn = document.getElementById('tab-btn-credentials');
+            if (tabName === 'credentials') {
+                if (riskTab) riskTab.style.display = 'none';
+                if (credTab) credTab.style.display = 'block';
+                if (riskBtn) { riskBtn.classList.remove('active'); riskBtn.classList.add('btn-ghost'); }
+                if (credBtn) { credBtn.classList.add('active'); credBtn.classList.remove('btn-ghost'); }
+                loadBrokerKeysForSettings();
+            } else {
+                if (riskTab) riskTab.style.display = 'block';
+                if (credTab) credTab.style.display = 'none';
+                if (riskBtn) { riskBtn.classList.add('active'); riskBtn.classList.remove('btn-ghost'); }
+                if (credBtn) { credBtn.classList.remove('active'); credBtn.classList.add('btn-ghost'); }
+            }
+        }
+
+        async function loadBrokerKeysForSettings() {
+            try {
+                const kRes = await fetch('/api/control/get-broker-keys');
+                if (kRes.ok) {
+                    const keys = await kRes.json();
+                    if (keys.iqoption_email && document.getElementById('modal-iqoption-email-settings')) {
+                        document.getElementById('modal-iqoption-email-settings').value = keys.iqoption_email;
+                    }
+                    if (keys.iqoption_password && document.getElementById('modal-iqoption-password-settings')) {
+                        document.getElementById('modal-iqoption-password-settings').value = keys.iqoption_password;
+                    }
+                    if (keys.iqoption_ssid && document.getElementById('modal-iqoption-ssid-settings')) {
+                        document.getElementById('modal-iqoption-ssid-settings').value = keys.iqoption_ssid;
+                    }
+                }
+            } catch (e) {
+                console.error("Error cargando llaves en ajustes:", e);
+            }
+        }
+
+        async function saveIQOptionCredentialsFromSettings() {
+            const email = document.getElementById('modal-iqoption-email-settings') ? document.getElementById('modal-iqoption-email-settings').value.trim() : "";
+            const password = document.getElementById('modal-iqoption-password-settings') ? document.getElementById('modal-iqoption-password-settings').value.trim() : "";
+            const ssid = document.getElementById('modal-iqoption-ssid-settings') ? document.getElementById('modal-iqoption-ssid-settings').value.trim() : "";
+
+            if (!email && !password && !ssid) {
+                alert("Por favor ingresa tu correo y contraseña o tu Token SSID de IQ Option.");
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/control/set-broker-keys', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        iqoption_email: email,
+                        iqoption_password: password,
+                        iqoption_ssid: ssid
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert("✅ Credenciales de IQ Option actualizadas y guardadas con éxito. Conectando al broker...");
+                    closeModals();
+                    await fetchState();
+                } else {
+                    alert("Error guardando credenciales: " + (data.error || "Desconocido"));
+                }
+            } catch (e) {
+                alert("Error de conexión al guardar credenciales: " + e.message);
+            }
+        }
+
+        function openCredentialsModal() {
+            openSettingsModal();
+            switchSettingsTab('credentials');
+        }
+
         // Modales
         function openSettingsModal() {
+            switchSettingsTab('risk');
             if (latestSystemData && latestSystemData.system_status) {
                 const sys = latestSystemData.system_status;
-                const activeBroker = sys.active_broker || 'BINANCE';
+                const activeBroker = sys.active_broker || 'IQOPTION';
                 const brokerInfo = (sys.brokers && sys.brokers[activeBroker]) || {};
-                const brokerIcon = brokerInfo.icon || (activeBroker === 'ALPACA' ? '🏛️' : (activeBroker === 'IQOPTION' ? '📈' : '🪙'));
+                const brokerIcon = brokerInfo.icon || (activeBroker === 'IQOPTION' ? '📈' : '🪙');
                 const brokerName = brokerInfo.name || activeBroker;
                 
                 const titleEl = document.getElementById('settings-modal-title');
                 if (titleEl) {
-                    titleEl.innerText = `⚙️ Circuit Breakers & Riesgo (${brokerIcon} ${brokerName})`;
+                    titleEl.innerText = `⚙️ Ajustes & Configuración (${brokerIcon} ${brokerName})`;
                 }
                 const userEl = document.getElementById('settings-modal-user-info');
                 if (userEl) {
@@ -4090,7 +4223,10 @@
             // Configurar títulos y badges
             const titleEl = document.getElementById('env-modal-broker-name');
             if (titleEl) {
-                if (activeBroker === 'ALPACA') {
+                if (activeBroker === 'IQOPTION') {
+                    titleEl.innerText = '📈 IQ Option Forex CFD';
+                    titleEl.style.color = 'var(--emerald-win)';
+                } else if (activeBroker === 'ALPACA') {
                     titleEl.innerText = '🏛️ Alpaca Wall Street';
                     titleEl.style.color = 'var(--cyber-cyan-bright)';
                 } else {
