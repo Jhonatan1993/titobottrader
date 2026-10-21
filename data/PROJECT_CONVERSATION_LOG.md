@@ -49,3 +49,21 @@ Este documento registra de forma cronológica, inmutable y persistente todas las
   - **Verificación Global:** Se ejecutaron todas las suites con 100% de éxito.
   - **Estado de Git y VPS:** Cambios aprobados por el usuario. Commits subidos exitosamente a GitHub (rama `main`, commit `323a09a`). Listo para sincronización en el VPS.
 
+### Sesión 20 de Octubre 2026 (Noche): Diagnóstico de Operativa y Compuertas de Entrada
+* **Consulta del Usuario:** "¿por que si se muestran opciones para comprar por que no esta operando que pasa ??????" (Captura muestra `NZDUSD: COMPRA A+ 82%`, `EURGBP: COMPRA A+ 83%`, `EURJPY: VENDER 82%`, saldo real `26,429.61 COP`, `0/5` posiciones y `Tolerancia Cero`).
+* **Diagnóstico Técnico de Compuertas en Motor de Ejecución:**
+  1. **Radar vs. Ejecución:** El Radar escanea el universo y califica la confluencia técnica en tiempo real (`evaluate_asset`). Pero para enviar una orden real al broker IQ Option, el motor pasa por compuertas de seguridad para proteger el capital:
+     - **Escudo Macroeconómico (`NewsMacroShield`):** Si en los últimos 300 segundos saltó un titular de alta volatilidad o shock global, congela preventivamente nuevas aperturas.
+     - **Límite de Exposición Controlada (`max_positions = 1`):** Solo se permite 1 operación abierta a la vez en IQ Option para no sobreexponer la cuenta micro de 26,429 COP con múltiples órdenes simultáneas.
+     - **Horarios y Disponibilidad de IQ Option:** Pares estándar de Forex pueden estar en receso o no admitir CFD a ciertas horas de la noche, requiriendo que la señal confluya en pares OTC que operan 24/7.
+* **Resolución y Saneamiento Integral de Fuentes de Noticias (100% Forex):**
+  - **Problema Detectado:** El módulo `news_sentiment_shield.py` consultaba feeds cripto residuales (`CoinDesk`, `BTC-USD`) y palabras como `crypto ban` o `hack`, bloqueando innecesariamente la operativa de Forex por 5 minutos ante noticias ajenas a divisas.
+  - **Saneamiento Aplicado:**
+    1. Extirpadas todas las fuentes y keywords de criptomonedas de `news_sentiment_shield.py`.
+    2. Feeds RSS redirigidos exclusivamente a **Yahoo Finance Forex & Currencies** (Dólar DXY, EURUSD, GBPUSD, USDJPY, AUDUSD, USDCAD, USDCHF, NZDUSD) y noticias macroeconómicas de Bancos Centrales (FED, BCE, BOE, BOJ).
+    3. Ventana de enfriamiento de shock calibrada a 120s (en lugar de 300s) y umbral estricto para eventos cambiarios de alta intensidad (<= -0.75).
+    4. En `trading_engine.py`, se optimizó la sincronización para omitir llamadas de red a brokers secundarios cuando `IQOPTION` es el broker activo único.
+  - **Pruebas y Verificación Sin Sesgo:** Creada suite `tests/test_forex_news_macro_shield.py` (6 pruebas unitarias específicas) y ejecutada suite global con 41 pruebas aprobadas al 100%. Cero fallos.
+
+
+

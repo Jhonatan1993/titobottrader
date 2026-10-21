@@ -198,7 +198,7 @@ class IntelligentTradingAgent:
             }
 
         # 2. FILTRO DE SEGURIDAD MACROECONÓMICA Y SENTIMIENTO (PRIORIDAD GLOBAL)
-        macro_check = self.sentiment_shield.is_macro_environment_safe()
+        macro_check = self.sentiment_shield.is_macro_environment_safe(symbol=symbol)
         if not macro_check["safe"]:
             return {
                 "symbol": symbol,

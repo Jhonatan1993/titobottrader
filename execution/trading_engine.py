@@ -918,6 +918,8 @@ class RealTimeTradingEngine:
 
         now_sync = time.time()
         for b_id, b_wal in list(self.broker_wallets.items()):
+            if self.active_broker == "IQOPTION" and b_id != "IQOPTION":
+                continue
             if b_wal.get("environment") == "LIVE_REAL":
                 if b_id == "BINANCE" and self.feed.binance.is_configured:
                     self.feed.binance.live_trading_enabled = True
