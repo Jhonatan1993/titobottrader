@@ -64,6 +64,7 @@ Este documento registra de forma cronológica, inmutable y persistente todas las
     3. Ventana de enfriamiento de shock calibrada a 120s (en lugar de 300s) y umbral estricto para eventos cambiarios de alta intensidad (<= -0.75).
     4. En `trading_engine.py`, se optimizó la sincronización para omitir llamadas de red a brokers secundarios cuando `IQOPTION` es el broker activo único.
   - **Pruebas y Verificación Sin Sesgo:** Creada suite `tests/test_forex_news_macro_shield.py` (6 pruebas unitarias específicas) y ejecutada suite global con 41 pruebas aprobadas al 100%. Cero fallos.
+  - **Despliegue a Producción:** Aprobado por el usuario. Commit `025e704` subido a GitHub `origin/main` para sincronización en el VPS.
 
 
 
