@@ -1102,7 +1102,18 @@ class IQOptionAdapter:
                         s_ms = d.get("msg")
                         if s_ms and isinstance(s_ms, (int, float)):
                             server_time_offset = (s_ms / 1000.0) - time.time()
-                    if d.get("name") in ["authenticated", "profile"]:
+                    if d.get("name") == "profile":
+                        p_msg = d.get("msg", {})
+                        if isinstance(p_msg, dict):
+                            for b_item in p_msg.get("balances", []):
+                                if b_item.get("type") == 1:
+                                    self.real_balance_id = int(b_item.get("id"))
+                                    if self.environment == "LIVE_REAL":
+                                        target_bal_id = self.real_balance_id
+                                elif b_item.get("type") == 4:
+                                    self.practice_balance_id = int(b_item.get("id"))
+                        break
+                    if d.get("name") == "authenticated":
                         break
                 except Exception:
                     pass
@@ -1123,7 +1134,7 @@ class IQOptionAdapter:
                 "request_id": f"sopts_bin_{int(now * 1000)}"
             }))
 
-            # Enviar mensaje oficial binary-options.open-option
+            # Enviar mensaje oficial binary-options.open-option (Protocolo Estándar v1.0)
             req_id = f"bin_opt_{int(time.time() * 1000)}"
             body_payload = {
                 "name": "sendMessage",
@@ -1132,13 +1143,12 @@ class IQOptionAdapter:
                     "name": "binary-options.open-option",
                     "version": "1.0",
                     "body": {
-                        "active_id": active_id,
+                        "active_id": int(active_id),
                         "direction": direction.lower(),
-                        "expired": expiration_ts,
+                        "expired": int(expiration_ts),
                         "option_type_id": 3,
-                        "price": amount,
-                        "user_balance_id": target_bal_id,
-                        "profit_percent": profit_percent
+                        "price": float(amount) if float(amount) % 1 != 0 else int(amount),
+                        "user_balance_id": int(target_bal_id) if target_bal_id else target_bal_id
                     }
                 }
             }
