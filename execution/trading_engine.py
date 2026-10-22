@@ -9,6 +9,7 @@ from execution.alpaca_adapter import AlpacaAdapter
 from execution.binance_adapter import BinanceAdapter
 from risk_management.risk_manager import RiskManager
 from execution.binary_options_engine import BinaryOptionsStrategyEngine
+from execution.iqoption_adapter import ACTIVE_ID_TO_SYMBOL
 
 class RealTimeTradingEngine:
     """
@@ -288,6 +289,8 @@ class RealTimeTradingEngine:
         Sincroniza y reconcilia las posiciones de IQ Option de forma bidireccional y blindada.
         Garantiza que si el broker tiene al menos 1 posición abierta, esta se refleje en memoria
         bloqueando cualquier intento de abrir una segunda operación simultánea.
+        Si el broker cerró la posición (Take-Profit, Stop-Loss o manual), se purga inmediatamente
+        de la memoria y se registra en el journal, liberando el cupo al instante (0/1).
         """
         broker_active_ids = set()
         for bp in broker_positions:
@@ -297,17 +300,65 @@ class RealTimeTradingEngine:
             for oid in bp.get("order_ids", []):
                 broker_active_ids.add(str(oid))
 
-        # 1. Si en el broker hay posiciones abiertas y en memoria no están, RECONSTRUIR en memoria
-        # para bloquear estrictamente los cupos (impidiendo aperturas repetidas)
+        iq_memory_positions = [
+            (sym, pos) for sym, pos in list(self.open_positions.items())
+            if (pos.get("broker") == "IQOPTION" or pos.get("category") in ["FOREX", "OPTIONS", "CFD"])
+        ]
+
+        # 1. Si en el broker hay posiciones abiertas
         if len(broker_positions) > 0:
             self._zero_pos_counter = 0
+            # Purgar si una posición en memoria ya no está en broker_active_ids
+            for sym, pos in iq_memory_positions:
+                pos_id = str(pos.get("broker_order_id", ""))
+                ext_id = str(pos.get("position_id", ""))
+                if pos_id and pos_id not in broker_active_ids and ext_id not in broker_active_ids:
+                    if sym in self.open_positions:
+                        del self.open_positions[sym]
+                    self.last_exit_times[sym] = time.time() + 180.0
+                    cur_price = self.feed.assets.get(sym, {}).get("price", pos.get("current_price", pos.get("entry_price", 1.0)))
+                    pnl = float(pos.get("current_pnl", 0.0))
+                    inv = float(pos.get("invested_amount", 2000.0))
+                    pnl_pct = round((pnl / inv) * 100, 2) if inv > 0 else 0.0
+                    trade_record = {
+                        "symbol": sym,
+                        "name": pos.get("name", sym),
+                        "broker": "IQOPTION",
+                        "environment": self.broker_wallets.get("IQOPTION", {}).get("environment", "LIVE_REAL"),
+                        "category": pos.get("category", "FOREX"),
+                        "side": pos.get("side", "BUY_LONG"),
+                        "quantity": pos.get("quantity", 1.0),
+                        "entry_price": pos.get("entry_price", cur_price),
+                        "exit_price": cur_price,
+                        "invested_amount": inv,
+                        "exit_value": round(inv + pnl, 2),
+                        "pnl": pnl,
+                        "pnl_percent": pnl_pct,
+                        "entry_time": pos.get("entry_time", datetime.datetime.now().strftime("%H:%M:%S")),
+                        "exit_time": datetime.datetime.now().strftime("%H:%M:%S"),
+                        "reason": "Cierre confirmado en broker IQ Option (Take-Profit / Stop-Loss)",
+                        "exit_reason": "Cierre confirmado en broker",
+                        "exit_type": "BROKER_CLOSE",
+                        "success": pnl >= 0
+                    }
+                    self.journal.record_trade(trade_record)
+                    self.agent.record_trade_result(trade_record)
+                    b_curr = getattr(self.feed.iqoption, "currency", "COP") if hasattr(self.feed, "iqoption") else "COP"
+                    self.agent._add_thought(
+                        f"💰 POSICIÓN CERRADA EN IQ OPTION: {sym} finalizó en el broker. Cupo liberado al instante (0/1).",
+                        "TRADE_WIN" if pnl >= 0 else "TRADE_LOSS",
+                        sym,
+                        "💰"
+                    )
+
+            # Reconstruir o actualizar en memoria las posiciones que SÍ están activas en el broker
             for bp in broker_positions:
                 act_id = bp.get("active_id")
-                sym = "GBPJPY" if act_id == 3 else ("EURUSD" if act_id == 1 else "EURUSD")
+                sym = bp.get("symbol") or ACTIVE_ID_TO_SYMBOL.get(int(act_id) if act_id is not None else 1, "EURUSD")
                 entry_q = float(bp.get("open_quote", 0.0))
                 asset_obj = self.feed.assets.get(sym, {})
                 cur_p = asset_obj.get("price", entry_q) if entry_q > 0 else 1.0
-                invested_amt = float(bp.get("invest") or 856.94)
+                invested_amt = float(bp.get("invest") or 2000.0)
                 pnl_net = float(bp.get("pnl_net", 0.0))
                 pnl_pct = round((pnl_net / invested_amt) * 100, 2) if invested_amt > 0 else 0.0
                 if sym not in self.open_positions:
@@ -335,20 +386,44 @@ class RealTimeTradingEngine:
                     if bp.get("invest"):
                         pos["invested_amount"] = invested_amt
 
-        # 2. Si el broker reporta cero posiciones abiertas, purgar SOLO con confirmación de 3 sondeos consecutivos
+        # 2. Si el broker reporta cero posiciones abiertas, purgar con confirmación de 3 sondeos consecutivos
         elif len(broker_positions) == 0:
             if not hasattr(self, "_zero_pos_counter"):
                 self._zero_pos_counter = 0
             self._zero_pos_counter += 1
             if self._zero_pos_counter >= 3:
-                ghost_symbols = [
-                    (sym, pos) for sym, pos in list(self.open_positions.items())
-                    if (pos.get("broker") == "IQOPTION" or pos.get("category") == "FOREX")
-                ]
-                for sym, pos in ghost_symbols:
-                    del self.open_positions[sym]
-                    # Cooldown forzado de 15 minutos en este símbolo para rotación obligatoria
-                    self.last_exit_times[sym] = time.time() + 900.0
+                for sym, pos in iq_memory_positions:
+                    if sym in self.open_positions:
+                        del self.open_positions[sym]
+                    self.last_exit_times[sym] = time.time() + 180.0
+                    cur_price = self.feed.assets.get(sym, {}).get("price", pos.get("current_price", pos.get("entry_price", 1.0)))
+                    pnl = float(pos.get("current_pnl", 0.0))
+                    inv = float(pos.get("invested_amount", 2000.0))
+                    pnl_pct = round((pnl / inv) * 100, 2) if inv > 0 else 0.0
+                    trade_record = {
+                        "symbol": sym,
+                        "name": pos.get("name", sym),
+                        "broker": "IQOPTION",
+                        "environment": self.broker_wallets.get("IQOPTION", {}).get("environment", "LIVE_REAL"),
+                        "category": pos.get("category", "FOREX"),
+                        "side": pos.get("side", "BUY_LONG"),
+                        "quantity": pos.get("quantity", 1.0),
+                        "entry_price": pos.get("entry_price", cur_price),
+                        "exit_price": cur_price,
+                        "invested_amount": inv,
+                        "exit_value": round(inv + pnl, 2),
+                        "pnl": pnl,
+                        "pnl_percent": pnl_pct,
+                        "entry_time": pos.get("entry_time", datetime.datetime.now().strftime("%H:%M:%S")),
+                        "exit_time": datetime.datetime.now().strftime("%H:%M:%S"),
+                        "reason": "Cierre confirmado en broker IQ Option (Take-Profit / Stop-Loss)",
+                        "exit_reason": "Cierre confirmado en broker",
+                        "exit_type": "BROKER_CLOSE",
+                        "success": pnl >= 0
+                    }
+                    self.journal.record_trade(trade_record)
+                    self.agent.record_trade_result(trade_record)
+                    b_curr = getattr(self.feed.iqoption, "currency", "COP") if hasattr(self.feed, "iqoption") else "COP"
                     self.agent._add_thought(
                         f"✅ OPERACIÓN CERRADA EN IQ OPTION: {sym} finalizó en el broker. Saldo y cupos 100% sincronizados.",
                         "INFO",
@@ -662,9 +737,9 @@ class RealTimeTradingEngine:
             return round(cash + crypto_val, 2)
         if wallet.get("environment") == "LIVE_REAL" and b == "IQOPTION":
             open_pos = self.get_broker_positions(b)
-            pos_val = sum(p.get("current_value", p.get("invested_amount", 0.0)) for p in open_pos)
+            unrealized = sum(p.get("current_pnl", 0.0) for p in open_pos)
             cash = wallet.get("cash", 0.0)
-            return round(cash + pos_val, 2)
+            return round(cash + unrealized, 2)
         base = wallet.get("initial_balance", 0.0)
         vault = wallet.get("profit_vault", 0.0)
         unrealized = sum(p.get("current_pnl", 0.0) for p in self.get_broker_positions(b))
@@ -1829,9 +1904,18 @@ class RealTimeTradingEngine:
         realized_stats = self.journal.get_statistics(broker=active_b, environment=active_env)
         completed_trades = self.journal.get_trades(35, broker=active_b, environment=active_env)
         
-        vault_val = round(self.get_broker_vault(active_b, active_env), 2)
-        total_profit = round(vault_val + unrealized_pnl, 2)
-        total_profit_pct = round((total_profit / initial_bal) * 100, 2) if initial_bal > 0 else 0.0
+        if active_b == "IQOPTION":
+            # Para IQ Option (Cero bóveda artificial): El rendimiento real acumulado es la diferencia neta entre la equity actual y el capital base
+            if initial_bal > 0:
+                total_profit = round(total_equity - initial_bal, 2)
+                total_profit_pct = round((total_profit / initial_bal) * 100, 2)
+            else:
+                total_profit = round(unrealized_pnl, 2)
+                total_profit_pct = 0.0
+        else:
+            vault_val = round(self.get_broker_vault(active_b, active_env), 2)
+            total_profit = round(vault_val + unrealized_pnl, 2)
+            total_profit_pct = round((total_profit / initial_bal) * 100, 2) if initial_bal > 0 else 0.0
 
         broker_running = wallet.get("is_running", True)
         if broker_running:

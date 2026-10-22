@@ -3589,7 +3589,7 @@
             const pnlUsd = fin.total_profit_usd || 0;
             const pnlPct = fin.total_profit_percent || 0;
             const pnlEl = document.getElementById('total-pnl-usd');
-            pnlEl.innerText = `${pnlUsd >= 0 ? '+' : ''}$${pnlUsd.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%)`;
+            pnlEl.innerText = `${pnlUsd >= 0 ? '+' : ''}${currSym}${pnlUsd.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%)`;
             pnlEl.className = pnlUsd >= 0 ? 'mono positive' : 'mono negative';
 
             // Cuantitativo & Kelly
@@ -3609,7 +3609,7 @@
             const splitText = ties > 0 ? `${wins}G / ${losses}P / ${ties}E` : `${wins}G / ${losses}P`;
             document.getElementById('win-loss-split').innerText = splitText;
             const realPnl = fin.realized_pnl || 0;
-            document.getElementById('realized-pnl').innerText = `${realPnl >= 0 ? '+' : ''}$${realPnl.toFixed(2)} Neto`;
+            document.getElementById('realized-pnl').innerText = `${realPnl >= 0 ? '+' : ''}${currSym}${realPnl.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} Neto`;
             document.getElementById('realized-pnl').className = realPnl >= 0 ? 'mono positive' : 'mono negative';
 
             // Circuit Breakers

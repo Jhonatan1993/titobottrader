@@ -59,6 +59,17 @@ ACTIVE_ASSET_IDS = {
     "EURAUDOTC": 95,
 }
 
+ACTIVE_ID_TO_SYMBOL: Dict[int, str] = {
+    1: "EURUSD", 2: "EURGBP", 3: "GBPJPY", 4: "EURJPY", 5: "USDJPY",
+    6: "GBPUSD", 7: "USDCHF", 8: "USDCAD", 72: "AUDUSD", 100: "NZDUSD",
+    76: "EURUSD", 77: "EURGBP", 78: "USDCHF", 79: "EURJPY",
+    80: "NZDUSD", 81: "GBPUSD", 86: "GBPJPY", 87: "USDJPY",
+    88: "AUDCAD", 89: "USDCAD", 90: "AUDUSD", 91: "GBPAUD",
+    92: "EURCAD", 93: "CHFJPY", 94: "CADCHF", 95: "EURAUD",
+    101: "AUDUSD", 102: "GBPCAD", 103: "GBPCHF", 104: "GBPAUD",
+    105: "EURCAD", 106: "CHFJPY", 107: "CADCHF", 108: "EURAUD",
+}
+
 class IQOptionAdapter:
     """
     Adaptador Oficial de IQ Option para TitoBotTrader:
@@ -114,7 +125,14 @@ class IQOptionAdapter:
             }))
             ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
 
-            # Solicitar sincronización simultánea de posiciones abiertas en IQ Option
+            # Indispensable: Activar entrega de respuestas a solicitudes en el WebSocket de IQ Option
+            ws.send(json.dumps({
+                "name": "setOptions",
+                "msg": {"sendResults": True},
+                "request_id": f"sopts_{int(time.time() * 1000)}"
+            }))
+
+            # Solicitar sincronización simultánea de posiciones abiertas en IQ Option con tipos oficiales
             req_pos_id = f"pos_sync_{int(time.time() * 1000)}"
             ws.send(json.dumps({
                 "name": "sendMessage",
@@ -123,7 +141,15 @@ class IQOptionAdapter:
                     "name": "portfolio.get-positions",
                     "version": "4.0",
                     "body": {
-                        "instrument_types": ["marginal-forex", "forex", "cfd"],
+                        "instrument_types": [
+                            "binary-option",
+                            "digital-option",
+                            "turbo-option",
+                            "blitz-option",
+                            "marginal-forex",
+                            "marginal-cfd",
+                            "marginal-crypto"
+                        ],
                         "limit": 30,
                         "offset": 0
                     }
@@ -169,6 +195,7 @@ class IQOptionAdapter:
                             p_status = p.get("status") or ev.get("status") or "open"
                             act_id = p.get("active_id") or ev.get("instrument_active_id")
                             oids = [str(oid) for oid in ev.get("order_ids", [])]
+                            sym = ACTIVE_ID_TO_SYMBOL.get(int(act_id) if act_id is not None else 1, "EURUSD")
                             if p_status != "closed":
                                 parsed_positions.append({
                                     "external_id": ext_id,
@@ -176,6 +203,7 @@ class IQOptionAdapter:
                                     "internal_id": int_id,
                                     "order_ids": oids,
                                     "active_id": act_id,
+                                    "symbol": sym,
                                     "status": p_status,
                                     "pnl_net": float(p.get("pnl") or ev.get("pnl_net") or 0.0),
                                     "invest": float(p.get("invest") or 0.0),
