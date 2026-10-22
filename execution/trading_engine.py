@@ -52,20 +52,28 @@ class RealTimeTradingEngine:
         )
 
         # Configuración persistente de Circuit Breakers (Meta Ganancia & Límite Pérdida)
-        self.profit_target_enabled = bool(self.broker_config.get("profit_target_enabled", True))
-        self.profit_target_amount = float(self.broker_config.get("profit_target_amount", 500.0))
+        target_val = float(self.broker_config.get("iqoption_profit_target_amount", self.broker_config.get("profit_target_amount", 50000.0)))
+        if target_val < 5000.0:
+            target_val = 50000.0
+        loss_val = float(self.broker_config.get("iqoption_max_loss_amount", self.broker_config.get("max_loss_amount", 10000.0)))
+        if loss_val > 0 and loss_val < 2000.0:
+            loss_val = 10000.0
+
+        self.profit_target_enabled = bool(self.broker_config.get("iqoption_profit_target_enabled", self.broker_config.get("profit_target_enabled", True)))
+        self.profit_target_amount = target_val
         self.target_reached = False
 
-        self.max_loss_enabled = bool(self.broker_config.get("max_loss_enabled", True))
-        self.max_loss_amount = float(self.broker_config.get("max_loss_amount", 150.0))
+        self.max_loss_enabled = bool(self.broker_config.get("iqoption_max_loss_enabled", self.broker_config.get("max_loss_enabled", True)))
+        self.max_loss_amount = loss_val
         self.loss_limit_reached = False
+        is_binary = (getattr(self, "iq_mode", "BINARY_OPTIONS") == "BINARY_OPTIONS")
         self.iqoption_risk_policy = IQOptionRiskPolicy(
             profit_target_amount=self.profit_target_amount,
             max_loss_amount=self.max_loss_amount,
             profit_target_enabled=self.profit_target_enabled,
             max_loss_enabled=self.max_loss_enabled,
             max_open_positions=1,
-            zero_loss_blocks_entries=self.execution_environment == "LIVE_REAL",
+            zero_loss_blocks_entries=(self.execution_environment == "LIVE_REAL" and not is_binary),
         )
 
         self.feed = MultiAssetMarketFeed()
@@ -132,7 +140,7 @@ class RealTimeTradingEngine:
         self.initial_balance = active_wallet["initial_balance"]
         self.execution_environment = active_wallet.get("environment", "PAPER")
         self.iqoption_risk_policy.zero_loss_blocks_entries = (
-            self.execution_environment == "LIVE_REAL"
+            self.execution_environment == "LIVE_REAL" and getattr(self, "iq_mode", "FOREX_CFD") != "BINARY_OPTIONS"
         )
 
         self._apply_iqoption_daily_halt()
@@ -355,7 +363,7 @@ class RealTimeTradingEngine:
                     "error": f"Error conectando a IQ Option: {conn.get('error', 'Credenciales inválidas')}. Se mantiene en Modo Demo/Paper."
                 }
             self.broker_wallets["IQOPTION"]["environment"] = "LIVE_REAL"
-            self.iqoption_risk_policy.zero_loss_blocks_entries = True
+            self.iqoption_risk_policy.zero_loss_blocks_entries = (getattr(self, "iq_mode", "FOREX_CFD") != "BINARY_OPTIONS")
             self.broker_config["iqoption_environment"] = "LIVE_REAL"
             real_bal = float(conn.get("real_balance") if conn.get("real_balance") is not None else conn.get("balance", 0.0))
             self.broker_wallets["IQOPTION"]["cash"] = real_bal
@@ -544,12 +552,14 @@ class RealTimeTradingEngine:
             self.binary_engine.iq = getattr(self.feed, "iqoption", None)
 
         if clean_m == "BINARY_OPTIONS":
+            self.iqoption_risk_policy.zero_loss_blocks_entries = False
             self.agent._add_thought(
                 "⏱️ MODO IQ OPTION CONMUTADO: OPCIONES BINARIAS TURBO (1m-5m). Aislamiento total de Forex CFD activo (Gatekeeper 1 operación, Payout >= 80%).",
                 "SUCCESS",
                 icon="⚡"
             )
         else:
+            self.iqoption_risk_policy.zero_loss_blocks_entries = (self.execution_environment == "LIVE_REAL")
             self.agent._add_thought(
                 "🌐 MODO IQ OPTION CONMUTADO: FOREX CFD TRADICIONAL. Aislamiento total de Binarias activo (SL/TP dinámico sin expiración).",
                 "SUCCESS",
@@ -634,6 +644,8 @@ class RealTimeTradingEngine:
                 profit_target_enabled=target_enabled,
                 max_loss_enabled=loss_enabled,
             )
+            if getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS":
+                self.iqoption_risk_policy.zero_loss_blocks_entries = False
             self._apply_iqoption_daily_halt()
 
         # Persistir en disco para que nunca se reseteen al recargar la página o reiniciar
@@ -850,7 +862,12 @@ class RealTimeTradingEngine:
         wallet = self.broker_wallets.get("IQOPTION", {})
         wallet["target_reached"] = snapshot["halted_reason"] == "META_DIARIA_ALCANZADA"
         wallet["loss_limit_reached"] = snapshot["halted_reason"] == "LIMITE_PERDIDA_DIARIA_ALCANZADO"
+        
+        is_binary = (getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS")
         if snapshot["halted"]:
+            # En Opciones Binarias Turbo, la tolerancia cero de Forex CFD no detiene el motor
+            if is_binary and snapshot["halted_reason"] == "TOLERANCIA_CERO_BLOQUEA_NUEVAS_ENTRADAS":
+                return
             wallet["is_running"] = False
             self.target_reached = wallet["target_reached"]
             self.loss_limit_reached = wallet["loss_limit_reached"]
@@ -859,18 +876,22 @@ class RealTimeTradingEngine:
         active_count = len(self.get_broker_positions("IQOPTION"))
         if hasattr(self, "binary_engine") and self.binary_engine.has_active_position:
             active_count += 1
+            
+        is_binary = (getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS")
+        if is_binary:
+            # Gatekeeper estricto 0/1: solo 1 operación a la vez
+            if active_count >= 1 or self._iqoption_order_pending:
+                return False
+            snapshot = self.iqoption_risk_policy.snapshot()
+            if snapshot.get("halted_reason") in ["META_DIARIA_ALCANZADA", "LIMITE_PERDIDA_DIARIA_ALCANZADO"]:
+                return False
+            return True
+
         decision = self.iqoption_risk_policy.can_open(
             active_positions=active_count,
             pending_order=self._iqoption_order_pending,
         )
         self._apply_iqoption_daily_halt()
-
-        # En Opciones Binarias Turbo, el riesgo está acotado estrictamente a la inversión por orden (COP 2,000)
-        # y blindado por el Gatekeeper de 1 posición a la vez (0/1). TOLERANCIA_CERO no debe bloquear entradas.
-        is_binary = (getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS")
-        if not decision.allowed and is_binary:
-            if decision.reason == "TOLERANCIA_CERO_BLOQUEA_NUEVAS_ENTRADAS" and active_count == 0 and not self._iqoption_order_pending:
-                return True
 
         if not decision.allowed:
             self.agent._add_thought(
@@ -881,12 +902,7 @@ class RealTimeTradingEngine:
         return decision.allowed
 
     def _evaluate_and_trade(self, market_state: Dict[str, Any]):
-        # AISLAMIENTO TOTAL: Si el modo activo es BINARIAS, delegar 100% al motor de Opciones Binarias
-        if self.active_broker == "IQOPTION" and getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS":
-            self._evaluate_and_trade_binary(market_state)
-            return
-
-        # A. Evaluar salidas de posiciones abiertas para TODOS los brokers
+        # A. Evaluar salidas de posiciones abiertas para TODOS los brokers (incluyendo CFDs existentes)
         for sym, pos in list(self.open_positions.items()):
             pos_b = (pos.get("broker") or "IQOPTION").upper()
             pos_wal = self.broker_wallets.get(pos_b, {})
@@ -969,6 +985,12 @@ class RealTimeTradingEngine:
 
         now_ts = time.time()
         is_weekend = datetime.datetime.now(datetime.timezone.utc).weekday() >= 5
+
+        # B. Evaluar NUEVAS ENTRADAS
+        # Si el modo activo de IQ Option es BINARY_OPTIONS, delegar la apertura de NUEVAS entradas a binarias
+        if self.active_broker == "IQOPTION" and getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS":
+            self._evaluate_and_trade_binary(market_state)
+            return
 
         for b_id, wallet in list(self.broker_wallets.items()):
             # Enfoque exclusivo en IQ Option: si el broker activo es IQOPTION y hay activos de Forex, concentrar el 100% en IQ Option
@@ -1558,6 +1580,8 @@ class RealTimeTradingEngine:
             b_wal["loss_limit_reached"] = False
             self.target_reached = False
             self.loss_limit_reached = False
+            if getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS":
+                self.iqoption_risk_policy.zero_loss_blocks_entries = False
             self.agent._add_thought(
                 f"▶️ [{b_name}] Operaciones REANUDADAS para este broker. Escáner y ejecuciones activas.",
                 "INFO",
@@ -1631,16 +1655,20 @@ class RealTimeTradingEngine:
         risk_snapshot = self.iqoption_risk_policy.snapshot()
         self._apply_iqoption_daily_halt()
         broker_running = wallet.get("is_running", True)
-        if risk_snapshot.get("halted_reason") == "TOLERANCIA_CERO_BLOQUEA_NUEVAS_ENTRADAS":
-            status_text = "🛡️ TOLERANCIA CERO: ENTRADAS BLOQUEADAS"
-        elif risk_snapshot.get("halted_reason") == "META_DIARIA_ALCANZADA":
+        is_binary = (getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS")
+
+        if risk_snapshot.get("halted_reason") == "META_DIARIA_ALCANZADA":
             status_text = "🏆 META DE GANANCIA LOGRADA (DETENIDO)"
         elif risk_snapshot.get("halted_reason") == "LIMITE_PERDIDA_DIARIA_ALCANZADO":
             status_text = "🛑 LÍMITE PÉRDIDA ALCANZADO (DETENIDO)"
-        elif broker_running:
-            status_text = "OPERANDO EN VIVO (24/7)"
-        else:
+        elif not broker_running:
             status_text = "EN PAUSA"
+        elif is_binary:
+            status_text = "OPERANDO EN VIVO (BINARIAS 1 A LA VEZ)"
+        elif risk_snapshot.get("halted_reason") == "TOLERANCIA_CERO_BLOQUEA_NUEVAS_ENTRADAS":
+            status_text = "🛡️ TOLERANCIA CERO: ENTRADAS BLOQUEADAS"
+        else:
+            status_text = "OPERANDO EN VIVO (24/7)"
 
         # Filtrado estricto por broker: SOLO activos permitidos para este broker (Cero mezcla)
         market_radar = []
