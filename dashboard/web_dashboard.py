@@ -400,6 +400,26 @@ def api_admin_system_update():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+@app.route("/api/admin/run-diagnose", methods=["POST"])
+def api_admin_run_diagnose():
+    """Ejecuta el script de diagnóstico y prueba real en vivo de IQ Option devolviendo la evidencia de consola."""
+    current_admin_id = session.get("user_id")
+    user = get_user_by_id(current_admin_id) if current_admin_id else None
+    if not user or user.get("role") != "admin":
+        return jsonify({"success": False, "error": "Acceso denegado"}), 403
+
+    import subprocess
+    try:
+        res = subprocess.run([sys.executable, "scripts/diagnose_iq_instruments.py"], capture_output=True, text=True, timeout=45)
+        return jsonify({
+            "success": True,
+            "stdout": res.stdout,
+            "stderr": res.stderr,
+            "returncode": res.returncode
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route("/api/admin/restart-service", methods=["POST"])
 def api_admin_restart_service():
     """Reinicia limpiamente el proceso del servicio para cargar código fresco."""
