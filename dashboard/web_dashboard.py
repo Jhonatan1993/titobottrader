@@ -432,16 +432,36 @@ def api_admin_iq_diagnostics():
         }))
         ws.send(json.dumps({"name": "ssid", "msg": iq.ssid}))
         
-        req_id = f"diag_{int(time.time() * 1000)}"
+        # 1. Esperar respuesta de autenticación
+        auth_t = time.time()
+        while time.time() - auth_t < 2.5:
+            r = ws.recv()
+            if not r: continue
+            try:
+                d = json.loads(r)
+                if d.get("name") in ["authenticated", "profile"]:
+                    break
+            except Exception:
+                pass
+
+        # 2. Habilitar resultados
         ws.send(json.dumps({
-            "name": "subscribeMessage",
-            "request_id": f"sub_{int(time.time() * 1000)}",
-            "msg": {
-                "name": "portfolio.positions-state",
-                "version": "1.0"
-            }
+            "name": "setOptions",
+            "msg": {"sendResults": True},
+            "request_id": f"sopts_{int(time.time() * 1000)}"
         }))
-        inst_types = ["marginal-forex", "marginal-cfd", "marginal-crypto", "digital-option", "turbo-option", "binary-option"]
+
+        # 3. Solicitar todas las categorías institucionales
+        inst_types = [
+            "marginal-forex",
+            "marginal-cfd",
+            "marginal-crypto",
+            "digital-option",
+            "turbo-option",
+            "binary-option",
+            "blitz-option",
+            "fx-option"
+        ]
         ws.send(json.dumps({
             "name": "sendMessage",
             "request_id": f"pos_{int(time.time() * 1000)}",
@@ -456,16 +476,11 @@ def api_admin_iq_diagnostics():
             }
         }))
         ws.send(json.dumps({
-            "name": "sendMessage",
-            "request_id": f"hist_{int(time.time() * 1000)}",
+            "name": "subscribeMessage",
+            "request_id": f"sub_{int(time.time() * 1000)}",
             "msg": {
-                "name": "portfolio.get-history-positions",
-                "version": "2.0",
-                "body": {
-                    "instrument_types": inst_types,
-                    "limit": 5,
-                    "offset": 0
-                }
+                "name": "portfolio.positions-state",
+                "version": "1.0"
             }
         }))
         
