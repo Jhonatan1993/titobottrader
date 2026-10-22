@@ -336,6 +336,16 @@ def set_iqoption_mode():
     res = ENGINE.set_iq_mode(mode)
     return jsonify(res)
 
+@app.route("/api/control/test-binary-trade", methods=["POST"])
+def test_binary_trade():
+    """Permite disparar 1 orden real de prueba mínima respetando el gatekeeper de 1 sola operación (0/1)."""
+    data = request.get_json(silent=True) or {}
+    symbol = data.get("symbol", "EURJPY")
+    direction = data.get("direction", "CALL")
+    amount = data.get("amount")
+    res = ENGINE.trigger_test_binary_trade(symbol=symbol, direction=direction, amount=amount)
+    return jsonify(res)
+
 @app.route("/api/control/set-active-broker", methods=["POST"])
 def set_active_broker():
     """Solo IQ Option está permitido; cualquier otro valor es rechazado."""

@@ -121,6 +121,17 @@ class BinaryOptionsStrategyEngine:
             if (upper_wick / total_range) >= 0.35 and upper_wick > body:
                 has_bearish_rejection = True
 
+        # Soportes y Resistencias dinámicos (Ventana de 15 velas de 1m)
+        if candles and len(candles) >= 3:
+            recent_lows = [float(c.get("low", c.get("close", price))) for c in candles[-15:]]
+            recent_highs = [float(c.get("high", c.get("close", price))) for c in candles[-15:]]
+            support = min(recent_lows)
+            resistance = max(recent_highs)
+        elif dist_check := abs(price - support) / max(0.0001, price) > 0.01:
+            # Si el soporte/resistencia estático está a más de 1% (300 pips), calibrar a rango de 1m (5-8 pips)
+            support = price * 0.9995
+            resistance = price * 1.0005
+
         change_pct = float(asset.get("change_percent", 0.0))
         trend_status = str(asset.get("trend_status", "")).upper()
         regime = str(asset.get("regime", "")).upper()
@@ -129,30 +140,32 @@ class BinaryOptionsStrategyEngine:
 
         # 4. Cálculo de Confluencia para CALL (Compra / Sube)
         call_score = 0
-        # A. Soporte Técnico
+        # A. Soporte Técnico Dinámico
         dist_support_pct = ((price - support) / price) * 100 if support > 0 else 99
-        if 0.0 <= dist_support_pct <= 0.60:
-            call_score += 35 # Rebote directo en zona de soporte
-        elif dist_support_pct <= 1.20:
+        if 0.0 <= dist_support_pct <= 0.08:
+            call_score += 35 # Rebote directo en zona de soporte inmediato
+        elif dist_support_pct <= 0.20:
             call_score += 20
+        elif dist_support_pct <= 0.40:
+            call_score += 10
 
         # B. Momentum y Reversión RSI
-        if rsi <= 38.0:
+        if rsi <= 40.0:
             call_score += 30 # Fuerte sobreventa (rebote inmediato)
         elif rsi <= 48.0:
             call_score += 20 # Zona propensa a rebote
-        elif rsi > 52.0 and change_pct > 0:
-            call_score += 15 # Momentum comprador
+        elif rsi >= 50.0 and (last_candle_green or change_pct > 0):
+            call_score += 15 # Continuación compradora
 
-        # C. Tendencia y Dirección
-        if "ALCISTA" in trend_status or "UP" in regime or change_pct > 0.05:
-            call_score += 20
+        # C. Tendencia y Medias
+        if "ALCISTA" in trend_status or "UP" in regime or change_pct > 0.02:
+            call_score += 15
         if price >= ema20 or ema20 >= ema50:
             call_score += 15
 
-        # D. Confirmación de Velas
+        # D. Confirmación de Velas (Acción de Precio)
         if last_candle_green:
-            call_score += 10
+            call_score += 15
         if has_bullish_rejection:
             call_score += 20
 
@@ -164,30 +177,32 @@ class BinaryOptionsStrategyEngine:
 
         # 5. Cálculo de Confluencia para PUT (Venta / Baja)
         put_score = 0
-        # A. Resistencia Técnica
+        # A. Resistencia Técnica Dinámica
         dist_resistance_pct = ((resistance - price) / price) * 100 if resistance > 0 else 99
-        if 0.0 <= dist_resistance_pct <= 0.60:
-            put_score += 35 # Rechazo directo en techo técnico
-        elif dist_resistance_pct <= 1.20:
+        if 0.0 <= dist_resistance_pct <= 0.08:
+            put_score += 35 # Rechazo directo en techo técnico inmediato
+        elif dist_resistance_pct <= 0.20:
             put_score += 20
+        elif dist_resistance_pct <= 0.40:
+            put_score += 10
 
         # B. Momentum y Reversión RSI
-        if rsi >= 62.0:
+        if rsi >= 60.0:
             put_score += 30 # Fuerte sobrecompra (retroceso inmediato)
         elif rsi >= 52.0:
             put_score += 20 # Zona propensa a agotamiento
-        elif rsi < 48.0 and change_pct < 0:
-            put_score += 15 # Momentum vendedor
+        elif rsi <= 50.0 and (last_candle_red or change_pct < 0):
+            put_score += 15 # Continuación vendedora
 
-        # C. Tendencia y Dirección
-        if "BAJISTA" in trend_status or "DOWN" in regime or change_pct < -0.05:
-            put_score += 20
+        # C. Tendencia y Medias
+        if "BAJISTA" in trend_status or "DOWN" in regime or change_pct < -0.02:
+            put_score += 15
         if price <= ema20 or ema20 <= ema50:
             put_score += 15
 
-        # D. Confirmación de Velas
+        # D. Confirmación de Velas (Acción de Precio)
         if last_candle_red:
-            put_score += 10
+            put_score += 15
         if has_bearish_rejection:
             put_score += 20
 
@@ -218,6 +233,34 @@ class BinaryOptionsStrategyEngine:
             "confidence": max(call_score, put_score),
             "reason": f"Mercado en equilibrio (Call: {call_score}p, Put: {put_score}p). Esperando confluencia >= {self.min_confidence} pts."
         }
+
+    def trigger_test_binary_trade(
+        self, 
+        symbol: str = "EURJPY", 
+        direction: str = "CALL", 
+        amount: float = 2000.0,
+        duration_minutes: int = 1
+    ) -> Dict[str, Any]:
+        """
+        Fuerza una operación controlada de prueba en IQ Option (respetando estrictamente el cupo único 0/1).
+        Retorna el resultado directo de la ejecución con evidencia del ID de orden.
+        """
+        if self.has_active_position:
+            return {
+                "success": False,
+                "error": "GATEKEEPER ACTIVO: Ya existe 1 operación binaria en curso (1/1). Espere a su finalización."
+            }
+        
+        dir_clean = direction.upper()
+        if dir_clean not in ["CALL", "PUT"]:
+            dir_clean = "CALL"
+
+        return self.execute_binary_option(
+            symbol=symbol,
+            direction=dir_clean,
+            amount=amount,
+            duration_minutes=duration_minutes
+        )
 
     def execute_binary_option(
         self, 

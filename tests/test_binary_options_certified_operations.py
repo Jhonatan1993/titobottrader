@@ -277,3 +277,78 @@ def test_certified_operation_5_defensive_loss_zero_martingale():
     eval_blocked = engine.binary_engine.evaluate_asset(market_state["EURUSD"])
     assert eval_blocked["decision"] == "HOLD"
     assert "enfriamiento post-operación" in eval_blocked["reason"]
+
+
+def test_certified_operation_6_trigger_test_binary_trade_gatekeeper():
+    """
+    CERTIFICACIÓN OPERATIVA 6: Disparo de orden de prueba controlada y GATEKEEPER 0/1.
+    - Ejecuta orden de prueba por valor legal mínimo.
+    - Ocupa el cupo único de cartera (1/1).
+    - Un segundo intento es RECHAZADO INMEDIATAMENTE por el Gatekeeper inquebrantable.
+    - Al resolverse la orden, se libera el cupo a (0/1) para habilitar nuevas entradas.
+    """
+    adapter = CertifiedMockIQAdapter(currency="COP", balance=50000.0)
+    engine = RealTimeTradingEngine(initial_balance=50000.0, execution_environment="PAPER")
+    engine.set_iq_mode("BINARY_OPTIONS")
+    engine.feed.iqoption = adapter
+    engine.binary_engine.iq = adapter
+
+    res1 = engine.trigger_test_binary_trade(symbol="EURJPY", direction="CALL", amount=2000.0)
+    assert res1["success"] is True
+    assert res1["order_id"].startswith("BIN_CERT_")
+    assert engine.binary_engine.has_active_position is True
+
+    # Intento concurrentemente bloqueado por política de 1 sola operación a la vez
+    res2 = engine.trigger_test_binary_trade(symbol="AUDUSD", direction="PUT", amount=2000.0)
+    assert res2["success"] is False
+    assert "GATEKEEPER ACTIVO" in res2["error"]
+
+    # Simular expiración y resolución pausando nuevas compras en el step
+    pos = engine.binary_engine.open_position
+    pos["expiration_timestamp"] = time.time() - 2.0
+    engine.is_running = False
+    engine.step()
+
+    # Cupo liberado a 0/1
+    assert engine.binary_engine.has_active_position is False
+    assert engine.binary_engine.total_wins == 1
+
+    # Al reanudar, el motor autónomo puede tomar la siguiente operación (1 a la vez)
+    engine.is_running = True
+    engine.step()
+    assert engine.binary_engine.has_active_position is True
+
+
+def test_certified_operation_7_dynamic_candles_confluence_evaluation():
+    """
+    CERTIFICACIÓN OPERATIVA 7: Evaluación de confluencia con velas de 1m y niveles dinámicos.
+    Garantiza que un activo con velas de 1m que rebotan en soporte dinámico genera señal CALL
+    con puntaje >= 50 pts sin quedarse estancado en HOLD eterno.
+    """
+    adapter = CertifiedMockIQAdapter(currency="COP", balance=50000.0)
+    engine = RealTimeTradingEngine(initial_balance=50000.0, execution_environment="PAPER")
+    engine.set_iq_mode("BINARY_OPTIONS")
+    engine.feed.iqoption = adapter
+    engine.binary_engine.iq = adapter
+
+    asset = {
+        "symbol": "EURJPY",
+        "price": 165.200,
+        "rsi": 38.0,
+        "ema20": 165.195,
+        "ema50": 165.190,
+        "support": 165.195,
+        "resistance": 165.350,
+        "change_percent": 0.05,
+        "trend_status": "ALCISTA",
+        "category": "FOREX"
+    }
+    candles = [
+        {"open": 165.190, "close": 165.192, "high": 165.195, "low": 165.188},
+        {"open": 165.192, "close": 165.200, "high": 165.205, "low": 165.190} # Vela verde de rebote
+    ]
+
+    eval_res = engine.binary_engine.evaluate_asset(asset, candles)
+    assert eval_res["decision"] == "CALL"
+    assert eval_res["confidence"] >= 50
+    assert "Confluencia Alcista" in eval_res["reason"]

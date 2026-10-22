@@ -1062,6 +1062,7 @@ class RealTimeTradingEngine:
         trade_amount = 2000.0 if is_cop else 2.0
 
         candidates = []
+        scanned_evals = []
         for sym, asset in market_state.items():
             cat = asset.get("category")
             # Permitir Forex tradicional y pares OTC 24/7 para Opciones Binarias
@@ -1072,6 +1073,7 @@ class RealTimeTradingEngine:
             eval_res = self.binary_engine.evaluate_asset(asset, candles)
             dec = eval_res.get("decision")
             conf = eval_res.get("confidence", 0)
+            scanned_evals.append((conf, sym, dec, eval_res))
 
             if dec in ["CALL", "PUT"] and conf >= self.binary_engine.min_confidence:
                 payout = eval_res.get("payout", 0.85)
@@ -1092,8 +1094,9 @@ class RealTimeTradingEngine:
             if order_res.get("success"):
                 wallet["cash"] = round(wallet.get("cash", 0.0) - trade_amount, 2)
                 self.cash_balance = wallet["cash"]
+                real_oid = order_res.get("order_id", "EN_CURSO")
                 self.agent._add_thought(
-                    f"⏱️ OPCIÓN BINARIA LANZADA: {best_sym} {best_dir} (${trade_amount:,.2f}) - {best_eval['reason']}",
+                    f"🎯 OPCIÓN BINARIA LANZADA [IQ OPTION]: {best_sym} {best_dir} (${trade_amount:,.2f}) | Expiración 60s | ID #{real_oid} | {best_eval['reason']}",
                     "SUCCESS",
                     best_sym,
                     "🎯"
@@ -1105,6 +1108,85 @@ class RealTimeTradingEngine:
                     best_sym,
                     "⚠️"
                 )
+        else:
+            # Heartbeat informativo para el Dashboard cada 8-10 segundos
+            now_scan = time.time()
+            if not hasattr(self, "_last_binary_scan_ts"):
+                self._last_binary_scan_ts = 0.0
+            if (now_scan - self._last_binary_scan_ts) >= 10.0:
+                self._last_binary_scan_ts = now_scan
+                if scanned_evals:
+                    scanned_evals.sort(key=lambda x: x[0], reverse=True)
+                    top_conf, top_sym, top_dec, top_res = scanned_evals[0]
+                    self.agent._add_thought(
+                        f"⏱️ [Binarias Turbo] Escaneando {len(scanned_evals)} pares en vivo. Mejor activo: {top_sym} ({top_dec} {top_conf}% - Req: >= {self.binary_engine.min_confidence}%). Cartera 0/1 disponible.",
+                        "INFO",
+                        top_sym,
+                        "⏱️"
+                    )
+
+    def trigger_test_binary_trade(
+        self, 
+        symbol: str = "EURJPY", 
+        direction: str = "CALL", 
+        amount: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """
+        Dispara una orden de prueba controlada de Binarias Turbo directamente en IQ Option.
+        Respeta al 100% el límite inquebrantable de 1 sola operación a la vez (0/1).
+        """
+        if not hasattr(self, "binary_engine"):
+            return {"success": False, "error": "Motor de opciones binarias no inicializado."}
+
+        if self.binary_engine.has_active_position:
+            return {
+                "success": False, 
+                "error": "GATEKEEPER ACTIVO: Ya existe 1 operación binaria en curso (1/1 ocupado). Espere su resolución."
+            }
+
+        if not self._iqoption_can_open():
+            return {
+                "success": False,
+                "error": "Límite de riesgo activo: No se permiten nuevas posiciones en IQ Option en este momento."
+            }
+
+        wallet = self.broker_wallets.get("IQOPTION", {})
+        is_cop = (getattr(self.feed.iqoption, "currency", "USD") == "COP")
+        min_amount = 2000.0 if is_cop else 1.0
+        final_amount = float(amount) if amount and float(amount) >= min_amount else min_amount
+
+        cash = wallet.get("cash", 0.0)
+        if cash < final_amount:
+            return {
+                "success": False,
+                "error": f"Saldo insuficiente: Dispones de {cash:,.2f} y se requieren al menos {final_amount:,.2f}."
+            }
+
+        res = self.binary_engine.trigger_test_binary_trade(
+            symbol=symbol,
+            direction=direction,
+            amount=final_amount,
+            duration_minutes=1
+        )
+        if res.get("success"):
+            wallet["cash"] = round(wallet.get("cash", 0.0) - final_amount, 2)
+            self.cash_balance = wallet["cash"]
+            oid = res.get("order_id", "REGISTRADA")
+            self.agent._add_thought(
+                f"🧪 PRUEBA BINARIA EN PRODUCCIÓN: {symbol} {direction} (${final_amount:,.2f}) | Orden Oficial #{oid} en IQ Option | 1/1 Ocupado",
+                "SUCCESS",
+                symbol,
+                "🧪"
+            )
+        else:
+            self.agent._add_thought(
+                f"⚠️ Error en prueba binaria {symbol}: {res.get('error', 'Rechazada por el broker')}",
+                "WARNING",
+                symbol,
+                "⚠️"
+            )
+
+        return res
 
 
     def _execute_buy(self, symbol: str, asset: Dict[str, Any], decision_data: Dict[str, Any], broker_id: Optional[str] = None):

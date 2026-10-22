@@ -1064,11 +1064,6 @@ class IQOptionAdapter:
         clean_sym = symbol.replace("/", "").replace(" ", "").replace("_", "").upper()
         active_id = ACTIVE_ASSET_IDS.get(clean_sym, ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC", 1))
 
-        now = time.time()
-        rem_sec = int(now) % 60
-        add_sec = (60 - rem_sec) if rem_sec <= 30 else (120 - rem_sec)
-        expiration_ts = int(now) + add_sec + (max(1, duration_minutes) - 1) * 60
-
         target_balance = self.real_balance_id if self.environment == "LIVE_REAL" else (self.practice_balance_id or self.active_balance_id)
         target_bal_id = int(target_balance) if target_balance and str(target_balance).isdigit() else target_balance
 
@@ -1085,7 +1080,9 @@ class IQOptionAdapter:
 
         try:
             ws = websocket.create_connection(ws_url, header=headers, timeout=8, sslopt={"cert_reqs": ssl.CERT_NONE})
-            # Handshake
+            now = time.time()
+            
+            # Handshake y sincronización con servidor IQ Option
             ws.send(json.dumps({
                 "name": "authenticate",
                 "msg": {"ssid": self.ssid, "protocol": 3, "session_id": "", "client_session_id": ""},
@@ -1093,6 +1090,7 @@ class IQOptionAdapter:
             }))
             ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
 
+            server_time_offset = 0.0
             auth_start = time.time()
             while time.time() - auth_start < 2.5:
                 raw = ws.recv()
@@ -1100,12 +1098,25 @@ class IQOptionAdapter:
                     continue
                 try:
                     d = json.loads(raw)
+                    if d.get("name") == "timeSync":
+                        s_ms = d.get("msg")
+                        if s_ms and isinstance(s_ms, (int, float)):
+                            server_time_offset = (s_ms / 1000.0) - time.time()
                     if d.get("name") in ["authenticated", "profile"]:
                         break
                 except Exception:
                     pass
 
-            # Habilitar recepción de respuestas de órdenes
+            # Cálculo de expiración sincronizado con el reloj del servidor IQ Option
+            synced_now = time.time() + server_time_offset
+            rem_sec = int(synced_now) % 60
+            if rem_sec > 30:
+                add_sec = (60 - rem_sec) + 60 * duration_minutes
+            else:
+                add_sec = (60 - rem_sec) + 60 * max(0, duration_minutes - 1)
+            expiration_ts = int(synced_now) + add_sec
+
+            # Habilitar recepción de resultados de órdenes
             ws.send(json.dumps({
                 "name": "setOptions",
                 "msg": {"sendResults": True},
@@ -1119,7 +1130,7 @@ class IQOptionAdapter:
                 "request_id": req_id,
                 "msg": {
                     "name": "binary-options.open-option",
-                    "version": "2.0",
+                    "version": "1.0",
                     "body": {
                         "active_id": active_id,
                         "direction": direction.lower(),
@@ -1163,6 +1174,16 @@ class IQOptionAdapter:
                             break
                         elif isinstance(msg_body, dict) and ("message" in msg_body or "reason" in msg_body):
                             err_msg = msg_body.get("message") or msg_body.get("reason")
+                            # Si el activo regular está cerrado en binarias, intentar con par OTC
+                            if ("closed" in str(err_msg).lower()) and not clean_sym.endswith("-OTC") and not clean_sym.endswith("OTC"):
+                                otc_id = ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC", ACTIVE_ASSET_IDS.get(f"{clean_sym}OTC"))
+                                if otc_id:
+                                    req_id_otc = f"bin_opt_otc_{int(time.time() * 1000)}"
+                                    body_payload["request_id"] = req_id_otc
+                                    body_payload["msg"]["body"]["active_id"] = otc_id
+                                    req_id = req_id_otc
+                                    ws.send(json.dumps(body_payload))
+                                    continue
                             result = {"success": False, "error": f"Rechazado por IQ Option Binarias: {err_msg}"}
                             break
                         elif st and st != 2000:
