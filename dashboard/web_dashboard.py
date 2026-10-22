@@ -434,6 +434,42 @@ def api_admin_restart_service():
     threading.Thread(target=trigger_restart, daemon=True).start()
     return jsonify({"success": True, "message": "Servicio reiniciando en 1 segundo..."})
 
+@app.route("/api/admin/force-real-binary-test", methods=["POST"])
+def api_admin_force_real_binary_test():
+    """Busca el activo disponible en IQ Option y dispara 1 orden real de 2,000 COP garantizando cupo 0/1."""
+    current_admin_id = session.get("user_id")
+    user = get_user_by_id(current_admin_id) if current_admin_id else None
+    if not user or user.get("role") != "admin":
+        return jsonify({"success": False, "error": "Acceso denegado"}), 403
+
+    iq = ENGINE.feed.iqoption
+    if not iq.ssid:
+        iq.connect()
+
+    is_cop = (getattr(iq, "currency", "COP") == "COP")
+    trade_amt = 2000.0 if is_cop else 1.0
+
+    # Activos candidatos comunes con alta liquidez (Forex estándar y OTC)
+    candidates = ["EURUSD", "AUDUSD", "EURGBP", "EURJPY", "GBPUSD", "USDJPY", "USDCHF-OTC", "EURUSD-OTC", "EURJPY-OTC", "AUDUSD-OTC"]
+    
+    results = {}
+    successful_order = None
+
+    for sym in candidates:
+        res = ENGINE.trigger_test_binary_trade(symbol=sym, direction="CALL", amount=trade_amt)
+        results[sym] = res
+        if res.get("success"):
+            successful_order = res
+            break
+
+    return jsonify({
+        "success": bool(successful_order),
+        "executed_trade": successful_order,
+        "attempts": results,
+        "currency": iq.currency,
+        "real_balance": iq.real_amount
+    })
+
 @app.route("/api/admin/system-logs", methods=["GET"])
 def api_admin_system_logs():
     """Obtiene los últimos registros del servicio systemd de titobot en el VPS."""
