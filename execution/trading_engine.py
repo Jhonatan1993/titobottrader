@@ -758,8 +758,9 @@ class RealTimeTradingEngine:
         if wallet.get("environment") == "LIVE_REAL" and b == "IQOPTION":
             open_pos = self.get_broker_positions(b)
             unrealized = sum(p.get("current_pnl", 0.0) for p in open_pos)
+            invested = sum(p.get("invested_amount", 0.0) for p in open_pos)
             cash = wallet.get("cash", 0.0)
-            return round(cash + unrealized, 2)
+            return round(cash + invested + unrealized, 2)
         base = wallet.get("initial_balance", 0.0)
         vault = wallet.get("profit_vault", 0.0)
         unrealized = sum(p.get("current_pnl", 0.0) for p in self.get_broker_positions(b))
@@ -1666,6 +1667,7 @@ class RealTimeTradingEngine:
             return
         
         pos = self.open_positions.pop(symbol)
+        actual_sym = pos.get("symbol", symbol)
         exit_price = asset["price"]
         quantity = pos["quantity"]
         invested = pos["invested_amount"]
@@ -1856,31 +1858,34 @@ class RealTimeTradingEngine:
                 "WARNING",
                 icon="🛑"
             )
-            for sym in list(self.open_positions.keys()):
-                pos = self.open_positions[sym]
+            for pos_key in list(self.open_positions.keys()):
+                pos = self.open_positions.get(pos_key)
+                if not pos: continue
                 pos_b = pos.get("broker") or ("BINANCE" if pos.get("category") == "CRYPTO" else ("IQOPTION" if pos.get("category") == "FOREX" else "ALPACA"))
                 if pos_b == target_b:
-                    asset = self.feed.get_asset(sym)
-                    if asset:
-                        decision = {
-                            "decision": "EMERGENCY_SELL",
-                            "reason_simple": f"Parada de Seguridad solicitada exclusivamente para {b_name}"
-                        }
-                        self._execute_sell(sym, asset, decision)
+                    actual_sym = pos.get("symbol", pos_key)
+                    asset = self.feed.get_asset(actual_sym) or {"price": pos.get("current_price", pos.get("entry_price", 1.0)), "name": pos.get("name", actual_sym)}
+                    decision = {
+                        "decision": "EMERGENCY_SELL",
+                        "reason_simple": f"Parada de Seguridad solicitada exclusivamente para {b_name}"
+                    }
+                    self._execute_sell(pos_key, asset, decision)
         else:
             # Si no se especificó broker, detener todos
             self.is_running = False
             for b_id, b_wal in self.broker_wallets.items():
                 b_wal["is_running"] = False
             self.agent._add_thought("🛑 PARADA DE EMERGENCIA GLOBAL: Operaciones detenidas en todos los brokers.", "WARNING", icon="🛑")
-            for sym in list(self.open_positions.keys()):
-                asset = self.feed.get_asset(sym)
-                if asset:
-                    decision = {
-                        "decision": "EMERGENCY_SELL",
-                        "reason_simple": "Cierre Inmediato de Seguridad / Parada solicitada por el usuario"
-                    }
-                    self._execute_sell(sym, asset, decision)
+            for pos_key in list(self.open_positions.keys()):
+                pos = self.open_positions.get(pos_key)
+                if not pos: continue
+                actual_sym = pos.get("symbol", pos_key)
+                asset = self.feed.get_asset(actual_sym) or {"price": pos.get("current_price", pos.get("entry_price", 1.0)), "name": pos.get("name", actual_sym)}
+                decision = {
+                    "decision": "EMERGENCY_SELL",
+                    "reason_simple": "Cierre Inmediato de Seguridad / Parada solicitada por el usuario"
+                }
+                self._execute_sell(pos_key, asset, decision)
 
         # El motor general sigue activo si al menos un broker continúa operando
         self.is_running = any(w.get("is_running", True) for w in self.broker_wallets.values())

@@ -230,7 +230,13 @@ class IQOptionAdapter:
                                     self.practice_amount = round(amt, 2)
                             found_profile = True
 
-                    elif msg_name in ["positions", "portfolio.positions", "portfolio.order-changed", "portfolio.position-changed"] or data.get("request_id") == req_pos_id:
+                    elif msg_name == "balance-changed" and isinstance(msg_body, dict):
+                        b_type = msg_body.get("user_balance_type") or msg_body.get("type")
+                        b_id = msg_body.get("id")
+                        if b_type == 1 or b_id == self.real_balance_id:
+                            self.real_amount = round(float(msg_body.get("amount", self.real_amount)), 2)
+
+                    elif (msg_name in ["positions", "portfolio.positions"] or (isinstance(msg_body, dict) and "positions" in msg_body)) and msg_name != "result":
                         found_positions = True
                         p_list = []
                         if isinstance(msg_body, dict):
@@ -239,12 +245,13 @@ class IQOptionAdapter:
                             p_list = msg_body
 
                         for p in p_list:
-                            ev = p.get("raw_event", {}).get("marginal_forex_position_changed1", {}) if isinstance(p.get("raw_event"), dict) else p
+                            raw_ev = p.get("raw_event", {}) if isinstance(p.get("raw_event"), dict) else {}
+                            ev = list(raw_ev.values())[0] if raw_ev else p
                             ext_id = str(p.get("external_id") or ev.get("id") or p.get("id") or "")
                             int_id = str(p.get("id") or "")
                             p_status = str(p.get("status") or ev.get("status") or "open").lower()
                             act_id = p.get("active_id") or ev.get("instrument_active_id")
-                            oids = [str(oid) for oid in ev.get("order_ids", [])]
+                            oids = [str(oid) for oid in ev.get("order_ids", [])] if isinstance(ev.get("order_ids"), list) else []
                             sym = ACTIVE_ID_TO_SYMBOL.get(int(act_id) if act_id is not None else 1, "EURUSD")
                             if p_status not in ["closed", "cancelled", "rejected"]:
                                 parsed_positions.append({
@@ -255,10 +262,10 @@ class IQOptionAdapter:
                                     "active_id": act_id,
                                     "symbol": sym,
                                     "status": p_status,
-                                    "pnl_net": float(p.get("pnl") or ev.get("pnl_net") or 0.0),
-                                    "invest": float(p.get("invest") or 0.0),
+                                    "pnl_net": float(p.get("pnl_net") or p.get("pnl") or ev.get("pnl_net") or 0.0),
+                                    "invest": float(p.get("invest") or ev.get("initial_margin") or 0.0),
                                     "open_quote": float(p.get("open_quote") or ev.get("open_quote_ask") or 0.0),
-                                    "side": str(p.get("side") or ev.get("side") or p.get("direction") or ev.get("direction") or "buy").upper(),
+                                    "side": str(p.get("side") or ev.get("type") or ev.get("side") or "buy").upper(),
                                     "leverage": int(p.get("leverage") or ev.get("leverage") or 500)
                                 })
                         if found_profile and found_positions:
