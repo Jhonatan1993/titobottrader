@@ -425,9 +425,22 @@ def api_admin_iq_diagnostics():
     headers = [f"Cookie: ssid={iq.ssid}", "User-Agent: Mozilla/5.0"]
     try:
         ws = websocket.create_connection(ws_url, header=headers, timeout=6, sslopt={"cert_reqs": ssl.CERT_NONE})
+        ws.send(json.dumps({
+            "name": "authenticate",
+            "msg": {"ssid": iq.ssid, "protocol": 3, "session_id": "", "client_session_id": ""},
+            "request_id": f"auth_{int(time.time() * 1000)}"
+        }))
         ws.send(json.dumps({"name": "ssid", "msg": iq.ssid}))
         
         req_id = f"diag_{int(time.time() * 1000)}"
+        ws.send(json.dumps({
+            "name": "subscribeMessage",
+            "request_id": f"sub_{int(time.time() * 1000)}",
+            "msg": {
+                "name": "portfolio.positions-state",
+                "version": "1.0"
+            }
+        }))
         ws.send(json.dumps({
             "name": "sendMessage",
             "request_id": req_id,
