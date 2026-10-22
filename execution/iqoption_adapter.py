@@ -1044,6 +1044,13 @@ class IQOptionAdapter:
                 except Exception:
                     pass
 
+            # Habilitar recepción de respuestas de órdenes
+            ws.send(json.dumps({
+                "name": "setOptions",
+                "msg": {"sendResults": True},
+                "request_id": f"sopts_bin_{int(now * 1000)}"
+            }))
+
             # Enviar mensaje oficial binary-options.open-option
             req_id = f"bin_opt_{int(time.time() * 1000)}"
             body_payload = {
