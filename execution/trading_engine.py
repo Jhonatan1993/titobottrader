@@ -581,6 +581,10 @@ class RealTimeTradingEngine:
         self.is_running = True
         if hasattr(self, "iqoption_risk_policy"):
             self.iqoption_risk_policy.reset_halt()
+        if hasattr(self, "binary_engine") and self.binary_engine.has_active_position:
+            pos = self.binary_engine.open_position
+            if pos and time.time() >= pos.get("expiration_timestamp", 0):
+                self.binary_engine.check_and_resolve_active_trade()
         return {
             "success": True,
             "iq_mode": self.iq_mode,
@@ -1001,6 +1005,12 @@ class RealTimeTradingEngine:
 
         now_ts = time.time()
         is_weekend = datetime.datetime.now(datetime.timezone.utc).weekday() >= 5
+
+        # Si hay una opción binaria en curso (independientemente del modo), resolverla si ya expiró
+        if hasattr(self, "binary_engine") and self.binary_engine.has_active_position:
+            pos = self.binary_engine.open_position
+            if pos and now_ts >= pos.get("expiration_timestamp", 0):
+                self.binary_engine.check_and_resolve_active_trade()
 
         # B. Evaluar NUEVAS ENTRADAS
         # Si el modo activo de IQ Option es BINARY_OPTIONS, delegar la apertura de NUEVAS entradas a binarias
