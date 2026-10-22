@@ -1087,7 +1087,7 @@ class IQOptionAdapter:
             ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
 
             auth_start = time.time()
-            while time.time() - auth_start < 2.0:
+            while time.time() - auth_start < 2.5:
                 raw = ws.recv()
                 if not raw:
                     continue
@@ -1127,6 +1127,7 @@ class IQOptionAdapter:
             ws.send(json.dumps(body_payload))
 
             order_start = time.time()
+            captured_frames = []
             while time.time() - order_start < 6.0:
                 raw_resp = ws.recv()
                 if not raw_resp:
@@ -1137,6 +1138,7 @@ class IQOptionAdapter:
                     msg_body = data.get("msg", {})
                     req = data.get("request_id")
                     st = data.get("status")
+                    captured_frames.append(msg_name)
 
                     if req == req_id:
                         if isinstance(msg_body, dict) and "id" in msg_body:
@@ -1173,10 +1175,16 @@ class IQOptionAdapter:
                             "status": "OPENED"
                         }
                         break
+                    elif msg_name in ["option-rejected", "rejected"]:
+                        err_msg = msg_body.get("message") if isinstance(msg_body, dict) else str(msg_body)
+                        result = {"success": False, "error": f"Rechazado por IQ Option: {err_msg}"}
+                        break
                 except Exception:
                     pass
 
             ws.close()
+            if not result.get("success") and "Tiempo de espera" in result.get("error", ""):
+                result["error"] += f" (Frames recibidos: {', '.join(captured_frames[:6])})"
         except Exception as e:
             result = {"success": False, "error": f"Error WebSocket Binarias: {str(e)}"}
 

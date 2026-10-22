@@ -406,6 +406,50 @@ def api_admin_restart_service():
     threading.Thread(target=trigger_restart, daemon=True).start()
     return jsonify({"success": True, "message": "Servicio reiniciando en 1 segundo..."})
 
+@app.route("/api/admin/system-logs", methods=["GET"])
+def api_admin_system_logs():
+    """Obtiene los últimos registros del servicio systemd de titobot en el VPS."""
+    current_admin_id = session.get("user_id")
+    user = get_user_by_id(current_admin_id) if current_admin_id else None
+    if not user or user.get("role") != "admin":
+        return jsonify({"success": False, "error": "Acceso denegado: solo Administradores."}), 403
+
+    import subprocess
+    n = request.args.get("n", "80")
+    try:
+        res = subprocess.run(["journalctl", "-u", "titobot", "-n", str(n), "--no-pager"], capture_output=True, text=True, timeout=10)
+        return jsonify({"success": True, "logs": res.stdout, "stderr": res.stderr})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/admin/test-binary-order", methods=["POST"])
+def api_admin_test_binary_order():
+    """Prueba en tiempo real de orden de opción binaria directamente en el broker con reporte detallado."""
+    current_admin_id = session.get("user_id")
+    user = get_user_by_id(current_admin_id) if current_admin_id else None
+    if not user or user.get("role") != "admin":
+        return jsonify({"success": False, "error": "Acceso denegado: solo Administradores."}), 403
+
+    data = request.get_json(silent=True) or {}
+    sym = data.get("symbol", "EURUSD")
+    direction = data.get("direction", "CALL")
+    amount = float(data.get("amount", 2000.0))
+    duration = int(data.get("duration", 1))
+
+    iq = ENGINE.feed.iqoption
+    exec_res = iq.submit_binary_option(symbol=sym, direction=direction, amount=amount, duration_minutes=duration)
+    return jsonify({
+        "success": exec_res.get("success", False),
+        "result": exec_res,
+        "iq_connected": iq.connected,
+        "currency": iq.currency,
+        "real_amount": iq.real_amount,
+        "real_balance_id": getattr(iq, "real_balance_id", None),
+        "practice_balance_id": getattr(iq, "practice_balance_id", None),
+        "active_balance_id": getattr(iq, "active_balance_id", None)
+    })
+
+
 @app.route("/api/admin/iq-diagnostics", methods=["GET"])
 def api_admin_iq_diagnostics():
     """Diagnóstico en tiempo real directo con los servidores de IQ Option."""

@@ -1428,6 +1428,14 @@ class RealTimeTradingEngine:
                     best_sym,
                     "🎯"
                 )
+            else:
+                self.agent._add_thought(
+                    f"⚠️ Orden Binaria {best_sym} {best_dir} no concretada: {order_res.get('error', 'Rechazada por el broker')}",
+                    "WARNING",
+                    best_sym,
+                    "⚠️"
+                )
+
 
     def _execute_buy(self, symbol: str, asset: Dict[str, Any], decision_data: Dict[str, Any], broker_id: Optional[str] = None):
         broker_id = (broker_id or self.active_broker).upper()
@@ -1696,7 +1704,7 @@ class RealTimeTradingEngine:
 
         # Enrutamiento de orden de cierre real en IQ Option (Cierre inmediato de Forex CFD en el broker)
         if broker_id == "IQOPTION" and is_broker_live and hasattr(self.feed, "iqoption"):
-            pos_id = pos.get("broker_order_id") or pos.get("position_id")
+            pos_id = pos.get("broker_order_id") or pos.get("position_id") or pos.get("id") or pos.get("order_id")
             if pos_id:
                 close_res = self.feed.iqoption.close_position(str(pos_id))
                 self.agent._add_thought(
