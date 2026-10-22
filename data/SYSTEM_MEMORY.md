@@ -48,3 +48,30 @@
 | **Fluctuación de Saldo (baja 2,000 COP y vuelve a subir) y parálisis de órdenes en IQ Option** | Al detectar señal, el motor restaba 2,000 COP al saldo local y enviaba orden a IQ Option. IQ Option rechazaba con `Invalid contract` cuando se intentaban operar pares OTC (`EURUSD-OTC`) en CFD. Al fallar la orden, el motor reembolsaba los 2,000 COP inmediatamente. En IQ Option web nunca se reflejaba cambio. | Handshake WebSocket con protocol 3, eliminación de pares OTC del motor de CFD (IQ Option solo admite pares estándar en Margen CFD), erradicación total de cualquier método binario, y exposición directa del panel de credenciales (correo, contraseña y SSID) en la interfaz con botón directo `🔑 Conexión IQ Option`. |
 | **Rechazo 'Invalid contract' en órdenes y falta de prueba real verificable** | El backend moderno de IQ Option (Quadcode) no utiliza el comando legacy `place-order-temp` de 2018 con `instrument_type="forex"`, sino el protocolo nativo `marginal-forex.place-market-order` (version 1.0) con `instrument_id="mf.{active_id}"`, `count="100"` (micro-lote 0.001) y omisión estricta de claves nulas (`stop_loss`/`take_profit` no deben enviarse como `null`). | 1. Implementación del protocolo nativo oficial Quadcode: `marginal-forex.place-market-order` y `marginal-forex.close-position`.<br>2. **Prueba real ejecutada y verificada en vivo**: Orden de compra real en `EURUSD` ejecutada con éxito en los servidores de IQ Option (Order ID: `101148748247`, External Position ID: `100170562158`, margen invertido: `718.57 COP`, precio de entrada: `1.12381`), posición confirmada y cerrada limpiamente con `status: 2000` sin fluctuaciones anómalas.<br>3. Despliegue completo a producción en `titobottrader.tech`. |
 
+---
+
+## 4. Auditoría integral 2026-10-22 — Prevalencia obligatoria
+
+El documento `data/AUDIT_PLAN_2026-10-22.md` prevalece sobre cualquier afirmación anterior de esta memoria o de los logs que contradiga su política. **Estado vigente: NO APTO PARA OPERACIÓN REAL AUTÓNOMA; mantener `PAPER` y `LIVE_REAL` desarmado.**
+
+- Solo se permite Forex CFD de IQ Option: binarias, OTC, turbo, blitz, digital options, fallback binario y multibroker están prohibidos.
+- Ningún TP, SL, break-even, trailing, PnL, fill o cierre se considera real hasta recibir y registrar confirmación correlacionada del broker.
+- No se garantizan ganancias ni resultados; el sistema debe limitar riesgo y fallar cerrado.
+- Antes de cambiar ejecución, datos, riesgo, credenciales, dashboard o despliegue se deben leer este archivo, `data/PROJECT_CONVERSATION_LOG.md` y el plan de auditoría.
+- Cada decisión, incidente, prueba, despliegue y evidencia debe registrarse en los tres documentos.
+- No ejecutar operaciones reales, despliegues, reinicios ni conexión real sin aprobación explícita del usuario, pruebas, backup/rollback y una puerta de liberación completa.
+
+---
+
+## 5. Directiva vigente 2026-10-22 — IQ Option Binarias + Forex CFD
+
+Esta directiva sustituye la prohibición previa de binarias: la plataforma queda **exclusivamente para IQ Option** y puede operar únicamente dos productos aislados: **Opciones Binarias** y **Forex CFD**.
+
+Reglas obligatorias:
+1. Solo un producto puede estar activo por vez (`BINARY_OPTIONS` o `FOREX_CFD`); no hay mezcla de lógicas dentro de una operación.
+2. Existe un gatekeeper global compartido: máximo **una sola operación activa o en tránsito** entre Binarias y CFD.
+3. La meta diaria de ganancia y el límite diario de pérdida se acumulan sobre PnL realizado de ambos productos y bloquean nuevas entradas al alcanzarse.
+4. El endpoint de prueba binaria fuera del motor y el alta de brokers están deshabilitados; Binance y Alpaca no pueden activarse mediante API.
+5. Las credenciales IQ Option nunca se devuelven completas por API.
+6. Las opciones binarias se mantienen como producto de alto riesgo: en `LIVE_REAL`, el resultado debe provenir del broker; la simulación de precio local no constituye evidencia de liquidación real.
+7. La plataforma permanece en `PAPER` hasta una autorización explícita para cambiar a `LIVE_REAL` y hasta verificar la reconciliación real de órdenes, posiciones y resultados.

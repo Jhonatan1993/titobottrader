@@ -110,3 +110,38 @@ Este documento registra de forma cronológica, inmutable y persistente todas las
 * **Verificación de Pruebas:**
   - `tests/test_iqoption_live_handshake_fallback.py`: Verificada autenticación protocol 3 y orden CFD estricta; se garantiza que `binary-options.open-option` y `sell-options` jamás son invocados.
   - `tests/test_iqoption_real_execution.py` y `tests/test_forex_cfd_strict_guarantees.py`: 18 pruebas aprobadas al 100%.
+
+---
+
+### Sesión 22 de octubre de 2026 — Auditoría integral y bloqueo preventivo
+
+**Dictamen vigente: NO APTO PARA OPERACIÓN REAL AUTÓNOMA.** La suite local pasó `100`, pero no prueba seguridad productiva. Se identificaron rutas binarias ejecutables, riesgo de divergencia entre el estado local y el broker, datos potencialmente sintéticos, exposición de secretos, TLS no verificado, cálculo inconsistente de PnL/apalancamiento y despliegue sin rollback.
+
+El documento normativo `data/AUDIT_PLAN_2026-10-22.md` prevalece sobre registros históricos contradictorios. Establece:
+1. Solo Forex CFD de IQ Option; quedan prohibidos binarias, OTC, turbo/blitz, digital options y multibroker.
+2. Mantener `PAPER`; `LIVE_REAL` queda desarmado hasta completar Fases 0–5 y la puerta de liberación documentada.
+3. Ningún fill, saldo, PnL, SL/TP, break-even, trailing ni cierre puede considerarse real sin confirmación correlacionada del broker.
+4. Diseño fail-closed para dato sintético/obsoleto, símbolo inválido, timeout, error o desincronización.
+5. Riesgo CFD determinista por contrato, margen, spread, SL y riesgo agregado; señales/IA no pueden eludirlo.
+6. Secretos fuera de APIs/logs, TLS verificado, auditoría append-only y despliegue aprobado con backup/rollback.
+
+**Memoria obligatoria:** antes de modificar ejecución, datos, riesgo, credenciales, dashboard o despliegue se deben leer `data/SYSTEM_MEMORY.md`, esta bitácora y `data/AUDIT_PLAN_2026-10-22.md`. Toda decisión, incidente, prueba y evidencia debe registrarse en los tres. Quedan prohibidos operaciones reales, conexiones reales, despliegues y reinicios sin aprobación explícita del usuario, pruebas aprobadas y rollback documentado.
+
+---
+
+### Sesión 22 de octubre de 2026 — Implementación IQ Option: Binarias + Forex CFD
+
+El usuario autorizó que la plataforma sea exclusiva de **IQ Option** y permita dos modos aislados: `BINARY_OPTIONS` y `FOREX_CFD`.
+
+Cambios implementados:
+1. Se creó `risk_management/iqoption_risk_policy.py`, política única que impone máximo una exposición global entre CFD, binarias y órdenes en tránsito.
+2. La política acumula PnL realizado diario en UTC de ambos productos y bloquea nuevas entradas al alcanzar la meta diaria de ganancia o el límite diario de pérdida.
+3. El motor integra el gatekeeper para CFD y binarios, publica el estado de riesgo en `/api/state` y fuerza `max_open_positions = 1`.
+4. El dashboard ya no devuelve contraseña, SSID ni secretos por `/api/control/get-broker-keys`.
+5. Se eliminó el endpoint de orden binaria de diagnóstico que saltaba el control de riesgo.
+6. La creación de brokers está bloqueada y los endpoints de broker externo rechazan activación; solo IQ Option está permitido.
+7. Se añadieron pruebas en `tests/test_iqoption_risk_policy.py` para posición única, orden en tránsito, meta diaria, pérdida diaria y límites deshabilitados.
+
+Validación local posterior a los cambios: `105 passed`.
+
+Restricción vigente: se mantiene `PAPER`. En `LIVE_REAL`, cualquier resultado binario y cierre CFD debe confirmarse y reconciliarse contra IQ Option antes de ser acreditado como PnL real. No se ejecutó ninguna conexión, orden, despliegue o reinicio real durante esta implementación.

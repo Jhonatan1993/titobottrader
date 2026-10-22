@@ -122,33 +122,14 @@ def test_binance_adapter_preflight_sell_clamping(monkeypatch):
     # Debe haber ajustado la query a quantity=1.4 (redondeado hacia abajo con el stepSize de NEAR que es 0.1)
     assert "quantity=1.4" in called_url[0]
 
-def test_phantom_paper_positions_purged_on_live_activation(monkeypatch):
-    """Verifica que al pasar de PAPER a LIVE_REAL se limpien las posiciones simuladas de cripto"""
+def test_secondary_broker_live_activation_is_rejected():
+    """La plataforma exclusiva IQ Option no puede activar Binance."""
     engine = RealTimeTradingEngine(initial_balance=100.0, execution_environment="PAPER")
-    engine.active_broker = "BINANCE"
-    engine.feed.binance.is_configured = True
 
-    monkeypatch.setattr(engine.feed.binance, "get_account_balances", lambda: {
-        "authenticated": True,
-        "balances": {"USDT": {"free": 100.0}},
-        "usdt_free": 100.0,
-        "total_stable_free": 100.0
-    })
+    res = engine.set_execution_environment("LIVE_REAL", broker="BINANCE")
 
-    # Inyectar una posición simulada
-    engine.open_positions["NEAR"] = {
-        "symbol": "NEAR",
-        "entry_price": 5.0,
-        "quantity": 1.0962,
-        "side": "BUY"
-    }
-    assert "NEAR" in engine.open_positions
-
-    # Cambiar a LIVE_REAL
-    res = engine.set_execution_environment("LIVE_REAL")
-    assert res["success"] is True
-    # La posición simulada debe haber sido purgada para evitar vender en real tokens inexistentes
-    assert "NEAR" not in engine.open_positions
+    assert res["success"] is False
+    assert "PLATAFORMA_EXCLUSIVA_IQOPTION" in res["error"]
 
 def test_auth_manager_database_status_and_auth():
     """Verifica que el gestor de autenticación funcione y mantenga la integridad de datos"""
@@ -191,49 +172,14 @@ def test_alpaca_adapter_preflight_sell_validation_zero_holdings(monkeypatch):
     assert res["success"] is False
     assert "Sin acciones disponibles en Alpaca para vender NVDA" in res["error"]
 
-def test_alpaca_phantom_paper_positions_purged_on_live_activation(monkeypatch):
-    """Verifica que al activar LIVE_REAL en Alpaca se purguen las posiciones simuladas de Wall Street"""
+def test_alpaca_live_activation_is_rejected():
+    """La plataforma exclusiva IQ Option no puede activar Alpaca."""
     engine = RealTimeTradingEngine(initial_balance=100000.0, execution_environment="PAPER")
-    engine.active_broker = "ALPACA"
-    engine.feed.alpaca.is_configured = True
 
-    # Simular conexión exitosa de Alpaca Live y posición real existente de TSLA
-    monkeypatch.setattr(engine.feed.alpaca, "test_connection", lambda: {
-        "connected": True,
-        "cash": 50000.0,
-        "equity": 52000.0
-    })
-    monkeypatch.setattr(engine.feed.alpaca, "get_positions", lambda: [
-        {
-            "symbol": "TSLA",
-            "avg_entry_price": "200.00",
-            "current_price": "205.00",
-            "qty": "10",
-            "market_value": "2050.00",
-            "unrealized_pl": "50.00",
-            "unrealized_plpc": "0.025"
-        }
-    ])
-
-    # Inyectar una posición simulada de papel de Apple
-    engine.open_positions["AAPL"] = {
-        "symbol": "AAPL",
-        "entry_price": 180.0,
-        "quantity": 5.0,
-        "side": "BUY",
-        "category": "TRADFI"
-    }
-    assert "AAPL" in engine.open_positions
-
-    # Pasar Alpaca a LIVE_REAL
     res = engine.set_execution_environment("LIVE_REAL", broker="ALPACA")
-    assert res["success"] is True
 
-    # La posición simulada de AAPL debe haber sido purgada
-    assert "AAPL" not in engine.open_positions
-    # Y la posición real de TSLA debe haber sido sincronizada en la cartera
-    assert "TSLA" in engine.open_positions
-    assert engine.open_positions["TSLA"]["quantity"] == 10.0
+    assert res["success"] is False
+    assert "PLATAFORMA_EXCLUSIVA_IQOPTION" in res["error"]
 
 def test_binance_notional_filter_failure_cleans_position(monkeypatch):
     """Verifica que el error -1013 (Filter failure: NOTIONAL) archive la posición y no quede en bucle infinito"""
@@ -420,4 +366,3 @@ def test_binance_dust_balance_under_5_usd_ignored_in_positions():
     assert "BNB" not in engine.open_positions
     # SOL sí debe estar porque supera el mínimo nocional de $5.00 USD
     assert "SOL" in engine.open_positions
-

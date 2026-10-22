@@ -8,6 +8,7 @@ from config.broker_config import load_broker_config, save_broker_config
 from execution.alpaca_adapter import AlpacaAdapter
 from execution.binance_adapter import BinanceAdapter
 from risk_management.risk_manager import RiskManager
+from risk_management.iqoption_risk_policy import IQOptionRiskPolicy
 from execution.binary_options_engine import BinaryOptionsStrategyEngine
 from execution.iqoption_adapter import ACTIVE_ID_TO_SYMBOL
 
@@ -40,8 +41,10 @@ class RealTimeTradingEngine:
         else:
             self.initial_balance = initial_balance if initial_balance is not None else 10000.0
             self.cash_balance = self.initial_balance
-        self.max_open_positions = max_open_positions
+        # Política de plataforma IQ Option: una sola exposición global, sin excepción.
+        self.max_open_positions = 1
         self.is_running = True
+        self._iqoption_order_pending = False
 
         # Gestor de Riesgo y Regulación FINRA 4210 (PDT Shield)
         self.risk_manager = RiskManager(
@@ -61,6 +64,13 @@ class RealTimeTradingEngine:
         self.max_loss_enabled = bool(self.broker_config.get("max_loss_enabled", True))
         self.max_loss_amount = float(self.broker_config.get("max_loss_amount", 150.0))
         self.loss_limit_reached = False
+        self.iqoption_risk_policy = IQOptionRiskPolicy(
+            profit_target_amount=self.profit_target_amount,
+            max_loss_amount=self.max_loss_amount,
+            profit_target_enabled=self.profit_target_enabled,
+            max_loss_enabled=self.max_loss_enabled,
+            max_open_positions=1,
+        )
 
         self.feed = MultiAssetMarketFeed()
         self.agent = IntelligentTradingAgent()
@@ -457,11 +467,13 @@ class RealTimeTradingEngine:
 
 
     def set_execution_environment(self, env: str, custom_balance: Optional[float] = None, broker: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Cambia de forma segura entre MODO PRÁCTICA (PAPER) y MODO DINERO REAL (LIVE_REAL)
-        de forma totalmente aislada para el broker seleccionado (Alpaca o Binance).
-        """
-        target_b = (broker or self.active_broker).upper()
+        """Cambia el entorno de IQ Option; otros brokers están deshabilitados."""
+        target_b = (broker or "IQOPTION").upper()
+        if target_b != "IQOPTION":
+            return {
+                "success": False,
+                "error": "PLATAFORMA_EXCLUSIVA_IQOPTION: solo IQ Option está permitido."
+            }
 
         if target_b == "ALPACA":
             if env == "LIVE_REAL":
@@ -768,6 +780,11 @@ class RealTimeTradingEngine:
 
     def set_active_broker(self, broker: str) -> Dict[str, Any]:
         b = broker.upper()
+        if b != "IQOPTION":
+            return {
+                "success": False,
+                "error": "PLATAFORMA_EXCLUSIVA_IQOPTION: no se permiten brokers secundarios."
+            }
         if b not in self.broker_wallets:
             return {"success": False, "error": f"Broker {broker} no soportado o no registrado"}
 
@@ -892,13 +909,7 @@ class RealTimeTradingEngine:
         }
 
     def update_broker_keys(self, alpaca_key: str = "", alpaca_secret: str = "", binance_key: str = "", binance_secret: str = "", iqoption_email: str = "", iqoption_password: str = "", iqoption_ssid: str = ""):
-        if alpaca_key or alpaca_secret:
-            self.broker_config["alpaca"]["api_key"] = alpaca_key
-            self.broker_config["alpaca"]["secret_key"] = alpaca_secret
-            self.broker_config["alpaca"]["enabled"] = bool(alpaca_key and alpaca_secret)
-        if binance_key or binance_secret:
-            self.broker_config["binance"]["api_key"] = binance_key
-            self.broker_config["binance"]["secret_key"] = binance_secret
+        """Actualiza únicamente credenciales IQ Option; claves externas se ignoran."""
         if iqoption_email or iqoption_password or iqoption_ssid:
             if "iqoption" not in self.broker_config:
                 self.broker_config["iqoption"] = {}
@@ -963,6 +974,15 @@ class RealTimeTradingEngine:
             self.max_loss_enabled = loss_enabled
             self.loss_limit_reached = False
 
+        if target_b == "IQOPTION":
+            self.iqoption_risk_policy.configure(
+                profit_target_amount=target_val,
+                max_loss_amount=loss_val,
+                profit_target_enabled=target_enabled,
+                max_loss_enabled=loss_enabled,
+            )
+            self._apply_iqoption_daily_halt()
+
         # Persistir en disco para que nunca se reseteen al recargar la página o reiniciar
         self.broker_config[f"{target_b.lower()}_profit_target_amount"] = target_val
         self.broker_config[f"{target_b.lower()}_max_loss_amount"] = loss_val
@@ -1015,6 +1035,8 @@ class RealTimeTradingEngine:
             cur_prices = {s: a.get("price", 1.0) for s, a in market_state.items()}
             bin_resolution = self.binary_engine.check_and_resolve_positions(cur_prices)
             if bin_resolution:
+                self.iqoption_risk_policy.record_closed_trade(bin_resolution.get("pnl", 0.0))
+                self._apply_iqoption_daily_halt()
                 res_type = bin_resolution.get("result", "WIN")
                 res_icon = "🏆" if res_type == "WIN" else ("🤝" if res_type == "TIE" else "🛡️")
                 self.agent._add_thought(
@@ -1207,6 +1229,34 @@ class RealTimeTradingEngine:
         # 6. Snapshot de equity
         self._record_equity_snapshot()
 
+    def _apply_iqoption_daily_halt(self):
+        """Detiene nuevas entradas tras alcanzar meta o límite diario realizado."""
+        snapshot = self.iqoption_risk_policy.snapshot()
+        wallet = self.broker_wallets.get("IQOPTION", {})
+        wallet["target_reached"] = snapshot["halted_reason"] == "META_DIARIA_ALCANZADA"
+        wallet["loss_limit_reached"] = snapshot["halted_reason"] == "LIMITE_PERDIDA_DIARIA_ALCANZADO"
+        if snapshot["halted"]:
+            wallet["is_running"] = False
+            self.target_reached = wallet["target_reached"]
+            self.loss_limit_reached = wallet["loss_limit_reached"]
+
+    def _iqoption_can_open(self) -> bool:
+        active_count = len(self.get_broker_positions("IQOPTION"))
+        if hasattr(self, "binary_engine") and self.binary_engine.has_active_position:
+            active_count += 1
+        decision = self.iqoption_risk_policy.can_open(
+            active_positions=active_count,
+            pending_order=self._iqoption_order_pending,
+        )
+        self._apply_iqoption_daily_halt()
+        if not decision.allowed:
+            self.agent._add_thought(
+                f"🛡️ IQ Option: nueva entrada bloqueada ({decision.reason}).",
+                "WARNING",
+                icon="🛡️",
+            )
+        return decision.allowed
+
     def _evaluate_and_trade(self, market_state: Dict[str, Any]):
         # AISLAMIENTO TOTAL: Si el modo activo es BINARIAS, delegar 100% al motor de Opciones Binarias
         if self.active_broker == "IQOPTION" and getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS":
@@ -1378,8 +1428,8 @@ class RealTimeTradingEngine:
         if not hasattr(self, "binary_engine"):
             return
 
-        # GATEKEEPER ABSOLUTO: 1 sola operación a la vez en toda la cuenta de IQ Option
-        if self.binary_engine.has_active_position or len(self.get_broker_positions("IQOPTION")) > 0:
+        # Gatekeeper único compartido por binarias y CFD.
+        if not self._iqoption_can_open():
             return
 
         wallet = self.broker_wallets.get("IQOPTION", {})
@@ -1474,8 +1524,10 @@ class RealTimeTradingEngine:
         if actual_investment < min_trade or actual_investment > available_cash:
             return
 
-        # CONTROL ESTRICTO DE CUPOS: Para IQ Option, NUNCA abrir más de 1 posición simultánea
+        # CONTROL ESTRICTO DE CUPOS: CFD y binarias comparten una sola posición global.
         if broker_id == "IQOPTION":
+            if not self._iqoption_can_open():
+                return
             forex_open = [p for p in self.open_positions.values() if p.get("broker") == "IQOPTION" or p.get("category") == "FOREX"]
             if len(forex_open) >= 1 or (hasattr(self, "binary_engine") and self.binary_engine.has_active_position):
                 return
@@ -1599,14 +1651,18 @@ class RealTimeTradingEngine:
             if price > 0 and stop_loss > 0 and take_profit > 0:
                 sl_pct = round(abs(price - stop_loss) / price * 100, 2)
                 tp_pct = round(abs(take_profit - price) / price * 100, 2)
-            iq_res = self.feed.iqoption.submit_order(
-                symbol=symbol,
-                side=cfd_side,
-                amount=actual_investment,
-                leverage=500,
-                stop_loss_pct=sl_pct,
-                take_profit_pct=tp_pct
-            )
+            self._iqoption_order_pending = True
+            try:
+                iq_res = self.feed.iqoption.submit_order(
+                    symbol=symbol,
+                    side=cfd_side,
+                    amount=actual_investment,
+                    leverage=500,
+                    stop_loss_pct=sl_pct,
+                    take_profit_pct=tp_pct
+                )
+            finally:
+                self._iqoption_order_pending = False
             if iq_res.get("success"):
                 oid = iq_res.get("order_id", "")
                 position["broker_order_id"] = oid
@@ -1820,6 +1876,9 @@ class RealTimeTradingEngine:
         self.last_exit_times[symbol] = time.time()
         if hasattr(self, "risk_manager"):
             self.risk_manager.register_trade_close(pnl, symbol=symbol, is_intraday=True, broker_id=broker_id)
+        if broker_id == "IQOPTION":
+            self.iqoption_risk_policy.record_closed_trade(pnl)
+            self._apply_iqoption_daily_halt()
 
         b_curr = "COP" if (broker_id == "IQOPTION" and getattr(self.feed.iqoption, "currency", "USD") == "COP") else "USD"
         trade_label = "Forex CFD (SL/TP)" if broker_id == "IQOPTION" else "Spot"
@@ -2112,6 +2171,7 @@ class RealTimeTradingEngine:
                 "max_loss_enabled": self.max_loss_enabled,
                 "max_loss_amount": wallet.get("max_loss_amount", self.max_loss_amount),
                 "loss_limit_reached": self.loss_limit_reached,
+                "risk_policy": self.iqoption_risk_policy.snapshot(),
                 "brokers": brokers_dict,
                 "broker_connections": {
                     "iqoption": iqoption_status
@@ -2308,10 +2368,12 @@ class RealTimeTradingEngine:
         }
 
     def add_broker(self, broker_id: str, api_key: str = "", secret_key: str = "", initial_balance: float = 1000.0) -> Dict[str, Any]:
-        """
-        Registra y activa un nuevo broker en el motor cuantitativo.
-        Queda operando inmediatamente de forma simultánea con todos los demás brokers 24/7.
-        """
+        """Deshabilitado: la plataforma usa exclusivamente IQ Option."""
+        return {
+            "success": False,
+            "error": "PLATAFORMA_EXCLUSIVA_IQOPTION: no se permite agregar brokers."
+        }
+
         b = broker_id.upper().strip()
         broker_presets = {
             "BYBIT": {"name": "Bybit Exchange", "icon": "⚡", "category": "CRYPTO", "allowed": ["CRYPTO"], "target": 2000.0, "max_loss": 0.0},

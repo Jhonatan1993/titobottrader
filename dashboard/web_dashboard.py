@@ -422,34 +422,6 @@ def api_admin_system_logs():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-@app.route("/api/admin/test-binary-order", methods=["POST"])
-def api_admin_test_binary_order():
-    """Prueba en tiempo real de orden de opción binaria directamente en el broker con reporte detallado."""
-    current_admin_id = session.get("user_id")
-    user = get_user_by_id(current_admin_id) if current_admin_id else None
-    if not user or user.get("role") != "admin":
-        return jsonify({"success": False, "error": "Acceso denegado: solo Administradores."}), 403
-
-    data = request.get_json(silent=True) or {}
-    sym = data.get("symbol", "EURUSD")
-    direction = data.get("direction", "CALL")
-    amount = float(data.get("amount", 2000.0))
-    duration = int(data.get("duration", 1))
-
-    iq = ENGINE.feed.iqoption
-    exec_res = iq.submit_binary_option(symbol=sym, direction=direction, amount=amount, duration_minutes=duration)
-    return jsonify({
-        "success": exec_res.get("success", False),
-        "result": exec_res,
-        "iq_connected": iq.connected,
-        "currency": iq.currency,
-        "real_amount": iq.real_amount,
-        "real_balance_id": getattr(iq, "real_balance_id", None),
-        "practice_balance_id": getattr(iq, "practice_balance_id", None),
-        "active_balance_id": getattr(iq, "active_balance_id", None)
-    })
-
-
 @app.route("/api/admin/iq-diagnostics", methods=["GET"])
 def api_admin_iq_diagnostics():
     """Diagnóstico en tiempo real directo con los servidores de IQ Option."""
@@ -562,18 +534,17 @@ def api_admin_iq_diagnostics():
 
 @app.route("/api/control/get-broker-keys", methods=["GET"])
 def get_broker_keys():
-    cfg = ENGINE.broker_config
-    alpaca = cfg.get("alpaca", {})
-    binance = cfg.get("binance", {})
-    iqoption = cfg.get("iqoption", {})
+    """Nunca devuelve secretos; solo informa si la configuración IQ Option existe."""
+    iqoption = ENGINE.broker_config.get("iqoption", {})
     return jsonify({
-        "alpaca_key": alpaca.get("api_key", ""),
-        "alpaca_secret": alpaca.get("secret_key", ""),
-        "binance_key": binance.get("api_key", ""),
-        "binance_secret": binance.get("secret_key", ""),
-        "iqoption_email": iqoption.get("email", ""),
-        "iqoption_password": iqoption.get("password", ""),
-        "iqoption_ssid": iqoption.get("ssid", "")
+        "broker": "IQOPTION",
+        "iqoption_email": mask_secret(iqoption.get("email", "")),
+        "configured": bool(
+            iqoption.get("ssid") or
+            (iqoption.get("email") and iqoption.get("password"))
+        ),
+        "has_password": bool(iqoption.get("password")),
+        "has_ssid": bool(iqoption.get("ssid"))
     })
 
 @app.route("/api/control/set-broker-keys", methods=["POST"])
@@ -592,13 +563,10 @@ def set_broker_keys():
 
 @app.route("/api/control/add-broker", methods=["POST"])
 def add_broker():
-    data = request.get_json(silent=True) or {}
-    broker_id = data.get("broker_type") or data.get("broker") or "BYBIT"
-    api_key = data.get("api_key", "").strip()
-    secret_key = data.get("secret_key", "").strip()
-    initial_balance = float(data.get("initial_balance", 1000.0))
-    res = ENGINE.add_broker(broker_id, api_key=api_key, secret_key=secret_key, initial_balance=initial_balance)
-    return jsonify(res)
+    return jsonify({
+        "success": False,
+        "error": "PLATAFORMA_EXCLUSIVA_IQOPTION: no se permite agregar brokers."
+    }), 403
 
 @app.route("/api/control/set-execution-environment", methods=["POST"])
 def set_execution_environment():
