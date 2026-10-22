@@ -443,13 +443,13 @@ def api_admin_iq_diagnostics():
         }))
         ws.send(json.dumps({
             "name": "sendMessage",
-            "request_id": req_id,
+            "request_id": f"hist_{int(time.time() * 1000)}",
             "msg": {
-                "name": "portfolio.get-positions",
-                "version": "4.0",
+                "name": "portfolio.get-history-positions",
+                "version": "2.0",
                 "body": {
                     "instrument_types": ["marginal-forex", "forex", "cfd"],
-                    "limit": 30,
+                    "limit": 10,
                     "offset": 0
                 }
             }
@@ -457,7 +457,7 @@ def api_admin_iq_diagnostics():
         
         frames = []
         st = time.time()
-        while time.time() - st < 3.0:
+        while time.time() - st < 4.0:
             try:
                 r = ws.recv()
                 if r:
