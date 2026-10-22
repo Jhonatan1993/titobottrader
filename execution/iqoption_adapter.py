@@ -118,6 +118,7 @@ class IQOptionAdapter:
                 "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             ]
             ws = websocket.create_connection(ws_url, header=headers, timeout=6, sslopt={"cert_reqs": ssl.CERT_NONE})
+            # 1. Enviar autenticación
             ws.send(json.dumps({
                 "name": "authenticate",
                 "msg": {"ssid": self.ssid, "protocol": 3, "session_id": "", "client_session_id": ""},
@@ -125,43 +126,10 @@ class IQOptionAdapter:
             }))
             ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
 
-            # Indispensable: Activar entrega de respuestas a solicitudes en el WebSocket de IQ Option
-            ws.send(json.dumps({
-                "name": "setOptions",
-                "msg": {"sendResults": True},
-                "request_id": f"sopts_{int(time.time() * 1000)}"
-            }))
-
-            # Solicitar sincronización simultánea de posiciones abiertas en IQ Option con tipos oficiales
-            req_pos_id = f"pos_sync_{int(time.time() * 1000)}"
-            ws.send(json.dumps({
-                "name": "sendMessage",
-                "request_id": req_pos_id,
-                "msg": {
-                    "name": "portfolio.get-positions",
-                    "version": "4.0",
-                    "body": {
-                        "instrument_types": [
-                            "binary-option",
-                            "digital-option",
-                            "turbo-option",
-                            "blitz-option",
-                            "marginal-forex",
-                            "marginal-cfd",
-                            "marginal-crypto"
-                        ],
-                        "limit": 30,
-                        "offset": 0
-                    }
-                }
-            }))
-
-            start_t = time.time()
+            # 2. Esperar confirmación de autenticación del broker antes de enviar peticiones de portafolio
+            auth_start = time.time()
             found_profile = False
-            found_positions = False
-            parsed_positions = []
-
-            while time.time() - start_t < 4.0:
+            while time.time() - auth_start < 2.5:
                 raw = ws.recv()
                 if not raw:
                     continue
@@ -184,19 +152,101 @@ class IQOptionAdapter:
                                 elif b_type == 4:
                                     self.practice_balance_id = b_id
                                     self.practice_amount = round(amt, 2)
+                        found_profile = True
+                        break
+                    elif msg_name in ["authenticated", "front"]:
+                        break
+                except Exception:
+                    pass
+
+            # 3. Habilitar respuestas de requests en WebSocket oficial de IQ Option
+            ws.send(json.dumps({
+                "name": "setOptions",
+                "msg": {"sendResults": True},
+                "request_id": f"sopts_{int(time.time() * 1000)}"
+            }))
+
+            # 4. Suscribir y solicitar posiciones abiertas oficiales
+            req_pos_id = f"pos_sync_{int(time.time() * 1000)}"
+            inst_types = [
+                "marginal-forex",
+                "marginal-cfd",
+                "marginal-crypto",
+                "binary-option",
+                "turbo-option",
+                "blitz-option",
+                "digital-option"
+            ]
+            ws.send(json.dumps({
+                "name": "sendMessage",
+                "request_id": req_pos_id,
+                "msg": {
+                    "name": "portfolio.get-positions",
+                    "version": "4.0",
+                    "body": {
+                        "instrument_types": inst_types,
+                        "limit": 30,
+                        "offset": 0
+                    }
+                }
+            }))
+            ws.send(json.dumps({
+                "name": "subscribeMessage",
+                "request_id": f"sub_p_{int(time.time() * 1000)}",
+                "msg": {
+                    "name": "portfolio.positions-state",
+                    "version": "1.0"
+                }
+            }))
+
+            # 5. Escuchar paquetes de posiciones y balances
+            start_t = time.time()
+            found_positions = False
+            parsed_positions = []
+
+            while time.time() - start_t < 4.5:
+                raw = ws.recv()
+                if not raw:
+                    continue
+                try:
+                    data = json.loads(raw)
+                    msg_name = data.get("name")
+                    msg_body = data.get("msg", {})
+
+                    if msg_name == "profile" and not found_profile:
+                        if isinstance(msg_body, dict):
+                            self.profile_data.update(msg_body)
+                            self.currency = msg_body.get("currency", self.currency)
+                            balances = msg_body.get("balances", [])
+                            for b in balances:
+                                b_type = b.get("type")
+                                b_id = b.get("id")
+                                amt = float(b.get("amount", 0.0)) + float(b.get("bonus_amount", 0.0))
+                                if b_type == 1:
+                                    self.real_balance_id = b_id
+                                    self.real_amount = round(amt, 2)
+                                elif b_type == 4:
+                                    self.practice_balance_id = b_id
+                                    self.practice_amount = round(amt, 2)
                             found_profile = True
-                    elif msg_name == "positions" or data.get("request_id") == req_pos_id:
+
+                    elif msg_name in ["positions", "portfolio.positions", "portfolio.order-changed", "portfolio.position-changed"] or data.get("request_id") == req_pos_id:
                         found_positions = True
-                        p_list = data.get("msg", {}).get("positions", [])
+                        p_list = []
+                        if isinstance(msg_body, dict):
+                            p_list = msg_body.get("positions", []) or msg_body.get("items", [])
+                        elif isinstance(msg_body, list):
+                            p_list = msg_body
+
                         for p in p_list:
                             ev = p.get("raw_event", {}).get("marginal_forex_position_changed1", {}) if isinstance(p.get("raw_event"), dict) else p
                             ext_id = str(p.get("external_id") or ev.get("id") or p.get("id") or "")
                             int_id = str(p.get("id") or "")
-                            p_status = p.get("status") or ev.get("status") or "open"
+                            p_status = str(p.get("status") or ev.get("status") or "open").lower()
                             act_id = p.get("active_id") or ev.get("instrument_active_id")
                             oids = [str(oid) for oid in ev.get("order_ids", [])]
                             sym = ACTIVE_ID_TO_SYMBOL.get(int(act_id) if act_id is not None else 1, "EURUSD")
-                            if p_status != "closed":
+                            if p_status not in ["closed", "cancelled", "rejected"]:
                                 parsed_positions.append({
                                     "external_id": ext_id,
                                     "id": ext_id,
@@ -211,13 +261,15 @@ class IQOptionAdapter:
                                     "side": str(p.get("side") or ev.get("side") or p.get("direction") or ev.get("direction") or "buy").upper(),
                                     "leverage": int(p.get("leverage") or ev.get("leverage") or 500)
                                 })
-                    if found_profile and found_positions:
-                        break
+                        if found_profile and found_positions:
+                            break
                 except Exception:
                     pass
             ws.close()
             if found_positions:
                 self.open_broker_positions = parsed_positions
+                self._positions_synced = True
+            elif len(getattr(self, "open_broker_positions", [])) > 0:
                 self._positions_synced = True
             else:
                 self._positions_synced = False

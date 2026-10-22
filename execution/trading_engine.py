@@ -301,7 +301,7 @@ class RealTimeTradingEngine:
                 broker_active_ids.add(str(oid))
 
         iq_memory_positions = [
-            (sym, pos) for sym, pos in list(self.open_positions.items())
+            (pos_key, pos) for pos_key, pos in list(self.open_positions.items())
             if (pos.get("broker") == "IQOPTION" or pos.get("category") in ["FOREX", "OPTIONS", "CFD"])
         ]
 
@@ -309,12 +309,13 @@ class RealTimeTradingEngine:
         if len(broker_positions) > 0:
             self._zero_pos_counter = 0
             # Purgar si una posición en memoria ya no está en broker_active_ids
-            for sym, pos in iq_memory_positions:
+            for pos_key, pos in iq_memory_positions:
                 pos_id = str(pos.get("broker_order_id", ""))
                 ext_id = str(pos.get("position_id", ""))
+                sym = pos.get("symbol", pos_key)
                 if pos_id and pos_id not in broker_active_ids and ext_id not in broker_active_ids:
-                    if sym in self.open_positions:
-                        del self.open_positions[sym]
+                    if pos_key in self.open_positions:
+                        del self.open_positions[pos_key]
                     self.last_exit_times[sym] = time.time() + 180.0
                     cur_price = self.feed.assets.get(sym, {}).get("price", pos.get("current_price", pos.get("entry_price", 1.0)))
                     pnl = float(pos.get("current_pnl", 0.0))
@@ -355,6 +356,16 @@ class RealTimeTradingEngine:
             for bp in broker_positions:
                 act_id = bp.get("active_id")
                 sym = bp.get("symbol") or ACTIVE_ID_TO_SYMBOL.get(int(act_id) if act_id is not None else 1, "EURUSD")
+                pos_id = str(bp.get("id") or bp.get("external_id") or "")
+                
+                # Asignar clave: si sym está libre o pertenece a esta misma orden, usar sym. Si ya hay otra orden de sym, usar pos_key única.
+                if sym not in self.open_positions:
+                    pos_key = sym
+                elif str(self.open_positions[sym].get("broker_order_id", "")) == pos_id or str(self.open_positions[sym].get("position_id", "")) == pos_id:
+                    pos_key = sym
+                else:
+                    pos_key = f"{sym}_{pos_id}" if pos_id else f"{sym}_dup"
+
                 entry_q = float(bp.get("open_quote", 0.0))
                 asset_obj = self.feed.assets.get(sym, {})
                 cur_p = asset_obj.get("price", entry_q) if entry_q > 0 else 1.0
@@ -363,8 +374,9 @@ class RealTimeTradingEngine:
                 pnl_pct = round((pnl_net / invested_amt) * 100, 2) if invested_amt > 0 else 0.0
                 pos_side = bp.get("side", "BUY")
                 pos_lev = bp.get("leverage", 500)
-                if sym not in self.open_positions:
-                    self.open_positions[sym] = {
+
+                if pos_key not in self.open_positions:
+                    self.open_positions[pos_key] = {
                         "symbol": sym,
                         "name": asset_obj.get("name", sym),
                         "broker": "IQOPTION",
@@ -382,7 +394,8 @@ class RealTimeTradingEngine:
                         "entry_timestamp": time.time()
                     }
                 else:
-                    pos = self.open_positions[sym]
+                    pos = self.open_positions[pos_key]
+                    pos["symbol"] = sym
                     pos["current_pnl"] = pnl_net
                     pos["current_pnl_percent"] = pnl_pct
                     pos["side"] = pos_side
@@ -398,9 +411,10 @@ class RealTimeTradingEngine:
                 self._zero_pos_counter = 0
             self._zero_pos_counter += 1
             if self._zero_pos_counter >= 3:
-                for sym, pos in iq_memory_positions:
-                    if sym in self.open_positions:
-                        del self.open_positions[sym]
+                for pos_key, pos in iq_memory_positions:
+                    sym = pos.get("symbol", pos_key)
+                    if pos_key in self.open_positions:
+                        del self.open_positions[pos_key]
                     self.last_exit_times[sym] = time.time() + 180.0
                     cur_price = self.feed.assets.get(sym, {}).get("price", pos.get("current_price", pos.get("entry_price", 1.0)))
                     pnl = float(pos.get("current_pnl", 0.0))
@@ -1010,7 +1024,8 @@ class RealTimeTradingEngine:
                 )
 
         # 1. Actualizar posiciones abiertas y gestionar Trailing Stop Adaptativo
-        for sym, pos in list(self.open_positions.items()):
+        for pos_key, pos in list(self.open_positions.items()):
+            sym = pos.get("symbol", pos_key)
             asset = market_state.get(sym)
             if not asset:
                 continue
