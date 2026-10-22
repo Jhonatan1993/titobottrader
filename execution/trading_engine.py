@@ -21,10 +21,9 @@ class RealTimeTradingEngine:
     6. Auto-Calibración Cuantitativa Continua tras cada transacción
     """
     def __init__(self, initial_balance: Optional[float] = None, max_open_positions: int = 5, execution_environment: Optional[str] = None):
-        self.broker_config = load_broker_config()
-        # Modo exclusivo: IQ Option Forex CFD
-        self.operating_mode = "IQ_CFD"
-        self.iq_mode = "FOREX_CFD"
+        # Modo exclusivo: IQ Option Forex CFD / Binarias
+        self.operating_mode = self.broker_config.get("operating_mode", "IQ_BINARY")
+        self.iq_mode = self.broker_config.get("iq_mode", "BINARY_OPTIONS")
         self.execution_environment = execution_environment or self.broker_config.get("iqoption_environment", "PAPER")
         
         saved_paper = float(self.broker_config.get("paper_initial_balance", 10000.0))
@@ -1152,10 +1151,13 @@ class RealTimeTradingEngine:
                 "error": "GATEKEEPER ACTIVO: Ya existe 1 operación binaria en curso (1/1 ocupado). Espere su resolución."
             }
 
-        if not self._iqoption_can_open():
+        active_count = len(self.get_broker_positions("IQOPTION"))
+        if hasattr(self, "binary_engine") and self.binary_engine.has_active_position:
+            active_count += 1
+        if active_count >= 1 or self._iqoption_order_pending:
             return {
                 "success": False,
-                "error": "Límite de riesgo activo: No se permiten nuevas posiciones en IQ Option en este momento."
+                "error": "GATEKEEPER ACTIVO: Ya existe 1 operación en curso (1/1 ocupado). Espere su resolución."
             }
 
         wallet = self.broker_wallets.get("IQOPTION", {})
