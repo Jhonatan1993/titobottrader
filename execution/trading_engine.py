@@ -21,6 +21,7 @@ class RealTimeTradingEngine:
     6. Auto-Calibración Cuantitativa Continua tras cada transacción
     """
     def __init__(self, initial_balance: Optional[float] = None, max_open_positions: int = 5, execution_environment: Optional[str] = None):
+        self.broker_config = load_broker_config()
         # Modo exclusivo: IQ Option Forex CFD / Binarias
         self.operating_mode = self.broker_config.get("operating_mode", "IQ_BINARY")
         self.iq_mode = self.broker_config.get("iq_mode", "BINARY_OPTIONS")
