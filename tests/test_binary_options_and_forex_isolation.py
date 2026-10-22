@@ -200,3 +200,102 @@ def test_total_isolation_mode_switching():
     state_fx = engine.get_state()
     assert state_fx["system_status"]["iq_mode"] == "FOREX_CFD"
     assert state_fx["system_status"]["operating_mode"] == "IQ_CFD"
+
+def test_iqoption_adapter_paper_and_real_binary_payload():
+    """EVIDENCIA 6: Verificación de ejecución de Binarias en IQOptionAdapter (Paper y Real WS)."""
+    import json
+    from unittest.mock import MagicMock, patch
+
+    # 1. MODO PAPER: Debe retornar orden simulada válida inmediatamente
+    adapter_paper = IQOptionAdapter(ssid="test_ssid", environment="PAPER")
+    adapter_paper.connected = True
+    paper_res = adapter_paper.submit_binary_option("EURUSD", "CALL", 2000.0, duration_minutes=1)
+    assert paper_res["success"] is True
+    assert paper_res["environment"] == "PAPER"
+    assert "BIN_PAPER_" in paper_res["order_id"]
+    assert paper_res["direction"] == "call"
+
+    # 2. MODO LIVE_REAL: Debe generar el payload WebSocket oficial binary-options.open-option
+    adapter_real = IQOptionAdapter(ssid="test_ssid_valid", environment="LIVE_REAL")
+    adapter_real.connected = True
+    adapter_real.real_amount = 50000.0
+    adapter_real.balance = 50000.0
+    adapter_real.real_balance_id = 998877
+
+    sent_messages = []
+    mock_ws = MagicMock()
+    def mock_send(msg):
+        sent_messages.append(json.loads(msg))
+    mock_ws.send.side_effect = mock_send
+    mock_ws.recv.side_effect = [
+        '{"name": "profile", "msg": {}}',
+        '{"name": "order-placed-temp", "status": 2000, "request_id": "bin_opt_123", "msg": {"id": 555444}}'
+    ]
+
+    with patch("websocket.create_connection", return_value=mock_ws):
+        # Parchear time.time para capturar request_id consistente
+        with patch("time.time", side_effect=[1000.0, 1000.1, 1000.2, 1000.3, 1000.4]):
+            res_real = adapter_real._execute_real_binary_ws_order(
+                symbol="EURUSD",
+                direction="call",
+                amount=2000.0,
+                duration_minutes=1
+            )
+            # Encontrar el mensaje oficial enviado
+            bin_msg = next((m for m in sent_messages if m.get("name") == "sendMessage" and m.get("msg", {}).get("name") == "binary-options.open-option"), None)
+            assert bin_msg is not None, "El mensaje binary-options.open-option no fue transmitido"
+            
+            body = bin_msg["msg"]["body"]
+            assert body["active_id"] == 1 # EURUSD = 1 en IQ Option
+            assert body["direction"] == "call"
+            assert body["option_type_id"] == 3 # Turbo Binary Option
+            assert body["price"] == 2000.0
+            assert body["user_balance_id"] == 998877
+
+def test_trading_engine_evaluates_and_executes_binary_option():
+    """EVIDENCIA 7: El ciclo de trading de RealTimeTradingEngine ejecuta opciones binarias en modo BINARY_OPTIONS."""
+    engine = RealTimeTradingEngine(initial_balance=25000.0, execution_environment="PAPER")
+    engine.set_iq_mode("BINARY_OPTIONS")
+    assert engine.iq_mode == "BINARY_OPTIONS"
+
+    # Simular mercado con señal fuerte en EURUSD
+    market_state = {
+        "EURUSD": {
+            "symbol": "EURUSD",
+            "name": "EUR / USD",
+            "price": 1.0850,
+            "rsi": 32.0, # Sobreventa profunda
+            "support": 1.0849, # En soporte
+            "resistance": 1.0920,
+            "ema20": 1.0852,
+            "ema50": 1.0855,
+            "trend_status": "ALCISTA",
+            "category": "FOREX",
+            "change_percent": 0.15,
+            "ai_decision": "CALL",
+            "ai_confidence": 90
+        }
+    }
+    # Inyectar velas con mecha de absorción
+    engine.feed.candles = {
+        "EURUSD": [
+            {"open": 1.0858, "high": 1.0860, "low": 1.0842, "close": 1.0850}
+        ]
+    }
+
+    # Evaluar mercado en modo binarias
+    engine._evaluate_and_trade_binary(market_state)
+
+    # Debe haberse disparado la opción binaria
+    assert engine.binary_engine.has_active_position is True
+    pos = engine.binary_engine.open_position
+    assert pos["symbol"] == "EURUSD"
+    assert pos["direction"] == "CALL"
+    assert pos["amount"] > 0
+    assert pos["payout"] >= 0.80
+
+    # Estado del sistema debe reportar la opción binaria activa
+    state = engine.get_state()
+    assert state["binary_options"]["has_active_trade"] is True
+    assert state["binary_options"]["active_trade"]["symbol"] == "EURUSD"
+

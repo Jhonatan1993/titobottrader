@@ -51,12 +51,7 @@ class TradeJournal:
         b = trade.get("broker")
         if b:
             return str(b).upper()
-        cat = trade.get("category")
-        if cat == "CRYPTO":
-            return "BINANCE"
-        elif cat in ("TRADFI_STOCK", "ETF"):
-            return "ALPACA"
-        return "SIMULATION"
+        return "IQOPTION"
 
     def record_trade(self, trade_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -77,8 +72,8 @@ class TradeJournal:
             "reason": trade_data.get("reason") or trade_data.get("exit_reason", "Cierre por estrategia de IA"),
             "exit_reason": trade_data.get("exit_reason") or trade_data.get("reason", "Cierre por estrategia de IA"),
             "exit_type": trade_data.get("exit_type", "SELL"),
-            "broker": trade_data.get("broker") or ("BINANCE" if trade_data.get("category") == "CRYPTO" else "ALPACA"),
-            "category": trade_data.get("category", "CRYPTO"),
+            "broker": trade_data.get("broker") or "IQOPTION",
+            "category": trade_data.get("category", "FOREX"),
             "environment": trade_data.get("environment", "PAPER"),
             "opened_at": trade_data.get("opened_at", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
             "closed_at": trade_data.get("closed_at", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),

@@ -8,36 +8,8 @@ from ai_analysis.funding_arbitrage import FundingArbitrageScanner
 from ai_analysis.news_sentiment_shield import NewsMacroShield
 
 ASSET_RISK_PROFILES = {
-    # === TRADFI WALL STREET (Captura Binance TradFi) ===
-    "META": {"sl_pct": 0.016, "tp_pct": 0.042, "vol_type": "Redes / IA Meta"},
-    "MU": {"sl_pct": 0.018, "tp_pct": 0.046, "vol_type": "Semiconductores Memoria"},
-    "AMD": {"sl_pct": 0.019, "tp_pct": 0.048, "vol_type": "CPUs & GPUs IA"},
-    "INTC": {"sl_pct": 0.007, "tp_pct": 0.020, "vol_type": "Semiconductores Value"},
-    "NVDA": {"sl_pct": 0.009, "tp_pct": 0.024, "vol_type": "Líder Hardware IA"},
-    "SNDK": {"sl_pct": 0.008, "tp_pct": 0.022, "vol_type": "Hardware Almacenamiento"},
-    "TSLA": {"sl_pct": 0.010, "tp_pct": 0.028, "vol_type": "Alta Volatilidad Tech"},
-    "MSFT": {"sl_pct": 0.006, "tp_pct": 0.018, "vol_type": "Defensivo Cloud & Software"},
-    "AAPL": {"sl_pct": 0.006, "tp_pct": 0.018, "vol_type": "Ecosistema Estable"},
-    "AMZN": {"sl_pct": 0.007, "tp_pct": 0.020, "vol_type": "E-Commerce / Cloud AWS"},
-    "GOOGL": {"sl_pct": 0.007, "tp_pct": 0.020, "vol_type": "Publicidad & Gemini IA"},
-    "SPCX": {"sl_pct": 0.007, "tp_pct": 0.020, "vol_type": "ETF Aeroespacial"},
-    "SPY": {"sl_pct": 0.005, "tp_pct": 0.014, "vol_type": "ETF Índice S&P 500"},
-    "QQQ": {"sl_pct": 0.006, "tp_pct": 0.016, "vol_type": "ETF NASDAQ 100"},
-
-    # === CRIPTOMONEDAS SPOT (Ratio Asimétrico Optimizado >= 2.0:1) ===
-    "BTC": {"sl_pct": 0.010, "tp_pct": 0.025, "vol_type": "Criptomoneda Líder"},
-    "ETH": {"sl_pct": 0.010, "tp_pct": 0.025, "vol_type": "Smart Contracts Cripto"},
-    "SOL": {"sl_pct": 0.012, "tp_pct": 0.030, "vol_type": "Alta Velocidad Cripto"},
-    "BNB": {"sl_pct": 0.010, "tp_pct": 0.025, "vol_type": "Ecosistema Binance"},
-    "XRP": {"sl_pct": 0.012, "tp_pct": 0.030, "vol_type": "Pagos Globales Cripto"},
-    "DOGE": {"sl_pct": 0.014, "tp_pct": 0.035, "vol_type": "Alta Volatilidad / Momentum"},
-    "ADA": {"sl_pct": 0.012, "tp_pct": 0.030, "vol_type": "Smart Contracts / PoS"},
-    "AVAX": {"sl_pct": 0.012, "tp_pct": 0.032, "vol_type": "DeFi / Escalabilidad"},
-    "NEAR": {"sl_pct": 0.012, "tp_pct": 0.030, "vol_type": "IA & Sharding Cripto"},
-
-    # === FOREX MAYORES Y CRUCES (Ratio Asimétrico Institucional 2.0:1) ===
+    # === FOREX CFD IQ Option — Pares Mayores y Cruces (R:R mínimo 2.0:1) ===
     "EURUSD": {"sl_pct": 0.0035, "tp_pct": 0.0070, "vol_type": "Forex Mayor - Alta Liquidez"},
-    "EURUSD-OTC": {"sl_pct": 0.0035, "tp_pct": 0.0070, "vol_type": "Forex OTC 24/7 - Alta Liquidez"},
     "GBPUSD": {"sl_pct": 0.0040, "tp_pct": 0.0080, "vol_type": "Forex Mayor - Volatilidad Media"},
     "USDJPY": {"sl_pct": 0.0035, "tp_pct": 0.0070, "vol_type": "Forex Mayor - Dinámica Asiática"},
     "AUDUSD": {"sl_pct": 0.0038, "tp_pct": 0.0076, "vol_type": "Forex Mayor - Commodities"},

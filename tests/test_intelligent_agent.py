@@ -7,16 +7,16 @@ from trade_journal.journal import TradeJournal
 def test_market_feed():
     feed = MultiAssetMarketFeed()
     assets = feed.tick()
-    assert len(assets) >= 7
-    assert "AAPL" in assets
-    assert "BTC" in assets
-    assert assets["AAPL"]["price"] > 0
+    assert len(assets) >= 7  # Al menos los 10 pares Forex CFD de IQ Option
+    assert "EURUSD" in assets
+    assert "GBPUSD" in assets
+    assert assets["EURUSD"]["price"] > 0
 
 def test_intelligent_agent_evaluation():
     agent = IntelligentTradingAgent()
     feed = MultiAssetMarketFeed()
     assets = feed.tick()
-    eval_res = agent.evaluate_asset(assets["AAPL"], {})
+    eval_res = agent.evaluate_asset(assets["EURUSD"], {})
     assert "decision" in eval_res
     assert eval_res["decision"] in ["BUY", "SELL", "HOLD"]
     assert len(eval_res["reason_simple"]) > 10

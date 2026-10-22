@@ -115,43 +115,21 @@ def test_iqoption_vault_isolation_between_paper_and_real():
     # Limpiar estado real después del test
     engine.save_broker_vault("IQOPTION", 0.0, env="LIVE_REAL")
 
-def test_iqoption_pause_isolation_leaves_alpaca_and_binance_untouched():
-    """Verifica que al pausar IQ Option, Binance y Alpaca sigan operando normalmente"""
+def test_iqoption_pause_isolation_and_exclusive_wallet():
+    """Verifica que al pausar IQ Option, el motor queda pausado correctamente y solo existe IQ Option"""
     engine = RealTimeTradingEngine(initial_balance=100.0, execution_environment="PAPER")
     
-    # Pausar únicamente IQ Option
+    # Pausar IQ Option
     engine.toggle_pause(broker="IQOPTION")
     assert engine.broker_wallets["IQOPTION"]["is_running"] is False
-
-    # Binance y Alpaca continúan activos
-    assert engine.broker_wallets["BINANCE"]["is_running"] is True
-    assert engine.broker_wallets["ALPACA"]["is_running"] is True
+    # Solo existe el wallet de IQ Option
+    assert list(engine.broker_wallets.keys()) == ["IQOPTION"]
 
 def test_iqoption_emergency_close_closes_only_forex_positions():
-    """Parada de emergencia en IQ Option solo debe cerrar posiciones de IQ Option, dejando intactas las de Binance y Alpaca"""
+    """Parada de emergencia en IQ Option solo cierra posiciones Forex CFD de IQ Option"""
     engine = RealTimeTradingEngine(initial_balance=100.0, execution_environment="PAPER")
     
-    # Inyectar una posición en cada broker
-    engine.open_positions["BTC"] = {
-        "symbol": "BTC",
-        "name": "Bitcoin",
-        "broker": "BINANCE",
-        "category": "CRYPTO",
-        "invested_amount": 20.0,
-        "entry_price": 60000.0,
-        "current_price": 60000.0,
-        "quantity": 0.00033
-    }
-    engine.open_positions["AAPL"] = {
-        "symbol": "AAPL",
-        "name": "Apple",
-        "broker": "ALPACA",
-        "category": "TRADFI_STOCK",
-        "invested_amount": 20.0,
-        "entry_price": 220.0,
-        "current_price": 220.0,
-        "quantity": 0.09
-    }
+    # Inyectar posiciones solo en IQ Option (broker único)
     engine.open_positions["EURUSD"] = {
         "symbol": "EURUSD",
         "name": "EUR / USD",
@@ -162,21 +140,27 @@ def test_iqoption_emergency_close_closes_only_forex_positions():
         "current_price": 1.085,
         "quantity": 18.43
     }
+    engine.open_positions["GBPUSD"] = {
+        "symbol": "GBPUSD",
+        "name": "GBP / USD",
+        "broker": "IQOPTION",
+        "category": "FOREX",
+        "invested_amount": 20.0,
+        "entry_price": 1.295,
+        "current_price": 1.295,
+        "quantity": 15.44
+    }
 
-    assert len(engine.open_positions) == 3
+    assert len(engine.open_positions) == 2
 
-    # Ejecutar parada de emergencia EXCLUSIVA para IQ Option
+    # Ejecutar parada de emergencia
     engine.emergency_close_all(broker="IQOPTION")
 
-    # EURUSD debe haberse cerrado
+    # Todas las posiciones FOREX de IQ Option deben haberse cerrado
     assert "EURUSD" not in engine.open_positions
-    # BTC y AAPL DEBEN seguir abiertas e intactas
-    assert "BTC" in engine.open_positions
-    assert "AAPL" in engine.open_positions
-    # Solo IQ Option debe estar pausado
-    assert engine.broker_wallets["IQOPTION"]["is_running"] is False
-    assert engine.broker_wallets["BINANCE"]["is_running"] is True
-    assert engine.broker_wallets["ALPACA"]["is_running"] is True
+    assert "GBPUSD" not in engine.open_positions
+    # Solo IQ Option debe existir en las carteras
+    assert list(engine.broker_wallets.keys()) == ["IQOPTION"]
 
 def test_iqoption_otc_24_7_resolution_weekdays_and_weekends():
     """Verifica que los activos OTC operen 24/7 tanto en días de semana como en fines de semana"""

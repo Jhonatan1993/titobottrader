@@ -29,8 +29,8 @@
             --border-highlight: rgba(240, 185, 11, 0.35);
 
             /* Paleta Obsidian Autonomous Quant */
-            --binance-yellow: #F0B90B;
-            --binance-gold: #FCD535;
+            --theme-amber: #F0B90B;
+            --theme-gold: #FCD535;
             --emerald-win: #00F59B;
             --emerald-dark: #10B981;
             --neon-rose: #F43F5E;
@@ -161,7 +161,7 @@
             letter-spacing: 0.4px;
         }
 
-        /* Selector de Mercados Estilo Binance */
+        /* Selector de Mercados Forex */
         .market-switcher {
             display: flex;
             align-items: center;
@@ -197,7 +197,7 @@
 
         .market-tab.active {
             background: rgba(240, 185, 11, 0.15);
-            color: var(--binance-gold);
+            color: var(--theme-gold);
             border: 1px solid rgba(240, 185, 11, 0.4);
             box-shadow: 0 0 10px rgba(240, 185, 11, 0.15);
         }
@@ -224,9 +224,9 @@
         }
 
         .btn-primary {
-            background: var(--binance-yellow);
+            background: var(--theme-amber);
             color: #070B14;
-            border-color: var(--binance-gold);
+            border-color: var(--theme-gold);
             box-shadow: 0 0 10px rgba(240, 185, 11, 0.25);
         }
 
@@ -274,7 +274,7 @@
 
         .env-pill.real {
             background: rgba(240, 185, 11, 0.15);
-            color: var(--binance-gold);
+            color: var(--theme-gold);
             border-color: rgba(240, 185, 11, 0.4);
             box-shadow: 0 0 10px rgba(240, 185, 11, 0.2);
         }
@@ -323,7 +323,7 @@
         }
 
         .brand-sub {
-            color: var(--binance-gold);
+            color: var(--theme-gold);
             font-weight: 700;
         }
 
@@ -375,20 +375,12 @@
             color: #F8FAFC;
         }
 
-        .broker-pill-btn.active#broker-tab-binance,
-        .broker-pill-btn.active.active-binance {
-            background: rgba(240, 185, 11, 0.12);
-            border: 1px solid var(--binance-yellow);
+        .broker-pill-btn.active#broker-tab-iqoption,
+        .broker-pill-btn.active.active-iqoption {
+            background: rgba(16, 185, 129, 0.12);
+            border: 1px solid var(--emerald-win);
             color: #F8FAFC;
-            box-shadow: 0 0 12px rgba(240, 185, 11, 0.15);
-        }
-
-        .broker-pill-btn.active#broker-tab-alpaca,
-        .broker-pill-btn.active.active-alpaca {
-            background: rgba(56, 189, 248, 0.12);
-            border: 1px solid var(--cyber-cyan-bright);
-            color: #F8FAFC;
-            box-shadow: 0 0 12px rgba(56, 189, 248, 0.15);
+            box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
         }
 
         .broker-pill-icon {
@@ -669,7 +661,7 @@
         }
 
         .view-nav-notice strong {
-            color: var(--binance-gold);
+            color: var(--theme-gold);
         }
 
         /* View Containers */
@@ -846,7 +838,7 @@
             font-size: 10px;
             font-weight: 700;
             background: rgba(240, 185, 11, 0.12);
-            color: var(--binance-gold);
+            color: var(--theme-gold);
             border: 1px solid rgba(240, 185, 11, 0.35);
         }
 
@@ -923,7 +915,7 @@
         }
 
         .search-input:focus {
-            border-color: var(--binance-yellow);
+            border-color: var(--theme-amber);
         }
 
         /* Tabla de Mercado */
@@ -1036,7 +1028,7 @@
 
         .cat-crypto {
             background: rgba(240, 185, 11, 0.12);
-            color: var(--binance-gold);
+            color: var(--theme-gold);
             border: 1px solid rgba(240, 185, 11, 0.3);
         }
 
@@ -1164,7 +1156,7 @@
             font-weight: 700;
             font-family: var(--font-mono);
             background: rgba(240, 185, 11, 0.12);
-            color: var(--binance-gold);
+            color: var(--theme-gold);
             border: 1px solid rgba(240, 185, 11, 0.3);
         }
 
@@ -1187,7 +1179,7 @@
         }
 
         .slot-pill.active {
-            background: linear-gradient(90deg, var(--binance-yellow), #f59e0b);
+            background: linear-gradient(90deg, var(--theme-amber), #f59e0b);
             border-color: rgba(240, 185, 11, 0.5);
             box-shadow: 0 0 6px rgba(240, 185, 11, 0.25);
         }
@@ -1289,7 +1281,7 @@
         }
 
         .thought-item.TRADE_BUY {
-            border-left-color: var(--binance-yellow);
+            border-left-color: var(--theme-amber);
             background: rgba(240, 185, 11, 0.04);
         }
 
@@ -1330,7 +1322,7 @@
 
         .custom-select-trigger:hover,
         .custom-select-container.open .custom-select-trigger {
-            border-color: var(--binance-yellow);
+            border-color: var(--theme-amber);
             box-shadow: 0 0 10px rgba(240, 185, 11, 0.2);
         }
 
@@ -1342,7 +1334,7 @@
 
         .custom-select-container.open .custom-select-trigger .arrow {
             transform: rotate(180deg);
-            color: var(--binance-yellow);
+            color: var(--theme-amber);
         }
 
         .custom-select-menu {
@@ -1381,12 +1373,12 @@
 
         .custom-option:hover {
             background: rgba(240, 185, 11, 0.15);
-            color: var(--binance-gold);
+            color: var(--theme-gold);
         }
 
         .custom-option.selected {
             background: rgba(240, 185, 11, 0.2);
-            color: var(--binance-gold);
+            color: var(--theme-gold);
             font-weight: 700;
         }
 
@@ -1448,7 +1440,7 @@
         }
 
         .form-control:focus {
-            border-color: var(--binance-yellow);
+            border-color: var(--theme-amber);
             outline: none;
         }
 
@@ -1870,7 +1862,7 @@
         }
 
         .timeframe-pill.active {
-            background: var(--binance-yellow);
+            background: var(--theme-amber);
             color: #070B14;
             font-weight: 700;
             box-shadow: 0 0 8px rgba(240, 185, 11, 0.35);
@@ -1925,8 +1917,8 @@
 
         .quick-pill.active {
             background: rgba(240, 185, 11, 0.15);
-            border-color: var(--binance-yellow);
-            color: var(--binance-yellow);
+            border-color: var(--theme-amber);
+            color: var(--theme-amber);
             font-weight: 700;
             box-shadow: 0 0 10px rgba(240, 185, 11, 0.2);
         }
@@ -1979,7 +1971,7 @@
             justify-content: center;
             font-size: 12px;
             font-family: var(--font-mono);
-            color: var(--binance-gold);
+            color: var(--theme-gold);
             z-index: 10;
             pointer-events: none;
             transition: opacity 0.2s ease;
@@ -2045,7 +2037,7 @@
 
                 {% if current_user and current_user.role == 'admin' %}
                 <a href="/admin" class="btn-action btn-ghost"
-                    style="border: 1px solid rgba(240, 185, 11, 0.4); color: var(--binance-gold); text-decoration: none; display: inline-flex; align-items: center; gap: 5px; font-weight: 700;"
+                    style="border: 1px solid rgba(240, 185, 11, 0.4); color: var(--theme-gold); text-decoration: none; display: inline-flex; align-items: center; gap: 5px; font-weight: 700;"
                     title="Acceder al Panel de Control de Usuarios">
                     🛡️ Panel Admin
                 </a>
@@ -2146,7 +2138,7 @@
             <div class="summary-stat-col">
                 <span class="stat-label">MOTOR CUANTITATIVO</span>
                 <div class="stat-value-row">
-                    <span class="stat-primary-val mono" style="font-size:16px; color:var(--binance-gold);"><span
+                    <span class="stat-primary-val mono" style="font-size:16px; color:var(--theme-gold);"><span
                             id="profit-factor">1.97x</span></span>
                     <span class="badge-mastery" id="mastery-badge" style="font-size:9.5px; padding:2px 6px;">🌱
                         CADETE</span>
@@ -2271,7 +2263,7 @@
                             <span>Vol: <span class="mono" id="ohlc-vol"
                                     style="color:var(--text-secondary);">0</span></span>
                             <span id="chart-position-legend"
-                                style="margin-left:auto; display:none; color:var(--binance-gold); font-weight:600;">
+                                style="margin-left:auto; display:none; color:var(--theme-gold); font-weight:600;">
                                 💼 En Cartera
                             </span>
                         </div>
@@ -2293,7 +2285,7 @@
                                 <span class="mono" style="font-size:10.5px;">⚡ RSI: <strong
                                         id="chart-rsi-val">50.0</strong></span>
                                 <span class="mono" style="font-size:10.5px;">🤖 IA: <strong id="chart-ai-decision"
-                                        style="color:var(--binance-gold);">HOLD</strong></span>
+                                        style="color:var(--theme-gold);">HOLD</strong></span>
                             </div>
                             <div id="chart-position-strip"
                                 style="font-size:10.5px; color:var(--text-muted); font-family:var(--font-mono);">
@@ -2406,8 +2398,8 @@
                                     style="padding:5px 10px; font-size:11px; border-radius:5px;">
                                     <span>💰 Arbitrage</span>
                                     <span class="mono quant-tab-badge" id="top-funding-badge"
-                                        style="background:rgba(240,185,11,0.15); color:var(--binance-gold); font-size:9.5px;">SOL:
-                                        +19.7%</span>
+                                        style="background:rgba(240,185,11,0.15); color:var(--theme-gold); font-size:9.5px;">EURUSD:
+                                        +0.8%</span>
                                 </button>
                                 <button class="quant-tab-btn" id="tab-btn-news" onclick="switchQuantTab('news', this)"
                                     style="padding:5px 10px; font-size:11px; border-radius:5px;">
@@ -2431,7 +2423,7 @@
                             <div class="quant-pane" id="pane-funding">
                                 <div style="font-size:11.5px; color:var(--text-secondary); line-height:1.4;"
                                     id="top-funding-desc">
-                                    Estrategia Cash & Carry Delta-Neutral en Binance.
+                                    Estrategia Delta-Neutral Cuantitativa & Coberturas Forex.
                                 </div>
                             </div>
                             <div class="quant-pane" id="pane-news">
@@ -2459,7 +2451,7 @@
                                 </h3>
                                 <p style="font-size:11px; color:var(--text-muted); margin:0;"
                                     id="history-broker-subtitle">
-                                    Métricas cuantitativas consolidadas del broker activo (Win Rate, PnL, Profit Factor,
+                                    Métricas cuantitativas consolidadas de IQ Option (Win Rate, PnL, Profit Factor,
                                     Volumen).
                                 </p>
                             </div>
@@ -2467,8 +2459,8 @@
                             <!-- Botonera de Exportación Directa -->
                             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                                 <span class="mono" id="history-active-broker-pill"
-                                    style="font-size:11px; padding:5px 12px; border-radius:6px; font-weight:700; background:rgba(240,185,11,0.12); color:var(--binance-gold); border:1px solid rgba(240,185,11,0.3); display:inline-flex; align-items:center; gap:6px;">
-                                    <span>🪙</span> <span>Binance Spot</span>
+                                    style="font-size:11px; padding:5px 12px; border-radius:6px; font-weight:700; background:rgba(16,185,129,0.12); color:var(--emerald-win); border:1px solid rgba(16,185,129,0.3); display:inline-flex; align-items:center; gap:6px;">
+                                    <span>📈</span> <span>IQ Option</span>
                                 </span>
                                 <button class="btn-action btn-primary" onclick="downloadTradesExport('pdf')"
                                     style="font-size:11px; padding:6px 12px; display:inline-flex; align-items:center; gap:5px; background:linear-gradient(135deg, #EF4444, #B91C1C); border-color:#EF4444;"
@@ -2536,7 +2528,7 @@
                                     style="font-size:10px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">
                                     Volumen Invertido</div>
                                 <div class="mono" id="hist-kpi-volume"
-                                    style="font-size:17px; font-weight:700; color:var(--binance-gold); margin-top:2px;">
+                                    style="font-size:17px; font-weight:700; color:var(--theme-gold); margin-top:2px;">
                                     -</div>
                             </div>
                             <div
@@ -2605,7 +2597,7 @@
             <div class="terminal-header">
                 <span
                     style="font-size:11.5px; font-weight:700; display:flex; align-items:center; gap:6px; font-family:var(--font-mono);">
-                    <span style="color:var(--binance-yellow);">●</span> STREAMING NEURAL COGNITION
+                    <span style="color:var(--theme-amber);">●</span> STREAMING NEURAL COGNITION
                 </span>
                 <span class="mono" style="font-size:9.5px; color:var(--text-muted);">AUTO-REINFORCED</span>
             </div>
@@ -2821,67 +2813,9 @@
                 </div>
             </div>
 
-            <!-- Sección Alpaca (Wall Street) -->
-            <div id="modal-alpaca-section"
-                style="display:none; border-top:1px solid var(--border-subtle); padding-top:12px;">
-                <div
-                    style="background:rgba(56,189,248,0.05); border:1px solid rgba(56,189,248,0.2); border-radius:8px; padding:12px; margin-bottom:12px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <span
-                            style="font-size:12px; font-weight:700; color:var(--cyber-cyan-bright); display:flex; align-items:center; gap:6px;">🏛️
-                            Alpaca Markets (Wall Street TradFi)</span>
-                        <span class="mono" style="font-size:10px; color:var(--cyber-cyan-bright);"
-                            id="modal-alpaca-status-badge">CONECTADO</span>
-                    </div>
-                    <p id="modal-alpaca-desc"
-                        style="font-size:11px; color:#94A3B8; margin-bottom:10px; line-height:1.4;">
-                        Configura tus credenciales de Alpaca para operar acciones y ETFs de Wall Street.
-                    </p>
-                    <div class="form-group" style="margin-bottom:8px;">
-                        <label style="font-size:10.5px;">Alpaca API Key ID</label>
-                        <input type="text" id="modal-alpaca-key" class="form-control"
-                            placeholder="PKW6SLNFTRIU... (Paper) o AK... (Real)">
-                    </div>
-                    <div class="form-group" style="margin-bottom:0;">
-                        <label style="font-size:10.5px;">Alpaca Secret Key</label>
-                        <input type="password" id="modal-alpaca-secret" class="form-control"
-                            placeholder="2ECcHKuWLyu...">
-                    </div>
-                </div>
-            </div>
-
-            <!-- Sección Binance (Cripto 24/7) -->
-            <div id="modal-binance-section"
-                style="display:none; border-top:1px solid var(--border-subtle); padding-top:12px;">
-
-                <div id="binance-keys-container"
-                    style="background:rgba(240,185,11,0.05); border:1px solid rgba(240,185,11,0.2); border-radius:8px; padding:12px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <span
-                            style="font-size:12px; font-weight:700; color:var(--binance-gold); display:flex; align-items:center; gap:6px;">🪙
-                            Binance Spot (Cripto)</span>
-                        <span class="mono" style="font-size:10px; color:var(--emerald-win);"
-                            id="modal-binance-status-badge">CONECTADO</span>
-                    </div>
-                    <p id="modal-binance-desc"
-                        style="font-size:11px; color:#94A3B8; margin-bottom:10px; line-height:1.4;">
-                        Configura las claves API para operar o consultar saldos en Binance Spot.
-                    </p>
-                    <div class="form-group" style="margin-bottom:8px;">
-                        <label style="font-size:10.5px;">Binance API Key</label>
-                        <input type="text" id="modal-binance-key" class="form-control" placeholder="API Key de Binance">
-                    </div>
-                    <div class="form-group" style="margin-bottom:0;">
-                        <label style="font-size:10.5px;">Binance Secret Key</label>
-                        <input type="password" id="modal-binance-secret" class="form-control"
-                            placeholder="Secret Key de Binance">
-                    </div>
-                </div>
-            </div>
-
-            <!-- Sección IQ Option (Forex / CFDs) -->
+            <!-- Sección IQ Option (Forex CFD) -->
             <div id="modal-iqoption-section"
-                style="display:none; border-top:1px solid var(--border-subtle); padding-top:12px;">
+                style="display:block; border-top:1px solid var(--border-subtle); padding-top:12px;">
                 <div
                     style="background:rgba(16,185,129,0.05); border:1px solid rgba(16,185,129,0.2); border-radius:8px; padding:12px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
@@ -2972,7 +2906,7 @@
                     <span style="font-size:10px; color:#94A3B8; text-transform:uppercase; font-weight:700;">Capital
                         Operativo Base</span>
                     <div class="mono" id="modal-vault-base"
-                        style="font-size:18px; font-weight:700; color:var(--binance-gold); margin-top:3px;">$30.00 USD
+                        style="font-size:18px; font-weight:700; color:var(--theme-gold); margin-top:3px;">$30.00 USD
                     </div>
                 </div>
             </div>
@@ -3009,58 +2943,7 @@
         </div>
     </div>
 
-    <!-- ==================== MODAL DE AGREGAR OTRO BROKER ==================== -->
-    <div class="modal-overlay" id="add-broker-modal" onclick="handleBackdropClick(event, 'add-broker-modal')">
-        <div class="modal-card" style="max-width:520px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                <h3 style="margin:0; font-size:16px; display:flex; align-items:center; gap:8px;">
-                    <span>➕ Conectar Nuevo Broker o Exchange</span>
-                </h3>
-                <button class="btn-action btn-ghost" onclick="closeModals()"
-                    style="padding:2px 8px; font-size:12px;">✕</button>
-            </div>
 
-            <p style="font-size:11.5px; color:var(--text-secondary); margin-bottom:14px; line-height:1.45;">
-                Arquitectura <strong>Multi-Broker Aislada</strong>: Cada broker opera con su propio libro contable,
-                saldo y órdenes independientes. Cambiar de uno a otro no interrumpe ninguna orden activa.
-            </p>
-
-            <div class="form-group" style="margin-bottom:12px;">
-                <label>Broker / Exchange a Conectar</label>
-                <select id="new-broker-select" class="form-control" onchange="onBrokerSelectChange()"
-                    style="background:#0F172A; color:#F8FAFC; border:1px solid rgba(255,255,255,0.14); padding:9px 12px; border-radius:6px; width:100%; font-size:12.5px;">
-                    <option value="ALPACA">🏛️ Alpaca Markets (Wall Street / Acciones & ETFs)</option>
-                    <option value="BINANCE">🪙 Binance Spot (Criptomonedas 24/7)</option>
-                    <option value="BYBIT">⚡ Bybit (Cripto & Derivados)</option>
-                    <option value="IBKR">🌐 Interactive Brokers (Acciones & Opciones Globales)</option>
-                    <option value="IQOPTION">📊 IQ Option (Forex CFD Tradicional)</option>
-                    <option value="OKX">💎 OKX Exchange (Cripto Spot)</option>
-                </select>
-            </div>
-
-            <div class="form-group" style="margin-bottom:12px;">
-                <label id="new-broker-key-label">API Key / Client ID</label>
-                <input type="text" id="new-broker-key" class="form-control" placeholder="Pega tu API Key pública">
-            </div>
-
-            <div class="form-group" style="margin-bottom:14px;">
-                <label id="new-broker-secret-label">API Secret / Private Token</label>
-                <input type="password" id="new-broker-secret" class="form-control"
-                    placeholder="Pega tu Secret Key privada">
-            </div>
-
-            <div id="new-broker-hint"
-                style="background:rgba(56,189,248,0.06); border:1px solid rgba(56,189,248,0.2); border-radius:6px; padding:10px 12px; margin-bottom:16px; font-size:11px; color:var(--text-secondary); line-height:1.4;">
-                🔒 <strong>Aislamiento Total de Capital:</strong> Cada broker opera con su propio libro contable, saldo
-                y órdenes independientes 24/7 sin mezclar fondos.
-            </div>
-
-            <div style="display:flex; justify-content:flex-end; gap:8px;">
-                <button class="btn-action btn-ghost" onclick="closeModals()">Cancelar</button>
-                <button class="btn-action btn-primary" onclick="saveNewBroker()">Conectar & Activar</button>
-            </div>
-        </div>
-    </div>
 
     <!-- ==================== MODAL DE GRÁFICO MAXIMIZADO (FULLSCREEN) ==================== -->
     <div class="modal-overlay" id="chart-fullscreen-modal"
@@ -3128,10 +3011,10 @@
                 <label>Broker de la Exportación</label>
                 <div style="padding:10px 14px; border-radius:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); font-size:12px; font-weight:700; display:flex; align-items:center; gap:8px;"
                     id="export-modal-broker-display">
-                    <span style="color:var(--binance-gold); display:flex; align-items:center; gap:6px;"><span>🪙</span>
-                        <span>Binance Spot (Cripto 24/7)</span></span>
+                    <span style="color:var(--emerald-win); display:flex; align-items:center; gap:6px;"><span>📈</span>
+                        <span>IQ Option (Forex CFD)</span></span>
                 </div>
-                <input type="hidden" id="export-modal-broker" value="BINANCE">
+                <input type="hidden" id="export-modal-broker" value="IQOPTION">
             </div>
 
             <div class="form-group" style="margin-top:14px;">
@@ -3470,7 +3353,7 @@
                 if (rsiEl) rsiEl.innerText = (data.rsi || 50.0).toFixed(1);
                 if (decEl) {
                     decEl.innerText = `${data.ai_decision} (${data.ai_confidence || 50}%)`;
-                    decEl.style.color = (data.ai_decision === 'BUY') ? 'var(--emerald-win)' : ((data.ai_decision === 'SELL') ? 'var(--neon-rose)' : 'var(--binance-gold)');
+                    decEl.style.color = (data.ai_decision === 'BUY') ? 'var(--emerald-win)' : ((data.ai_decision === 'SELL') ? 'var(--neon-rose)' : 'var(--theme-gold)');
                 }
 
                 // Posición abierta en el gráfico
@@ -3481,7 +3364,7 @@
                         const pnlVal = pos.current_pnl || 0;
                         const pnlPct = pos.current_pnl_percent || 0;
                         posStripEl.innerHTML = `
-                            <span style="color:var(--binance-gold); font-weight:700;">💼 POSICIÓN ACTIVA:</span> 
+                            <span style="color:var(--theme-gold); font-weight:700;">💼 POSICIÓN ACTIVA:</span> 
                             <span>Entrada: <strong>$${(pos.entry_price || 0).toLocaleString()}</strong></span> · 
                             <span>SL: <strong style="color:var(--neon-rose);">$${(pos.stop_loss || 0).toLocaleString()}</strong></span> · 
                             <span>TP: <strong style="color:var(--emerald-win);">$${(pos.take_profit || 0).toLocaleString()}</strong></span> · 
@@ -3715,7 +3598,7 @@
 
         function initCandleAssetSelectors(assets) {
             if (!assets || assets.length === 0) return;
-            const currentBroker = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'BINANCE';
+            const currentBroker = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'IQOPTION';
 
             // Si no ha cambiado de broker y ya fue inicializado, sincronizar solo la clase activa de los pills
             if (lastCatalogBroker === currentBroker && candleCatalogInitialized) {
@@ -3731,37 +3614,24 @@
             // Asegurar que el activo en vista pertenezca al broker activo
             const assetSymbols = assets.map(a => a.symbol);
             if (!assetSymbols.includes(currentCandleSymbol)) {
-                if (currentBroker === 'ALPACA') {
-                    currentCandleSymbol = assetSymbols.includes('NVDA') ? 'NVDA' : assetSymbols[0];
-                } else if (currentBroker === 'IQOPTION') {
-                    currentCandleSymbol = assetSymbols.includes('EURUSD') ? 'EURUSD' : assetSymbols[0];
-                } else {
-                    currentCandleSymbol = assetSymbols.includes('BTC') ? 'BTC' : assetSymbols[0];
-                }
+                currentCandleSymbol = assetSymbols.includes('EURUSD') ? 'EURUSD' : (assetSymbols[0] || 'EURUSD');
                 selectCandleAsset(currentCandleSymbol);
             }
 
             const quickBar = document.getElementById('asset-quick-bar');
             if (quickBar) {
-                // Activos prioritarios estrictos por broker (CERO mezcla)
-                const brokerPills = (currentBroker === 'ALPACA')
-                    ? ['NVDA', 'TSLA', 'AAPL', 'META', 'AMZN', 'GOOGL', 'MSFT', 'AMD', 'SPY', 'QQQ', 'INTC', 'MU']
-                    : ((currentBroker === 'IQOPTION')
-                        ? ['EURUSD', 'GBPUSD', 'USDJPY', 'EURJPY', 'GBPJPY', 'AUDUSD', 'USDCAD', 'EURGBP']
-                        : ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA', 'AVAX', 'LINK', 'NEAR']);
+                const brokerPills = ['EURUSD', 'GBPUSD', 'USDJPY', 'EURJPY', 'GBPJPY', 'AUDUSD', 'USDCAD', 'EURGBP', 'USDCHF', 'NZDUSD'];
 
                 let pillsHtml = '';
                 brokerPills.forEach(sym => {
-                    const item = assets.find(a => a.symbol === sym);
-                    if (item) {
-                        const isActive = (item.symbol === currentCandleSymbol);
-                        pillsHtml += `
-                            <div class="quick-pill ${isActive ? 'active' : ''}" data-sym="${item.symbol}" onclick="selectCandleAsset('${item.symbol}')">
-                                <span>${item.icon || '📈'}</span>
-                                <span class="mono">${item.symbol}</span>
-                            </div>
-                        `;
-                    }
+                    const item = assets.find(a => a.symbol === sym) || { symbol: sym, icon: '📈' };
+                    const isActive = (item.symbol === currentCandleSymbol);
+                    pillsHtml += `
+                        <div class="quick-pill ${isActive ? 'active' : ''}" data-sym="${item.symbol}" onclick="selectCandleAsset('${item.symbol}')">
+                            <span>${item.icon || '📈'}</span>
+                            <span class="mono">${item.symbol}</span>
+                        </div>
+                    `;
                 });
                 quickBar.innerHTML = pillsHtml;
             }
@@ -3769,26 +3639,11 @@
             const selectEl = document.getElementById('chart-asset-select');
             if (selectEl) {
                 let selHtml = '';
-                if (currentBroker === 'ALPACA') {
-                    const tradfi = assets.filter(a => a.category === 'TRADFI_STOCK');
-                    const etfs = assets.filter(a => a.category === 'ETF');
-                    if (tradfi.length > 0) {
-                        selHtml += `<optgroup label="🏛️ Acciones Wall Street">`;
-                        tradfi.forEach(a => selHtml += `<option value="${a.symbol}">${a.icon || '🏛️'} ${a.symbol} - ${a.name}</option>`);
-                        selHtml += `</optgroup>`;
-                    }
-                    if (etfs.length > 0) {
-                        selHtml += `<optgroup label="📊 ETFs de Wall Street">`;
-                        etfs.forEach(a => selHtml += `<option value="${a.symbol}">${a.icon || '📊'} ${a.symbol} - ${a.name}</option>`);
-                        selHtml += `</optgroup>`;
-                    }
-                } else {
-                    const crypto = assets.filter(a => a.category === 'CRYPTO');
-                    if (crypto.length > 0) {
-                        selHtml += `<optgroup label="🪙 Criptomonedas 24/7">`;
-                        crypto.forEach(a => selHtml += `<option value="${a.symbol}">${a.icon || '🪙'} ${a.symbol} - ${a.name}</option>`);
-                        selHtml += `</optgroup>`;
-                    }
+                const forex = assets.filter(a => a.category === 'FOREX' || !a.category);
+                if (forex.length > 0) {
+                    selHtml += `<optgroup label="📈 Divisas Forex CFD">`;
+                    forex.forEach(a => selHtml += `<option value="${a.symbol}">${a.icon || '📈'} ${a.symbol} - ${a.name}</option>`);
+                    selHtml += `</optgroup>`;
                 }
                 selectEl.innerHTML = selHtml;
                 selectEl.value = currentCandleSymbol;
@@ -3976,7 +3831,7 @@
             if (!currentActiveBroker && sys.active_broker) {
                 currentActiveBroker = sys.active_broker;
             }
-            const activeBroker = currentActiveBroker || sys.active_broker || 'BINANCE';
+            const activeBroker = currentActiveBroker || sys.active_broker || 'IQOPTION';
             const envBadge = document.getElementById('env-badge');
             const brokerInfo = (sys.brokers && sys.brokers[activeBroker]) ? sys.brokers[activeBroker] : {};
             const brokerEnv = brokerInfo.environment || sys.execution_environment || 'PAPER';
@@ -3996,7 +3851,7 @@
             } else if (sys.loss_limit_reached) {
                 document.getElementById('system-status-text').style.color = 'var(--neon-rose)';
             } else {
-                document.getElementById('system-status-text').style.color = isRunningState ? 'var(--emerald-win)' : 'var(--binance-yellow)';
+                document.getElementById('system-status-text').style.color = isRunningState ? 'var(--emerald-win)' : 'var(--theme-amber)';
             }
 
             // Broker Switcher Dock Bar Sync - Centrado Exclusivamente en IQ Option
@@ -4044,8 +3899,6 @@
                         const bInfo = sys.brokers[bId] || {};
                         const bEq = (bInfo.equity !== undefined) ? bInfo.equity : 0;
                         const isActive = (bId === activeBroker);
-                        const isBin = (bId === 'BINANCE');
-                        const isAlp = (bId === 'ALPACA');
                         const bCurr = bInfo.currency || (bId === 'IQOPTION' ? 'COP' : 'USD');
                         const formattedEq = bCurr === 'COP' ? `COP ${bEq.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `$${bEq.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
 
@@ -4054,7 +3907,7 @@
                         }
                         if (btn) {
                             if (isActive) {
-                                btn.className = `broker-pill-btn active ${isBin ? 'active-binance' : (isAlp ? 'active-alpaca' : '')}`.trim();
+                                btn.className = 'broker-pill-btn active active-iqoption';
                             } else {
                                 btn.className = 'broker-pill-btn';
                             }
@@ -4111,12 +3964,12 @@
                     btnForex.style.color = 'var(--text-muted)';
                 }
                 if (btnBinary) {
-                    btnBinary.style.background = 'var(--binance-yellow)';
+                    btnBinary.style.background = 'var(--theme-amber)';
                     btnBinary.style.color = '#000';
                 }
                 if (modeBadgeEl) {
                     modeBadgeEl.innerText = 'BINARIAS 1M-5M';
-                    modeBadgeEl.style.color = 'var(--binance-yellow)';
+                    modeBadgeEl.style.color = 'var(--theme-amber)';
                     modeBadgeEl.style.background = 'rgba(234,179,8,0.15)';
                 }
                 if (modeDescEl) {
@@ -4236,7 +4089,7 @@
             if (funding.top_opportunity) {
                 const topOpp = funding.top_opportunity;
                 document.getElementById('top-funding-badge').innerText = `${topOpp.symbol}: +${topOpp.apr_percent}% APR`;
-                document.getElementById('top-funding-desc').innerText = `Oportunidad Delta-Neutral en Binance: ${topOpp.badge} (+${topOpp.net_apr_after_fees}% neto tras comisiones). ${topOpp.recommendation}`;
+                document.getElementById('top-funding-desc').innerText = `Oportunidad Cuantitativa en IQ Option: ${topOpp.badge} (+${topOpp.net_apr_after_fees}% neto tras comisiones). ${topOpp.recommendation}`;
             }
 
             if (macroShield.status) {
@@ -4313,7 +4166,7 @@
                 } else {
                     regBadge.innerText = '🌊 Rango / Consolidación';
                     regBadge.style.background = 'rgba(240,185,11,0.15)';
-                    regBadge.style.color = 'var(--binance-gold)';
+                    regBadge.style.color = 'var(--theme-gold)';
                     document.getElementById('global-regime-desc').innerText = 'Filtro HMM/ATR activo: Mercado consolidando. Compras restringidas solo a soportes con alta convicción.';
                 }
             }
@@ -4383,16 +4236,7 @@
                 const chgClass = chg >= 0 ? 'positive-bg' : 'negative-bg';
                 const chgSign = chg >= 0 ? '+' : '';
 
-                let catBadge = '';
-                if (item.category === 'TRADFI_STOCK') {
-                    catBadge = `<span class="cat-chip cat-tradfi" title="Operable vía Alpaca Markets">🏛️ Wall Street</span>`;
-                } else if (item.category === 'ETF') {
-                    catBadge = `<span class="cat-chip cat-etf" title="ETF vía Alpaca Markets">📊 ETF Wall St.</span>`;
-                } else if (item.category === 'FOREX') {
-                    catBadge = `<span class="cat-chip cat-forex" title="Forex & Derivados vía IQ Option">💱 Forex IQ Option</span>`;
-                } else {
-                    catBadge = `<span class="cat-chip cat-crypto" title="Cripto vía Binance Spot">🪙 Cripto Binance</span>`;
-                }
+                let catBadge = `<span class="cat-chip cat-forex" title="Forex CFD vía IQ Option">💱 Forex IQ Option</span>`;
 
                 let decisionClass = 'dec-hold';
                 let decText = '⏸️ HOLD';
@@ -4453,7 +4297,7 @@
                             </div>
                         </td>
                         <td>
-                            <div class="mono" style="font-size:10.5px; font-weight:600; color:var(--binance-gold);">Kelly: ${kelly}%</div>
+                            <div class="mono" style="font-size:10.5px; font-weight:600; color:var(--theme-gold);">Kelly: ${kelly}%</div>
                             <div style="font-size:9px; color:var(--text-muted); max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${item.expert_tag || ''}">${item.expert_tag || ''}</div>
                         </td>
                         <td style="text-align:right;">
@@ -4474,7 +4318,7 @@
         }
 
         function renderPositions(positions, unrealizedPnl) {
-            const activeBroker = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'BINANCE';
+            const activeBroker = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'IQOPTION';
             // Filtrado estricto por broker activo: Ningún broker muestra posiciones de otro broker
             positions = (positions || []).filter(p => (p.broker || '').toUpperCase() === activeBroker.toUpperCase());
 
@@ -4637,53 +4481,28 @@
                 container.classList.remove('open');
             }
 
-            const activeBroker = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'BINANCE';
+            const activeBroker = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'IQOPTION';
 
             const paperContainer = document.getElementById('paper-balance-container');
             const paperDesc = document.getElementById('modal-paper-desc');
             const paperInput = document.getElementById('modal-paper-balance');
 
             if (paperContainer) {
-                if (value === 'PAPER' && activeBroker !== 'ALPACA') {
+                if (value === 'PAPER') {
                     paperContainer.style.display = 'block';
-                    if (activeBroker === 'IQOPTION') {
-                        if (paperDesc) paperDesc.innerHTML = `🛡️ <strong style="color:var(--emerald-win);">Modo Práctica / Demo:</strong> Configura el capital virtual de prueba para ensayar en IQ Option (por defecto $10,000.00 USD).`;
-                        if (paperInput && (!paperInput.value || parseFloat(paperInput.value) <= 100)) paperInput.value = '10000.00';
-                    } else {
-                        if (paperDesc) paperDesc.innerHTML = `🛡️ <strong style="color:var(--emerald-win);">Modo Simulación Seguro:</strong> Configura el capital inicial para pruebas (ej. $10.00 o $30.00 USD).`;
-                        if (paperInput && parseFloat(paperInput.value) > 1000) paperInput.value = '10.00';
-                    }
+                    if (paperDesc) paperDesc.innerHTML = `🛡️ <strong style="color:var(--emerald-win);">Modo Práctica / Demo:</strong> Configura el capital virtual de prueba para ensayar en IQ Option (por defecto $10,000.00 USD).`;
+                    if (paperInput && (!paperInput.value || parseFloat(paperInput.value) <= 100)) paperInput.value = '10000.00';
                 } else {
                     paperContainer.style.display = 'none';
                 }
             }
 
-            if (activeBroker === 'ALPACA') {
-                const desc = document.getElementById('modal-alpaca-desc');
-                if (desc) {
-                    if (value === 'LIVE_REAL') {
-                        desc.innerHTML = `⚠️ <strong style="color:var(--neon-rose);">MODO DINERO REAL:</strong> Conexión a <code>https://api.alpaca.markets</code>. Se ejecutarán órdenes reales en Wall Street con tu saldo en custodia real. Requiere tus credenciales de cuenta real fondeada de Alpaca (API Key ID y Secret, que suelen comenzar con 'AK').`;
-                    } else {
-                        desc.innerHTML = `🛡️ <strong style="color:var(--cyber-cyan-bright);">MODO PAPER SANDBOX:</strong> Conexión a <code>https://paper-api.alpaca.markets</code>. Órdenes simuladas en tiempo real sin riesgo con el balance virtual oficial ($100,000 USD). Utiliza tus llaves de Paper Trading (comienzan con 'PK').`;
-                    }
-                }
-            } else if (activeBroker === 'IQOPTION') {
-                const desc = document.getElementById('modal-iqoption-desc');
-                if (desc) {
-                    if (value === 'LIVE_REAL') {
-                        desc.innerHTML = `⚠️ <strong style="color:var(--neon-rose);">MODO DINERO REAL:</strong> Operaciones reales con tu saldo depositado en IQ Option. Las ganancias van a tu Bóveda Real.`;
-                    } else {
-                        desc.innerHTML = `🛡️ <strong style="color:var(--emerald-win);">MODO PRÁCTICA / DEMO:</strong> Operaciones simuladas sin riesgo en IQ Option con saldo demo. Tu dinero real está 100% blindado.`;
-                    }
-                }
-            } else {
-                const desc = document.getElementById('modal-binance-desc');
-                if (desc) {
-                    if (value === 'LIVE_REAL') {
-                        desc.innerHTML = `⚠️ <strong style="color:var(--neon-rose);">MODO DINERO REAL:</strong> Conexión directa a Binance Spot. Se ejecutarán órdenes reales en el mercado con saldo en USDT.`;
-                    } else {
-                        desc.innerHTML = `🛡️ <strong style="color:var(--emerald-win);">MODO PAPER SIMULACIÓN:</strong> Cotizaciones de Binance Spot en vivo 24/7 sin riesgo con saldo virtual configurable.`;
-                    }
+            const desc = document.getElementById('modal-iqoption-desc');
+            if (desc) {
+                if (value === 'LIVE_REAL') {
+                    desc.innerHTML = `⚠️ <strong style="color:var(--neon-rose);">MODO DINERO REAL:</strong> Operaciones reales con tu saldo depositado en IQ Option. Las ganancias van a tu Bóveda Real.`;
+                } else {
+                    desc.innerHTML = `🛡️ <strong style="color:var(--emerald-win);">MODO PRÁCTICA / DEMO:</strong> Operaciones simuladas sin riesgo en IQ Option con saldo demo. Tu dinero real está 100% blindado.`;
                 }
             }
         }
@@ -4697,7 +4516,7 @@
 
         // Acciones del Motor
         async function toggleEngine() {
-            const activeBroker = currentActiveBroker || (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'BINANCE';
+            const activeBroker = currentActiveBroker || (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'IQOPTION';
             await fetch('/api/control/toggle', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -4707,7 +4526,7 @@
         }
 
         async function emergencyClose() {
-            const activeBroker = currentActiveBroker || (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'BINANCE';
+            const activeBroker = currentActiveBroker || (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'IQOPTION';
             const bName = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.brokers && latestSystemData.system_status.brokers[activeBroker] && latestSystemData.system_status.brokers[activeBroker].name) || activeBroker;
             if (confirm(`¿Confirmas la PARADA DE EMERGENCIA para ${bName}? Se cerrarán las posiciones y se detendrán las operaciones de este broker (los demás brokers continuarán funcionando normalmente).`)) {
                 await fetch('/api/control/emergency-close', {
@@ -4959,7 +4778,7 @@
             }
         }
         async function openEnvModal() {
-            const activeBroker = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'BINANCE';
+            const activeBroker = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'IQOPTION';
             const sys = (latestSystemData && latestSystemData.system_status) ? latestSystemData.system_status : {};
             const brokers = sys.brokers || {};
             const brokerInfo = brokers[activeBroker] || {};
@@ -4968,68 +4787,28 @@
             // Configurar títulos y badges
             const titleEl = document.getElementById('env-modal-broker-name');
             if (titleEl) {
-                if (activeBroker === 'IQOPTION') {
-                    titleEl.innerText = '📈 IQ Option Forex CFD';
-                    titleEl.style.color = 'var(--emerald-win)';
-                } else if (activeBroker === 'ALPACA') {
-                    titleEl.innerText = '🏛️ Alpaca Wall Street';
-                    titleEl.style.color = 'var(--cyber-cyan-bright)';
-                } else {
-                    titleEl.innerText = '🪙 Binance Spot';
-                    titleEl.style.color = 'var(--binance-gold)';
-                }
+                titleEl.innerText = '📈 IQ Option Forex CFD';
+                titleEl.style.color = 'var(--emerald-win)';
             }
 
-            // Mostrar/Ocultar secciones según el broker activo
-            const alpacaSec = document.getElementById('modal-alpaca-section');
-            const binanceSec = document.getElementById('modal-binance-section');
+            // Mostrar sección IQ Option
             const iqoptionSec = document.getElementById('modal-iqoption-section');
-            if (alpacaSec) alpacaSec.style.display = (activeBroker === 'ALPACA') ? 'block' : 'none';
-            if (binanceSec) binanceSec.style.display = (activeBroker === 'BINANCE') ? 'block' : 'none';
-            if (iqoptionSec) iqoptionSec.style.display = (activeBroker === 'IQOPTION') ? 'block' : 'none';
+            if (iqoptionSec) iqoptionSec.style.display = 'block';
 
             // Generar opciones del dropdown contextual
             const optionsMenu = document.getElementById('custom-env-options');
             if (optionsMenu) {
-                if (activeBroker === 'ALPACA') {
-                    optionsMenu.innerHTML = `
-                        <div class="custom-option ${currentEnv === 'PAPER' ? 'selected' : ''}" data-value="PAPER" onclick="selectEnvOption('PAPER', '🛡️ Modo Paper Sandbox (Alpaca Simulado - $100k)')">
-                            <span>🛡️ Modo Paper Sandbox (Alpaca Simulado - $100k)</span>
-                        </div>
-                        <div class="custom-option ${currentEnv === 'LIVE_REAL' ? 'selected' : ''}" data-value="LIVE_REAL" onclick="selectEnvOption('LIVE_REAL', '🔥 Modo Dinero Real (Alpaca Live Trading - Wall Street)')">
-                            <span>🔥 Modo Dinero Real (Alpaca Live Trading - Wall Street)</span>
-                        </div>
-                    `;
-                } else if (activeBroker === 'IQOPTION') {
-                    optionsMenu.innerHTML = `
-                        <div class="custom-option ${currentEnv === 'PAPER' ? 'selected' : ''}" data-value="PAPER" onclick="selectEnvOption('PAPER', '🛡️ Modo Práctica / Demo (IQ Option - $10,000 USD)')">
-                            <span>🛡️ Modo Práctica / Demo (IQ Option - $10,000 USD)</span>
-                        </div>
-                        <div class="custom-option ${currentEnv === 'LIVE_REAL' ? 'selected' : ''}" data-value="LIVE_REAL" onclick="selectEnvOption('LIVE_REAL', '🔥 Modo Dinero Real (IQ Option Cuenta Real)')">
-                            <span>🔥 Modo Dinero Real (IQ Option Cuenta Real)</span>
-                        </div>
-                    `;
-                } else {
-                    optionsMenu.innerHTML = `
-                        <div class="custom-option ${currentEnv === 'PAPER' ? 'selected' : ''}" data-value="PAPER" onclick="selectEnvOption('PAPER', '🛡️ Modo Práctica Seguro (Binance Simulado)')">
-                            <span>🛡️ Modo Práctica Seguro (Binance Simulado)</span>
-                        </div>
-                        <div class="custom-option ${currentEnv === 'LIVE_REAL' ? 'selected' : ''}" data-value="LIVE_REAL" onclick="selectEnvOption('LIVE_REAL', '🔥 Modo Dinero Real (Binance Spot Real)')">
-                            <span>🔥 Modo Dinero Real (Binance Spot Real)</span>
-                        </div>
-                    `;
-                }
+                optionsMenu.innerHTML = `
+                    <div class="custom-option ${currentEnv === 'PAPER' ? 'selected' : ''}" data-value="PAPER" onclick="selectEnvOption('PAPER', '🛡️ Modo Práctica / Demo (IQ Option - $10,000 USD)')">
+                        <span>🛡️ Modo Práctica / Demo (IQ Option - $10,000 USD)</span>
+                    </div>
+                    <div class="custom-option ${currentEnv === 'LIVE_REAL' ? 'selected' : ''}" data-value="LIVE_REAL" onclick="selectEnvOption('LIVE_REAL', '🔥 Modo Dinero Real (IQ Option Cuenta Real)')">
+                        <span>🔥 Modo Dinero Real (IQ Option Cuenta Real)</span>
+                    </div>
+                `;
             }
 
-            let labelText = '🛡️ Modo Práctica Seguro';
-            if (activeBroker === 'ALPACA') {
-                labelText = (currentEnv === 'LIVE_REAL') ? '🔥 Modo Dinero Real (Alpaca Live Trading - Wall Street)' : '🛡️ Modo Paper Sandbox (Alpaca Simulado - $100k)';
-            } else if (activeBroker === 'IQOPTION') {
-                labelText = (currentEnv === 'LIVE_REAL') ? '🔥 Modo Dinero Real (IQ Option Cuenta Real)' : '🛡️ Modo Práctica / Demo (IQ Option - $10,000 USD)';
-            } else {
-                labelText = (currentEnv === 'LIVE_REAL') ? '🔥 Modo Dinero Real (Binance Spot Real)' : '🛡️ Modo Práctica Seguro (Binance Simulado)';
-            }
-
+            const labelText = (currentEnv === 'LIVE_REAL') ? '🔥 Modo Dinero Real (IQ Option Cuenta Real)' : '🛡️ Modo Práctica / Demo (IQ Option - $10,000 USD)';
             selectEnvOption(currentEnv, labelText);
 
             if (sys.paper_initial_balance !== undefined) {
@@ -5037,23 +4816,11 @@
                 if (pbInput) pbInput.value = sys.paper_initial_balance;
             }
 
-            // Precargar credenciales guardadas de los brokers
+            // Precargar credenciales guardadas de IQ Option
             try {
                 const kRes = await fetch('/api/control/get-broker-keys');
                 if (kRes.ok) {
                     const keys = await kRes.json();
-                    if (keys.alpaca_key && document.getElementById('modal-alpaca-key')) {
-                        document.getElementById('modal-alpaca-key').value = keys.alpaca_key;
-                    }
-                    if (keys.alpaca_secret && document.getElementById('modal-alpaca-secret')) {
-                        document.getElementById('modal-alpaca-secret').value = keys.alpaca_secret;
-                    }
-                    if (keys.binance_key && document.getElementById('modal-binance-key')) {
-                        document.getElementById('modal-binance-key').value = keys.binance_key;
-                    }
-                    if (keys.binance_secret && document.getElementById('modal-binance-secret')) {
-                        document.getElementById('modal-binance-secret').value = keys.binance_secret;
-                    }
                     if (keys.iqoption_email && document.getElementById('modal-iqoption-email')) {
                         document.getElementById('modal-iqoption-email').value = keys.iqoption_email;
                     }
@@ -5083,7 +4850,7 @@
         function openTransferVaultModal() {
             const sys = (latestSystemData && latestSystemData.system_status) ? latestSystemData.system_status : {};
             const fin = (latestSystemData && latestSystemData.financial_summary) ? latestSystemData.financial_summary : {};
-            const activeBroker = sys.active_broker || 'BINANCE';
+            const activeBroker = sys.active_broker || 'IQOPTION';
             const brokers = sys.brokers || {};
             const brokerInfo = brokers[activeBroker] || {};
 
@@ -5111,7 +4878,7 @@
         function setTransferVaultAll() {
             const sys = (latestSystemData && latestSystemData.system_status) ? latestSystemData.system_status : {};
             const fin = (latestSystemData && latestSystemData.financial_summary) ? latestSystemData.financial_summary : {};
-            const activeBroker = sys.active_broker || 'BINANCE';
+            const activeBroker = sys.active_broker || 'IQOPTION';
             const brokers = sys.brokers || {};
             const brokerInfo = brokers[activeBroker] || {};
             const currentVault = brokerInfo.profit_vault !== undefined ? brokerInfo.profit_vault : (fin.profit_vault || 0);
@@ -5124,7 +4891,7 @@
 
         async function submitTransferVault() {
             const sys = (latestSystemData && latestSystemData.system_status) ? latestSystemData.system_status : {};
-            const activeBroker = sys.active_broker || 'BINANCE';
+            const activeBroker = sys.active_broker || 'IQOPTION';
             const inputEl = document.getElementById('transfer-vault-input');
             const rawVal = inputEl ? inputEl.value : '';
             const amount = parseFloat(rawVal);
@@ -5166,7 +4933,7 @@
 
         async function harvestProfitsToVault() {
             const sys = (latestSystemData && latestSystemData.system_status) ? latestSystemData.system_status : {};
-            const activeBroker = sys.active_broker || 'BINANCE';
+            const activeBroker = sys.active_broker || 'IQOPTION';
             const btn = document.getElementById('btn-harvest-profits');
             if (btn) {
                 btn.disabled = true;
@@ -5200,7 +4967,7 @@
         }
 
         async function saveSettings() {
-            const activeBroker = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'BINANCE';
+            const activeBroker = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'IQOPTION';
             const amountRaw = document.getElementById('modal-profit-target').value;
             const lossRaw = document.getElementById('modal-max-loss').value.trim();
             const amount = (amountRaw !== "" && !isNaN(parseFloat(amountRaw))) ? parseFloat(amountRaw) : 500;
@@ -5231,7 +4998,7 @@
             }
 
             if (env && latestSystemData && latestSystemData.system_status && latestSystemData.system_status.execution_environment !== env) {
-                const activeBroker = (latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'BINANCE';
+                const activeBroker = (latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'IQOPTION';
                 const res = await fetch('/api/control/set-execution-environment', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -5294,37 +5061,27 @@
         }
 
         // ==================== HISTÓRICO Y EXPORTACIÓN POR DÍA ====================
-        let currentHistoryBroker = 'BINANCE';
+        let currentHistoryBroker = 'IQOPTION';
         let historyDataCache = null;
 
         function updateHistoryBrokerDisplay(brokerId) {
-            const bNorm = (brokerId || 'BINANCE').toUpperCase();
             const pillEl = document.getElementById('history-active-broker-pill');
             if (pillEl) {
-                if (bNorm === 'ALPACA') {
-                    pillEl.innerHTML = `<span>🏛️</span> <span>Alpaca Wall St.</span>`;
-                    pillEl.style.background = 'rgba(56,189,248,0.12)';
-                    pillEl.style.color = 'var(--cyber-cyan-bright)';
-                    pillEl.style.borderColor = 'rgba(56,189,248,0.3)';
-                } else {
-                    pillEl.innerHTML = `<span>🪙</span> <span>Binance Spot</span>`;
-                    pillEl.style.background = 'rgba(240,185,11,0.12)';
-                    pillEl.style.color = 'var(--binance-gold)';
-                    pillEl.style.borderColor = 'rgba(240,185,11,0.3)';
-                }
+                pillEl.innerHTML = `<span>📈</span> <span>IQ Option</span>`;
+                pillEl.style.background = 'rgba(16,185,129,0.12)';
+                pillEl.style.color = 'var(--emerald-win)';
+                pillEl.style.borderColor = 'rgba(16,185,129,0.3)';
             }
 
             const subTitle = document.getElementById('history-broker-subtitle');
             if (subTitle) {
-                subTitle.innerHTML = (bNorm === 'ALPACA')
-                    ? 'Métricas cuantitativas y auditoría de operaciones de <strong style="color:var(--cyber-cyan-bright);">🏛️ Alpaca Markets (Wall Street TradFi)</strong>'
-                    : 'Métricas cuantitativas y auditoría de operaciones de <strong style="color:var(--binance-gold);">🪙 Binance Spot (Cripto 24/7)</strong>';
+                subTitle.innerHTML = 'Métricas cuantitativas y auditoría de operaciones de <strong style="color:var(--emerald-win);">📈 IQ Option (Forex CFD)</strong>';
             }
         }
 
         async function loadHistoryData() {
             try {
-                const brokerToLoad = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || currentHistoryBroker || 'BINANCE';
+                const brokerToLoad = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || currentHistoryBroker || 'IQOPTION';
                 currentHistoryBroker = brokerToLoad;
                 updateHistoryBrokerDisplay(brokerToLoad);
 
@@ -5378,7 +5135,7 @@
             if (kpiPf) kpiPf.innerText = `${globalPf}x`;
             const badgeEl = document.getElementById('history-total-days-badge');
             if (badgeEl) {
-                const bName = currentHistoryBroker === 'ALPACA' ? 'Alpaca' : 'Binance';
+                const bName = 'IQ Option';
                 badgeEl.innerText = `${bName}: ${totalDays} Jornadas (${totalTrades} Trades)`;
             }
 
@@ -5386,7 +5143,7 @@
             if (!container) return;
 
             if (dailyList.length === 0) {
-                const bName = currentHistoryBroker === 'ALPACA' ? 'Alpaca Markets' : 'Binance';
+                const bName = 'IQ Option';
                 container.innerHTML = `<div style="text-align:center; padding:32px; color:var(--text-muted); font-size:12px;">No hay operaciones registradas para ${bName}.</div>`;
                 return;
             }
@@ -5397,10 +5154,8 @@
                 const pnlSign = pnl >= 0 ? '+' : '';
                 const pnlColor = pnl >= 0 ? 'var(--emerald-win)' : 'var(--neon-rose)';
                 const pnlBg = pnl >= 0 ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)';
-                const wrColor = (d.win_rate >= 50) ? 'var(--emerald-win)' : ((d.win_rate >= 40) ? 'var(--binance-gold)' : 'var(--neon-rose)');
-                const brokerChip = d.broker === 'BINANCE'
-                    ? '<span class="cat-chip cat-crypto" style="font-size:10px;">🪙 Binance</span>'
-                    : (d.broker === 'ALPACA' ? '<span class="cat-chip cat-tradfi" style="font-size:10px;">🏛️ Alpaca</span>' : (d.broker === 'IQOPTION' ? '<span class="cat-chip cat-forex" style="font-size:10px;">💱 IQ Option</span>' : '<span class="cat-chip" style="font-size:10px; background:rgba(255,255,255,0.06); color:#94A3B8;">🌐 Multibroker</span>'));
+                const wrColor = (d.win_rate >= 50) ? 'var(--emerald-win)' : ((d.win_rate >= 40) ? 'var(--theme-gold)' : 'var(--neon-rose)');
+                const brokerChip = '<span class="cat-chip cat-forex" style="font-size:10px;">📈 IQ Option</span>';
 
                 html += `
                 <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-radius:8px; overflow:hidden;">
@@ -5419,7 +5174,7 @@
                             <span>Trades: <strong style="color:var(--text-primary);">${d.total_trades}</strong> (<span style="color:var(--emerald-win);">${d.winning_trades}G</span> / <span style="color:var(--neon-rose);">${d.losing_trades}P</span>${(d.tie_trades || 0) > 0 ? ` / <span style="color:#94A3B8;">${d.tie_trades}E</span>` : ''})</span>
                             <span>Win Rate: <strong style="color:${wrColor};">${d.win_rate}%</strong></span>
                             <span>PF: <strong style="color:var(--text-primary);">${d.profit_factor}x</strong></span>
-                            <span>Vol: <strong style="color:var(--binance-gold);">$${d.total_invested.toFixed(2)}</strong></span>
+                            <span>Vol: <strong style="color:var(--theme-gold);">$${d.total_invested.toFixed(2)}</strong></span>
                             <span>Mejor: <strong style="color:var(--emerald-win);">+$${d.best_trade.toFixed(2)}</strong></span>
                         </div>
 
@@ -5459,7 +5214,7 @@
                     const tColor = tPnl >= 0 ? 'var(--emerald-win)' : 'var(--neon-rose)';
                     const tPct = t.pnl_percent || 0.0;
                     const tTime = (t.closed_at || t.opened_at || '').substring(11, 19) || '-';
-                    const bTag = (t.broker === 'BINANCE' || t.category === 'CRYPTO') ? '🪙 Binance' : '🏛️ Alpaca';
+                    const bTag = (t.broker === 'IQOPTION' || t.category === 'FOREX') ? '📈 IQ Option' : (t.broker ? t.broker : '📈 IQ Option');
                     const resClass = tPnl > 0 ? 'mono positive' : (tPnl < 0 ? 'mono negative' : 'mono');
                     return `
                                         <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
@@ -5504,7 +5259,7 @@
         }
 
         function downloadTradesExport(mode) {
-            const broker = currentHistoryBroker || (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'BINANCE';
+            const broker = currentHistoryBroker || (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'IQOPTION';
             if (mode === 'xlsx') {
                 window.location.href = `/api/export/trades-xlsx?broker=${broker}`;
             } else if (mode === 'pdf') {
@@ -5517,27 +5272,23 @@
         }
 
         function downloadSingleDayCSV(dateStr, broker) {
-            const targetBroker = (broker && broker !== 'CONSOLIDADO') ? broker : (currentHistoryBroker || 'BINANCE');
+            const targetBroker = (broker && broker !== 'CONSOLIDADO') ? broker : (currentHistoryBroker || 'IQOPTION');
             window.location.href = `/api/export/trades-csv?broker=${targetBroker}&mode=complete`;
         }
 
         function openExportModal() {
-            const curBroker = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || currentHistoryBroker || 'BINANCE';
+            const curBroker = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || currentHistoryBroker || 'IQOPTION';
             const bInput = document.getElementById('export-modal-broker');
             if (bInput) bInput.value = curBroker;
             const bDisplay = document.getElementById('export-modal-broker-display');
             if (bDisplay) {
-                if (curBroker === 'ALPACA') {
-                    bDisplay.innerHTML = `<span style="color:var(--cyber-cyan-bright); display:flex; align-items:center; gap:6px;"><span>🏛️</span> <span>Alpaca Markets (Wall Street TradFi - Stocks & ETFs)</span></span>`;
-                } else {
-                    bDisplay.innerHTML = `<span style="color:var(--binance-gold); display:flex; align-items:center; gap:6px;"><span>🪙</span> <span>Binance Spot (Cripto 24/7)</span></span>`;
-                }
+                bDisplay.innerHTML = `<span style="color:var(--emerald-win); display:flex; align-items:center; gap:6px;"><span>📈</span> <span>IQ Option (Forex CFD)</span></span>`;
             }
             document.getElementById('export-modal').classList.add('active');
         }
 
         function executeModalExport() {
-            const broker = document.getElementById('export-modal-broker').value || currentHistoryBroker || 'BINANCE';
+            const broker = document.getElementById('export-modal-broker').value || currentHistoryBroker || 'IQOPTION';
             const modeEl = document.querySelector('input[name="export_mode"]:checked');
             const mode = modeEl ? modeEl.value : 'pdf';
 
@@ -5563,19 +5314,16 @@
                 latestSystemData.system_status.active_broker = bKey;
             }
 
-            // 2. RESPUESTA TÁCTIL INSTANTÁNEA (0ms de latencia, cero congelamiento, cero rebotes)
             candleCatalogInitialized = false;
             lastCatalogBroker = null;
-            currentCandleSymbol = (bKey === 'ALPACA') ? 'NVDA' : (bKey === 'BINANCE' ? 'BTC' : (bKey === 'IQOPTION' ? 'EURUSD' : (bKey === 'BYBIT' ? 'SOL' : 'EURUSD')));
+            currentCandleSymbol = 'EURUSD';
 
             // Actualizar pestañas superiores de inmediato
             document.querySelectorAll('.broker-pill-btn').forEach(btn => {
                 const isMatch = btn.id === `broker-tab-${bKey.toLowerCase()}`;
                 const badge = btn.querySelector('.broker-pill-badge');
                 if (isMatch) {
-                    const isBin = (bKey === 'BINANCE');
-                    const isAlp = (bKey === 'ALPACA');
-                    btn.className = `broker-pill-btn active ${isBin ? 'active-binance' : (isAlp ? 'active-alpaca' : '')}`.trim();
+                    btn.className = 'broker-pill-btn active active-iqoption';
                     if (badge) {
                         badge.className = 'broker-pill-badge active';
                         badge.innerText = 'ACTIVO';
@@ -5642,150 +5390,40 @@
             }
         }
 
-        function onBrokerSelectChange() {
-            const b = document.getElementById('new-broker-select').value;
-            const keyLabel = document.getElementById('new-broker-key-label');
-            const keyInput = document.getElementById('new-broker-key');
-            const secLabel = document.getElementById('new-broker-secret-label');
-            const secInput = document.getElementById('new-broker-secret');
-            const hint = document.getElementById('new-broker-hint');
-            if (b === 'IQOPTION') {
-                if (keyLabel) keyLabel.innerText = 'Correo Electrónico (Email de tu cuenta IQ Option)';
-                if (keyInput) keyInput.placeholder = 'ej: tu_correo@gmail.com';
-                if (secLabel) secLabel.innerText = 'Contraseña de IQ Option (o SSID Token)';
-                if (secInput) secInput.placeholder = 'Tu contraseña de acceso a IQ Option';
-                if (hint) hint.innerHTML = 'ℹ️ <strong>IQ Option no maneja API Keys públicas:</strong> La conexión se autentica directamente con tu Email y Contraseña de IQ Option (o Token SSID de sesión).';
-            } else {
-                if (keyLabel) keyLabel.innerText = 'API Key / Client ID';
-                if (keyInput) keyInput.placeholder = 'Pega tu API Key pública';
-                if (secLabel) secLabel.innerText = 'API Secret / Private Token';
-                if (secInput) secInput.placeholder = 'Pega tu Secret Key privada';
-                if (hint) hint.innerHTML = '🔒 <strong>Aislamiento Total de Capital:</strong> Cada broker opera de forma completamente aislada e independiente 24/7 sin mezclar fondos.';
-            }
-        }
-
-        function openAddBrokerModal() {
-            document.getElementById('add-broker-modal').classList.add('active');
-            onBrokerSelectChange();
-        }
-
-        async function saveNewBroker() {
-            const brokerType = document.getElementById('new-broker-select').value;
-            const apiKey = document.getElementById('new-broker-key').value.trim();
-            const secretKey = document.getElementById('new-broker-secret').value.trim();
-
-            if (!apiKey || !secretKey) {
-                alert("Por favor ingresa la API Key y Secret Key del broker.");
-                return;
-            }
-
-            try {
-                const res = await fetch('/api/control/add-broker', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ broker_type: brokerType, api_key: apiKey, secret_key: secretKey })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    alert(`✅ ¡Broker Conectado y Operando en Vivo!\n\n${data.name} (${data.broker}) se ha integrado y está operando simultáneamente 24/7 con los demás brokers.\nSaldo operativo base: $${data.initial_balance.toFixed(2)} USD.`);
-                    await selectActiveBroker(brokerType);
-                } else {
-                    alert(`❌ Error conectando broker: ${data.error || 'Desconocido'}`);
-                }
-            } catch (err) {
-                alert(`❌ Error de comunicación: ${err.message}`);
-            }
-
-            closeModals();
-            await fetchState();
-        }
 
         async function saveEnvAndKeys() {
-            const activeBroker = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'BINANCE';
             const env = document.getElementById('modal-env-select').value;
             const btn = document.getElementById('modal-save-env-btn');
             const originalText = btn ? btn.innerText : 'Guardar y Conectar';
             if (btn) btn.innerText = "Conectando...";
 
             try {
-                if (activeBroker === 'ALPACA') {
-                    const alpaca_key = document.getElementById('modal-alpaca-key') ? document.getElementById('modal-alpaca-key').value.trim() : "";
-                    const alpaca_secret = document.getElementById('modal-alpaca-secret') ? document.getElementById('modal-alpaca-secret').value.trim() : "";
+                const iqoption_email = document.getElementById('modal-iqoption-email') ? document.getElementById('modal-iqoption-email').value.trim() : "";
+                const iqoption_password = document.getElementById('modal-iqoption-password') ? document.getElementById('modal-iqoption-password').value.trim() : "";
+                const iqoption_ssid = document.getElementById('modal-iqoption-ssid') ? document.getElementById('modal-iqoption-ssid').value.trim() : "";
 
-                    if (alpaca_key || alpaca_secret) {
-                        await fetch('/api/control/set-broker-keys', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ alpaca_key, alpaca_secret })
-                        });
-                    }
-
-                    const res = await fetch('/api/control/set-execution-environment', {
+                if (iqoption_email || iqoption_password || iqoption_ssid) {
+                    await fetch('/api/control/set-broker-keys', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ environment: env, broker: 'ALPACA' })
+                        body: JSON.stringify({ iqoption_email, iqoption_password, iqoption_ssid })
                     });
-                    const data = await res.json();
-                    if (!data.success && data.error) {
-                        alert(data.error);
-                    } else {
-                        closeModals();
-                        await fetchState();
-                    }
-                } else if (activeBroker === 'IQOPTION') {
-                    const iqoption_email = document.getElementById('modal-iqoption-email') ? document.getElementById('modal-iqoption-email').value.trim() : "";
-                    const iqoption_password = document.getElementById('modal-iqoption-password') ? document.getElementById('modal-iqoption-password').value.trim() : "";
-                    const iqoption_ssid = document.getElementById('modal-iqoption-ssid') ? document.getElementById('modal-iqoption-ssid').value.trim() : "";
+                }
 
-                    if (iqoption_email || iqoption_password || iqoption_ssid) {
-                        await fetch('/api/control/set-broker-keys', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ iqoption_email, iqoption_password, iqoption_ssid })
-                        });
-                    }
+                const paper_balance_raw = document.getElementById('modal-paper-balance') ? document.getElementById('modal-paper-balance').value : null;
+                const paper_balance = paper_balance_raw !== "" && !isNaN(parseFloat(paper_balance_raw)) ? parseFloat(paper_balance_raw) : 10000.0;
 
-                    const paper_balance_raw = document.getElementById('modal-paper-balance') ? document.getElementById('modal-paper-balance').value : null;
-                    const paper_balance = paper_balance_raw !== "" && !isNaN(parseFloat(paper_balance_raw)) ? parseFloat(paper_balance_raw) : 10000.0;
-
-                    const res = await fetch('/api/control/set-execution-environment', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ environment: env, broker: 'IQOPTION', paper_balance: paper_balance })
-                    });
-                    const data = await res.json();
-                    if (!data.success && data.error) {
-                        alert(data.error);
-                    } else {
-                        closeModals();
-                        await fetchState();
-                    }
+                const res = await fetch('/api/control/set-execution-environment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ environment: env, broker: 'IQOPTION', paper_balance: paper_balance })
+                });
+                const data = await res.json();
+                if (!data.success && data.error) {
+                    alert(data.error);
                 } else {
-                    const binance_key = document.getElementById('modal-binance-key') ? document.getElementById('modal-binance-key').value.trim() : "";
-                    const binance_secret = document.getElementById('modal-binance-secret') ? document.getElementById('modal-binance-secret').value.trim() : "";
-                    const paper_balance_raw = document.getElementById('modal-paper-balance') ? document.getElementById('modal-paper-balance').value : null;
-                    const paper_balance = paper_balance_raw !== "" && !isNaN(parseFloat(paper_balance_raw)) ? parseFloat(paper_balance_raw) : 10.0;
-
-                    if (binance_key || binance_secret) {
-                        await fetch('/api/control/set-broker-keys', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ binance_key, binance_secret })
-                        });
-                    }
-
-                    const res = await fetch('/api/control/set-execution-environment', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ environment: env, broker: 'BINANCE', paper_balance })
-                    });
-                    const data = await res.json();
-                    if (!data.success && data.error) {
-                        alert(data.error);
-                    } else {
-                        closeModals();
-                        await fetchState();
-                    }
+                    closeModals();
+                    await fetchState();
                 }
             } catch (err) {
                 console.error("Error guardando entorno:", err);

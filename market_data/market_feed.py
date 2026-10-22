@@ -5,268 +5,12 @@ import math
 import threading
 from typing import Dict, List, Any, Optional
 from config.broker_config import load_broker_config
-from execution.alpaca_adapter import AlpacaAdapter
-from execution.binance_adapter import BinanceAdapter
 from execution.iqoption_adapter import IQOptionAdapter
 
-# Catálogo Completo: Wall Street TradFi (Acciones de EE.UU. + ETFs en Binance) + Top Criptomonedas
+# Catálogo exclusivo: Pares Forex CFD operables en IQ Option
+# Solo pares con suficiente liquidez y horario de sesión extendido.
 AVAILABLE_ASSETS = [
-    # === ACCIONES TRADFI WALL STREET (Captura Binance TradFi) ===
-    {
-        "symbol": "META",
-        "name": "Meta Platforms, Inc.",
-        "category": "TRADFI_STOCK",
-        "type": "Redes Sociales / IA & RV",
-        "icon": "♾️",
-        "base_price": 588.30,
-        "volatility": 0.0055,
-        "trend_bias": 0.0004
-    },
-    {
-        "symbol": "MU",
-        "name": "Micron Technology",
-        "category": "TRADFI_STOCK",
-        "type": "Memoria / Semiconductores",
-        "icon": "💾",
-        "base_price": 112.30,
-        "volatility": 0.0068,
-        "trend_bias": 0.0005
-    },
-    {
-        "symbol": "AMD",
-        "name": "Advanced Micro Devices",
-        "category": "TRADFI_STOCK",
-        "type": "CPUs / GPUs / Data Center",
-        "icon": "⚡",
-        "base_price": 158.40,
-        "volatility": 0.0062,
-        "trend_bias": 0.0005
-    },
-    {
-        "symbol": "INTC",
-        "name": "Intel Corporation",
-        "category": "TRADFI_STOCK",
-        "type": "Semiconductores / Fundición",
-        "icon": "🔷",
-        "base_price": 24.80,
-        "volatility": 0.0058,
-        "trend_bias": 0.0002
-    },
-    {
-        "symbol": "NVDA",
-        "name": "NVIDIA Corp.",
-        "category": "TRADFI_STOCK",
-        "type": "Líder Global Computación IA",
-        "icon": "🟢",
-        "base_price": 142.60,
-        "volatility": 0.0065,
-        "trend_bias": 0.0006
-    },
-    {
-        "symbol": "SNDK",
-        "name": "SanDisk Corp.",
-        "category": "TRADFI_STOCK",
-        "type": "Almacenamiento Flash / Hardware",
-        "icon": "🔴",
-        "base_price": 78.90,
-        "volatility": 0.0052,
-        "trend_bias": 0.0003
-    },
-    {
-        "symbol": "TSLA",
-        "name": "Tesla Motors",
-        "category": "TRADFI_STOCK",
-        "type": "Vehículos Autónomos / Robótica",
-        "icon": "🚗",
-        "base_price": 248.80,
-        "volatility": 0.0075,
-        "trend_bias": 0.0004
-    },
-    {
-        "symbol": "MSFT",
-        "name": "Microsoft Corp.",
-        "category": "TRADFI_STOCK",
-        "type": "Software / Cloud Azure / OpenAI",
-        "icon": "💻",
-        "base_price": 428.10,
-        "volatility": 0.0035,
-        "trend_bias": 0.0003
-    },
-    {
-        "symbol": "AAPL",
-        "name": "Apple Inc.",
-        "category": "TRADFI_STOCK",
-        "type": "Hardware / Ecosistema iOS",
-        "icon": "🍎",
-        "base_price": 224.50,
-        "volatility": 0.0038,
-        "trend_bias": 0.0003
-    },
-    {
-        "symbol": "AMZN",
-        "name": "Amazon.com",
-        "category": "TRADFI_STOCK",
-        "type": "Cloud AWS / E-Commerce Global",
-        "icon": "📦",
-        "base_price": 186.40,
-        "volatility": 0.0042,
-        "trend_bias": 0.0003
-    },
-    {
-        "symbol": "GOOGL",
-        "name": "Alphabet (Google)",
-        "category": "TRADFI_STOCK",
-        "type": "Búsqueda / Gemini IA / Cloud",
-        "icon": "🔍",
-        "base_price": 162.70,
-        "volatility": 0.0040,
-        "trend_bias": 0.0003
-    },
-
-    # === ETFs DE WALL STREET ===
-    {
-        "symbol": "SPCX",
-        "name": "Space Exploration ETF",
-        "category": "ETF",
-        "type": "Aeroespacial & Satélites",
-        "icon": "🚀",
-        "base_price": 32.40,
-        "volatility": 0.0048,
-        "trend_bias": 0.0003
-    },
-    {
-        "symbol": "SPY",
-        "name": "SPDR S&P 500 ETF Trust",
-        "category": "ETF",
-        "type": "Índice 500 Grandes EE.UU.",
-        "icon": "🏛️",
-        "base_price": 565.20,
-        "volatility": 0.0028,
-        "trend_bias": 0.0003
-    },
-    {
-        "symbol": "QQQ",
-        "name": "Invesco QQQ NASDAQ 100",
-        "category": "ETF",
-        "type": "Top 100 Tecnología EE.UU.",
-        "icon": "📈",
-        "base_price": 485.60,
-        "volatility": 0.0038,
-        "trend_bias": 0.0004
-    },
-
-    # === CRIPTOMONEDAS TOP SPOT ===
-    {
-        "symbol": "BTC",
-        "name": "Bitcoin / USD",
-        "category": "CRYPTO",
-        "type": "Oro Digital / Reserva Global",
-        "icon": "🪙",
-        "binance_pair": "BTCUSDT",
-        "base_price": 84200.0,
-        "volatility": 0.0080,
-        "trend_bias": 0.0005
-    },
-    {
-        "symbol": "ETH",
-        "name": "Ethereum / USD",
-        "category": "CRYPTO",
-        "type": "Smart Contracts / DeFi Líder",
-        "icon": "🔷",
-        "binance_pair": "ETHUSDT",
-        "base_price": 2680.0,
-        "volatility": 0.0090,
-        "trend_bias": 0.0005
-    },
-    {
-        "symbol": "SOL",
-        "name": "Solana / USD",
-        "category": "CRYPTO",
-        "type": "L1 Alta Velocidad & Web3",
-        "icon": "🟣",
-        "binance_pair": "SOLUSDT",
-        "base_price": 116.5,
-        "volatility": 0.0110,
-        "trend_bias": 0.0006
-    },
-    {
-        "symbol": "BNB",
-        "name": "Binance Coin",
-        "category": "CRYPTO",
-        "type": "Ecosistema Binance & BSC",
-        "icon": "🟡",
-        "binance_pair": "BNBUSDT",
-        "base_price": 777.0,
-        "volatility": 0.0085,
-        "trend_bias": 0.0004
-    },
-    {
-        "symbol": "XRP",
-        "name": "Ripple / USD",
-        "category": "CRYPTO",
-        "type": "Pagos Bancarios Transfronterizos",
-        "icon": "💎",
-        "binance_pair": "XRPUSDT",
-        "base_price": 1.54,
-        "volatility": 0.0120,
-        "trend_bias": 0.0005
-    },
-    {
-        "symbol": "DOGE",
-        "name": "Dogecoin / USD",
-        "category": "CRYPTO",
-        "type": "Alta Volatilidad / Momentum",
-        "icon": "🐕",
-        "binance_pair": "DOGEUSDT",
-        "base_price": 0.095,
-        "volatility": 0.0160,
-        "trend_bias": 0.0007
-    },
-    {
-        "symbol": "ADA",
-        "name": "Cardano / USD",
-        "category": "CRYPTO",
-        "type": "Smart Contracts PoS Revisado",
-        "icon": "🔵",
-        "binance_pair": "ADAUSDT",
-        "base_price": 0.25,
-        "volatility": 0.0120,
-        "trend_bias": 0.0004
-    },
-    {
-        "symbol": "AVAX",
-        "name": "Avalanche / USD",
-        "category": "CRYPTO",
-        "type": "Subnets / DeFi Escalable",
-        "icon": "🔺",
-        "binance_pair": "AVAXUSDT",
-        "base_price": 10.22,
-        "volatility": 0.0130,
-        "trend_bias": 0.0006
-    },
-    {
-        "symbol": "LINK",
-        "name": "Chainlink / USD",
-        "category": "CRYPTO",
-        "type": "Oráculos & Conexión TradFi RWA",
-        "icon": "🔗",
-        "binance_pair": "LINKUSDT",
-        "base_price": 13.24,
-        "volatility": 0.0120,
-        "trend_bias": 0.0005
-    },
-    {
-        "symbol": "NEAR",
-        "name": "NEAR Protocol",
-        "category": "CRYPTO",
-        "type": "IA Descentralizada & Sharding",
-        "icon": "🌐",
-        "binance_pair": "NEARUSDT",
-        "base_price": 4.60,
-        "volatility": 0.0150,
-        "trend_bias": 0.0007
-    },
-    # === FOREX MARGEN CFD (IQ Option / Multi-Broker Oficial) ===
+    # === FOREX CFD IQ Option — Pares Mayores y Cruces ===
     {
         "symbol": "EURUSD",
         "name": "EUR / USD",
@@ -369,43 +113,24 @@ AVAILABLE_ASSETS = [
     }
 ]
 
+
+
 class MultiAssetMarketFeed:
     """
-    Motor de cotizaciones multiactivo institucional:
-    - Modo UNIFIED_TRADFI_CRYPTO / HYBRID: Cobertura simultánea Wall Street + Cripto.
-    - Modo TRADFI_WALLSTREET / ALPACA_PAPER: Exclusivo TradFi (acciones y ETFs de Wall Street).
-    - Modo BINANCE_CRYPTO: Exclusivo Criptomonedas 24/7.
-    - Modo SIMULATION: Motor browniano de alta fidelidad 24/7.
+    Feed de cotizaciones exclusivo IQ Option Forex CFD.
+    - Fuente primaria: velas reales de IQ Option via WebSocket.
+    - Fuente secundaria: tasas interbancarias Forex HTTP (open.er-api.com / frankfurter.dev).
+    - Fallback: simulación browniana anclada al precio base real.
+    - Sin Binance ni Alpaca.
     """
-    VALID_MODES = [
-        "IQ_CFD",
-        "FOREX",
-        "IQOPTION_FOREX",
-        "HYBRID",
-        "UNIFIED_TRADFI_CRYPTO", 
-        "TRADFI_WALLSTREET", 
-        "BINANCE_CRYPTO", 
-        "ALPACA_PAPER", 
-        "SIMULATION"
-    ]
+    VALID_MODES = ["IQ_CFD", "FOREX", "IQOPTION_FOREX", "SIMULATION"]
 
     def __init__(self):
         self.assets: Dict[str, Dict[str, Any]] = {}
         self.history: Dict[str, List[Dict[str, Any]]] = {}
         self.candles: Dict[str, List[Dict[str, Any]]] = {}
         self.broker_config = load_broker_config()
-        self.mode = self.broker_config.get("operating_mode", "IQ_CFD")
-        if self.mode not in self.VALID_MODES:
-            self.mode = "IQ_CFD"
-
-        self.alpaca = AlpacaAdapter(
-            api_key=self.broker_config.get("alpaca", {}).get("api_key", ""),
-            secret_key=self.broker_config.get("alpaca", {}).get("secret_key", "")
-        )
-        self.binance = BinanceAdapter(
-            api_key=self.broker_config.get("binance", {}).get("api_key", ""),
-            secret_key=self.broker_config.get("binance", {}).get("secret_key", "")
-        )
+        self.mode = "IQ_CFD"  # Modo único
         self.iqoption = IQOptionAdapter(
             email=self.broker_config.get("iqoption", {}).get("email", ""),
             password=self.broker_config.get("iqoption", {}).get("password", ""),
@@ -414,9 +139,11 @@ class MultiAssetMarketFeed:
         )
         self.last_live_fetch = 0.0
         self.live_cache: Dict[str, float] = {}
+        self._last_fx_fetch = 0.0
         self._initialize_assets()
 
     def set_mode(self, new_mode: str):
+        """Mantiene siempre IQ_CFD; ignora modos no permitidos."""
         if new_mode in self.VALID_MODES:
             self.mode = new_mode
             self.broker_config["operating_mode"] = new_mode
@@ -425,17 +152,7 @@ class MultiAssetMarketFeed:
 
     def reload_credentials(self):
         self.broker_config = load_broker_config()
-        self.mode = self.broker_config.get("operating_mode", "UNIFIED_TRADFI_CRYPTO")
-        if self.mode not in self.VALID_MODES:
-            self.mode = "UNIFIED_TRADFI_CRYPTO"
-        self.alpaca = AlpacaAdapter(
-            api_key=self.broker_config.get("alpaca", {}).get("api_key", ""),
-            secret_key=self.broker_config.get("alpaca", {}).get("secret_key", "")
-        )
-        self.binance = BinanceAdapter(
-            api_key=self.broker_config.get("binance", {}).get("api_key", ""),
-            secret_key=self.broker_config.get("binance", {}).get("secret_key", "")
-        )
+        self.mode = "IQ_CFD"
         self.iqoption = IQOptionAdapter(
             email=self.broker_config.get("iqoption", {}).get("email", ""),
             password=self.broker_config.get("iqoption", {}).get("password", ""),
@@ -483,101 +200,63 @@ class MultiAssetMarketFeed:
                 })
 
     def _fetch_live_data_background(self):
-        """Consulta precios reales de Binance y Alpaca en tiempo real"""
+        """Actualiza cotizaciones Forex reales interbancarias desde open.er-api.com / frankfurter.dev."""
         now = time.time()
-        if now - self.last_live_fetch < 1.5:
+        if now - self._last_fx_fetch < 4.0:
             return
-        self.last_live_fetch = now
-
-        # 1. Obtener Cripto real de Binance (datos públicos oficiales en tiempo real para todos los activos cripto)
-        crypto_pairs = [item.get("binance_pair") for item in AVAILABLE_ASSETS if item.get("category") == "CRYPTO" and item.get("binance_pair")]
-        crypto_data = self.binance.get_public_crypto_prices(crypto_pairs)
-        for item in AVAILABLE_ASSETS:
-            pair = item.get("binance_pair")
-            sym = item.get("symbol")
-            if pair and pair in crypto_data and sym:
-                self.live_cache[sym] = crypto_data[pair]["price"]
-
-        # 2. Obtener Acciones reales de Alpaca si está configurado
-        if self.alpaca.is_configured:
-            stock_symbols = [item["symbol"] for item in AVAILABLE_ASSETS if item.get("category") in ["TRADFI_STOCK", "ETF"]]
-            stock_data = self.alpaca.get_latest_stock_prices(stock_symbols)
-            for sym, p in stock_data.items():
-                if p > 0:
-                    self.live_cache[sym] = p
-
-        # 3. Obtener cotizaciones Forex reales interbancarias en tiempo real
-        now_fx = time.time()
-        if (now_fx - getattr(self, "_last_fx_fetch", 0.0)) > 4.0:
-            self._last_fx_fetch = now_fx
+        self._last_fx_fetch = now
+        try:
+            import urllib.request
+            import json
+            import ssl
+            ctx = ssl._create_unverified_context()
+            rates = {}
+            # Fuente 1: open.er-api.com
             try:
-                import urllib.request
-                import json
-                import ssl
-                ctx = ssl._create_unverified_context()
-                rates = {}
-                # Intento 1: open.er-api.com (Rápido, oficial, sin redirects, sin SSL bloqueante)
-                try:
-                    req1 = urllib.request.Request("https://open.er-api.com/v6/latest/USD", headers={"User-Agent": "Mozilla/5.0 (TitoBotTrader/2.0)"})
-                    with urllib.request.urlopen(req1, timeout=3.0, context=ctx) as resp1:
-                        data1 = json.loads(resp1.read().decode())
-                        if data1.get("result") == "success":
-                            rates = data1.get("rates", {})
-                except Exception:
-                    pass
-
-                # Intento 2: frankfurter.dev oficial si el intento 1 falló
-                if not rates:
-                    try:
-                        req2 = urllib.request.Request("https://api.frankfurter.dev/v1/latest?from=USD", headers={"User-Agent": "Mozilla/5.0 (TitoBotTrader/2.0)"})
-                        with urllib.request.urlopen(req2, timeout=3.0, context=ctx) as resp2:
-                            rates = json.loads(resp2.read().decode()).get("rates", {})
-                    except Exception:
-                        pass
-
-                if rates:
-                    if "EUR" in rates and float(rates["EUR"]) > 0:
-                        val = round(1.0 / float(rates["EUR"]), 5)
-                        self.live_cache["EURUSD"] = val
-                        self.live_cache["EURUSD-OTC"] = val
-                    if "GBP" in rates and float(rates["GBP"]) > 0:
-                        val = round(1.0 / float(rates["GBP"]), 5)
-                        self.live_cache["GBPUSD"] = val
-                        self.live_cache["GBPUSD-OTC"] = val
-                    if "JPY" in rates and float(rates["JPY"]) > 0:
-                        val = round(float(rates["JPY"]), 3)
-                        self.live_cache["USDJPY"] = val
-                        self.live_cache["USDJPY-OTC"] = val
-                    if "CAD" in rates and float(rates["CAD"]) > 0:
-                        val = round(float(rates["CAD"]), 5)
-                        self.live_cache["USDCAD"] = val
-                        self.live_cache["USDCAD-OTC"] = val
-                    if "CHF" in rates and float(rates["CHF"]) > 0:
-                        val = round(float(rates["CHF"]), 5)
-                        self.live_cache["USDCHF"] = val
-                        self.live_cache["USDCHF-OTC"] = val
-                    if "AUD" in rates and float(rates["AUD"]) > 0:
-                        val = round(1.0 / float(rates["AUD"]), 5)
-                        self.live_cache["AUDUSD"] = val
-                        self.live_cache["AUDUSD-OTC"] = val
-                    if "NZD" in rates and float(rates["NZD"]) > 0:
-                        val = round(1.0 / float(rates["NZD"]), 5)
-                        self.live_cache["NZDUSD"] = val
-                        self.live_cache["NZDUSD-OTC"] = val
-                    if "EUR" in rates and "GBP" in rates and float(rates["EUR"]) > 0 and float(rates["GBP"]) > 0:
-                        val = round(float(rates["GBP"]) / float(rates["EUR"]), 5)
-                        self.live_cache["EURGBP"] = val
-                        self.live_cache["EURGBP-OTC"] = val
-                    if "EUR" in rates and "JPY" in rates and float(rates["EUR"]) > 0 and float(rates["JPY"]) > 0:
-                        val = round(float(rates["JPY"]) / float(rates["EUR"]), 3)
-                        self.live_cache["EURJPY"] = val
-                        self.live_cache["EURJPY-OTC"] = val
-                    if "GBP" in rates and "JPY" in rates and float(rates["GBP"]) > 0 and float(rates["JPY"]) > 0:
-                        val = round(float(rates["JPY"]) / float(rates["GBP"]), 3)
-                        self.live_cache["GBPJPY"] = val
-                        self.live_cache["GBPJPY-OTC"] = val
+                req1 = urllib.request.Request(
+                    "https://open.er-api.com/v6/latest/USD",
+                    headers={"User-Agent": "TitoBotTrader/3.0"}
+                )
+                with urllib.request.urlopen(req1, timeout=3.0, context=ctx) as resp1:
+                    data1 = json.loads(resp1.read().decode())
+                    if data1.get("result") == "success":
+                        rates = data1.get("rates", {})
             except Exception:
                 pass
+            # Fuente 2: frankfurter.dev
+            if not rates:
+                try:
+                    req2 = urllib.request.Request(
+                        "https://api.frankfurter.dev/v1/latest?from=USD",
+                        headers={"User-Agent": "TitoBotTrader/3.0"}
+                    )
+                    with urllib.request.urlopen(req2, timeout=3.0, context=ctx) as resp2:
+                        rates = json.loads(resp2.read().decode()).get("rates", {})
+                except Exception:
+                    pass
+            if rates:
+                if "EUR" in rates and float(rates["EUR"]) > 0:
+                    self.live_cache["EURUSD"] = round(1.0 / float(rates["EUR"]), 5)
+                if "GBP" in rates and float(rates["GBP"]) > 0:
+                    self.live_cache["GBPUSD"] = round(1.0 / float(rates["GBP"]), 5)
+                if "JPY" in rates and float(rates["JPY"]) > 0:
+                    self.live_cache["USDJPY"] = round(float(rates["JPY"]), 3)
+                if "CAD" in rates and float(rates["CAD"]) > 0:
+                    self.live_cache["USDCAD"] = round(float(rates["CAD"]), 5)
+                if "CHF" in rates and float(rates["CHF"]) > 0:
+                    self.live_cache["USDCHF"] = round(float(rates["CHF"]), 5)
+                if "AUD" in rates and float(rates["AUD"]) > 0:
+                    self.live_cache["AUDUSD"] = round(1.0 / float(rates["AUD"]), 5)
+                if "NZD" in rates and float(rates["NZD"]) > 0:
+                    self.live_cache["NZDUSD"] = round(1.0 / float(rates["NZD"]), 5)
+                if "EUR" in rates and "GBP" in rates and float(rates["EUR"]) > 0 and float(rates["GBP"]) > 0:
+                    self.live_cache["EURGBP"] = round(float(rates["GBP"]) / float(rates["EUR"]), 5)
+                if "EUR" in rates and "JPY" in rates and float(rates["EUR"]) > 0:
+                    self.live_cache["EURJPY"] = round(float(rates["JPY"]) / float(rates["EUR"]), 3)
+                if "GBP" in rates and "JPY" in rates and float(rates["GBP"]) > 0:
+                    self.live_cache["GBPJPY"] = round(float(rates["JPY"]) / float(rates["GBP"]), 3)
+        except Exception:
+            pass
 
     def tick(self) -> Dict[str, Dict[str, Any]]:
         now = time.time()
@@ -627,17 +306,17 @@ class MultiAssetMarketFeed:
             asset["price"] = new_price
             open_p = asset.get("open_price", new_price)
             asset["change_percent"] = round(((new_price - open_p) / open_p) * 100, 2) if open_p > 0 else 0.0
-            if new_price > asset["high_24h"]:
+            if new_price > asset.get("high_24h", new_price):
                 asset["high_24h"] = new_price
-            if new_price < asset["low_24h"]:
+            if new_price < asset.get("low_24h", new_price):
                 asset["low_24h"] = new_price
 
             vol_delta = random.randint(200, 3500)
-            asset["volume"] += vol_delta
+            asset["volume"] = asset.get("volume", 0) + vol_delta
 
             # Medias móviles exponenciales EMA 20 y 50 con precisión adecuada
-            asset["ema20"] = round(asset["ema20"] * 0.94 + new_price * 0.06, dec_places)
-            asset["ema50"] = round(asset["ema50"] * 0.98 + new_price * 0.02, dec_places)
+            asset["ema20"] = round(asset.get("ema20", new_price) * 0.94 + new_price * 0.06, dec_places)
+            asset["ema50"] = round(asset.get("ema50", new_price) * 0.98 + new_price * 0.02, dec_places)
 
             # RSI dinámico
             if new_price > old_price:
@@ -674,12 +353,13 @@ class MultiAssetMarketFeed:
             if sym in self.candles and len(self.candles[sym]) > 0:
                 current_minute = (int(now) // 60) * 60
                 last_c = self.candles[sym][-1]
-                if last_c["time"] == current_minute:
-                    last_c["high"] = max(last_c["high"], new_price)
-                    last_c["low"] = min(last_c["low"], new_price)
+                last_c_time = last_c.get("time", current_minute)
+                if last_c_time == current_minute:
+                    last_c["high"] = max(last_c.get("high", new_price), new_price)
+                    last_c["low"] = min(last_c.get("low", new_price), new_price)
                     last_c["close"] = new_price
-                    last_c["volume"] = round(last_c["volume"] + vol_delta, 2)
-                elif current_minute > last_c["time"]:
+                    last_c["volume"] = round(last_c.get("volume", 0) + vol_delta, 2)
+                elif current_minute > last_c_time:
                     new_c = {
                         "time": current_minute,
                         "open": last_c["close"],
@@ -707,18 +387,8 @@ class MultiAssetMarketFeed:
         current_p = self.assets.get(sym, {}).get("price", item["base_price"])
         volat = item.get("volatility", 0.008)
 
-        # 1. Intentar velas reales de Binance para activos cripto
-        if item.get("category") == "CRYPTO" and item.get("binance_pair"):
-            try:
-                real_klines = self.binance.get_klines(item["binance_pair"], interval="1m", limit=90)
-                if real_klines and len(real_klines) > 10:
-                    self.candles[sym] = real_klines
-                    return
-            except Exception:
-                pass
-
-        # 2. Intentar velas reales de IQ Option para activos FOREX / OTC
-        if item.get("category") == "FOREX" and hasattr(self, "iqoption") and self.iqoption.is_configured and getattr(self.iqoption, "ssid", None):
+        # 1. Intentar velas reales de IQ Option para activos FOREX CFD
+        if item.get("category") == "FOREX" and hasattr(self, "iqoption") and getattr(self.iqoption, "is_configured", False) and getattr(self.iqoption, "ssid", None):
             try:
                 iq_candles = self.iqoption.get_candles(sym, interval=60, count=60)
                 if iq_candles and len(iq_candles) > 10:
@@ -727,16 +397,6 @@ class MultiAssetMarketFeed:
                     if sym in self.assets:
                         self.assets[sym]["price"] = latest["close"]
                         self.assets[sym]["source"] = "IQOPTION_REAL_FEED"
-                    return
-            except Exception:
-                pass
-
-        # 3. Intentar velas reales de Alpaca para acciones TradFi y ETFs
-        if item.get("category") in ["TRADFI_STOCK", "ETF"] and self.alpaca.is_configured:
-            try:
-                stock_bars = self.alpaca.get_stock_bars(sym, limit=90)
-                if stock_bars and len(stock_bars) > 5:
-                    self.candles[sym] = stock_bars
                     return
             except Exception:
                 pass
@@ -807,17 +467,7 @@ class MultiAssetMarketFeed:
         if timeframe == "1m":
             return base_candles[-limit:]
 
-        # Para cripto con Binance disponible directamente en temporalidades superiores (5m, 15m, 1h)
-        item = next((i for i in AVAILABLE_ASSETS if i["symbol"] == sym), None)
-        if item and item.get("category") == "CRYPTO" and item.get("binance_pair") and timeframe in ["5m", "15m", "1h"]:
-            try:
-                b_klines = self.binance.get_klines(item["binance_pair"], interval=timeframe, limit=limit)
-                if b_klines and len(b_klines) > 5:
-                    return b_klines
-            except Exception:
-                pass
-
-        # Agregación temporal algorítmica para TradFi o simulación (5m, 15m, 1h)
+        # Agregación temporal (5m, 15m, 1h) a partir de velas de 1m
         step_min = 5 if timeframe == "5m" else (15 if timeframe == "15m" else 60)
         bucket_sec = step_min * 60
         aggregated = []

@@ -367,7 +367,8 @@ class BinaryOptionsStrategyEngine:
                     "invested_amount": invested,
                     "pnl": pnl,
                     "pnl_percent": (payout * 100) if is_win else (-100.0 if not is_tie else 0.0),
-                    "reason_simple": reason
+                    "reason": reason,
+                    "exit_reason": reason
                 })
             except Exception as e:
                 logger.error(f"Error registrando binaria en journal: {e}")

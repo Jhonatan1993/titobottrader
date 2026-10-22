@@ -5,41 +5,20 @@ from typing import Dict, Any
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "broker_config.json")
 
 DEFAULT_CONFIG: Dict[str, Any] = {
-    "operating_mode": "IQ_CFD",  # "IQ_CFD" (Forex Tradicional con SL/TP automáticos)
-    "active_broker": "IQOPTION",    # IQOPTION exclusivo
+    "operating_mode": "IQ_CFD",       # Único modo válido: Forex CFD de IQ Option
+    "active_broker": "IQOPTION",      # Broker único exclusivo
+    "iq_mode": "FOREX_CFD",
+    "iqoption_environment": "PAPER",  # PAPER por defecto; LIVE_REAL requiere armado explícito
+    "iqoption_paper_initial_balance": 10000.0,
+    "iqoption_initial_balance": 10000.0,
+    "iqoption_profit_target_amount": 50000.0,
+    "iqoption_profit_target_enabled": True,
+    "iqoption_max_loss_amount": 0.0,
+    "iqoption_max_loss_enabled": False,
     "profit_target_amount": 50000.0,
     "profit_target_enabled": True,
     "max_loss_amount": 0.0,
     "max_loss_enabled": False,
-    "paper_initial_balance": 30.0,
-    "alpaca_initial_balance": 100000.0,
-    "binance_profit_vault": 0.0,
-    "alpaca_profit_vault": 0.0,
-    "alpaca": {
-        "api_key": os.environ.get("ALPACA_API_KEY", ""),
-        "secret_key": os.environ.get("ALPACA_SECRET_KEY", ""),
-        "base_url": os.environ.get("ALPACA_BASE_URL", "https://paper-api.alpaca.markets"),
-        "data_url": "https://data.alpaca.markets/v2",
-        "enabled": False
-    },
-    "binance": {
-        "api_key": os.environ.get("BINANCE_API_KEY", ""),
-        "secret_key": os.environ.get("BINANCE_SECRET_KEY", ""),
-        "testnet": False,
-        "live_trading_enabled": False,
-        "base_url": "https://api.binance.com/api/v3",
-        "public_url": "https://api.binance.com/api/v3",
-        "enabled": True
-    },
-    "iqoption_initial_balance": 10000.0,
-    "iqoption_profit_vault": 0.0,
-    "iqoption_real_profit_vault": 0.0,
-    "iqoption_paper_profit_vault": 0.0,
-    "alpaca_real_profit_vault": 0.0,
-    "alpaca_paper_profit_vault": 0.0,
-    "binance_real_profit_vault": 0.0,
-    "binance_paper_profit_vault": 0.0,
-    "iqoption_environment": "PAPER",
     "iqoption": {
         "email": os.environ.get("IQOPTION_EMAIL", ""),
         "password": os.environ.get("IQOPTION_PASSWORD", ""),
@@ -47,6 +26,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "enabled": False
     }
 }
+
 
 def load_broker_config() -> Dict[str, Any]:
     os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)

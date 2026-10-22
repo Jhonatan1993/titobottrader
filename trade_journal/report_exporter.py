@@ -261,7 +261,7 @@ def generate_trades_xlsx(journal, broker: Optional[str] = None) -> bytes:
             ws2.write(r2, 0, d["date"], fmt_cell_center)
             ws2.write(r2, 1, t.get("id", ""), fmt_cell_center)
             ws2.write(r2, 2, time_str, fmt_cell_center)
-            t_broker = t.get("broker") or ("BINANCE" if t.get("category") == "CRYPTO" else ("ALPACA" if t.get("category") in ("TRADFI_STOCK", "ETF") else "SIMULATION"))
+            t_broker = t.get("broker") or "IQOPTION"
             ws2.write(r2, 3, t_broker, fmt_cell_center)
             ws2.write(r2, 4, t.get("symbol", ""), fmt_cell_center)
             ws2.write(r2, 5, t.get("name", ""), fmt_cell)
@@ -601,8 +601,8 @@ def generate_trades_pdf(journal, broker: Optional[str] = None) -> bytes:
         t_pct = t.get("pnl_percent", 0.0)
         pct_s = f"+{t_pct:.2f}%" if t_pct >= 0 else f"{t_pct:.2f}%"
         time_str = (t.get("closed_at") or t.get("opened_at") or "")[11:19] or "-"
-        b_val = (t.get("broker") or ("BINANCE" if t.get("category") == "CRYPTO" else ("ALPACA" if t.get("category") in ("TRADFI_STOCK", "ETF") else "SIMULATION"))).upper()
-        b_tag = "Binance" if b_val == "BINANCE" else ("Alpaca" if b_val == "ALPACA" else "Simulación")
+        b_val = (t.get("broker") or "IQOPTION").upper()
+        b_tag = "IQ Option" if b_val == "IQOPTION" else ("Simulación" if b_val == "SIMULATION" else b_val.capitalize())
 
         trade_rows.append([
             Paragraph(time_str, style_td),

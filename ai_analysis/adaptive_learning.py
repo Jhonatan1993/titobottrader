@@ -69,7 +69,7 @@ class AdaptiveLearningEngine:
             sym_trades = all_sym_trades[-self.lookback_trades:] if self.lookback_trades > 0 else all_sym_trades
 
             wins = [t for t in sym_trades if t.get("pnl", 0.0) > 0]
-            losses = [t for t in sym_trades if t.get("pnl", 0.0) <= 0]
+            losses = [t for t in sym_trades if t.get("pnl", 0.0) < 0]
             
             n_wins = len(wins)
             n_losses = len(losses)
@@ -124,12 +124,13 @@ class AdaptiveLearningEngine:
                     max_dd = dd
             max_drawdown = round(max_dd, 2)
 
-            # Racha perdedora consecutiva más reciente
+            # Racha perdedora consecutiva más reciente (pérdidas reales, PnL < 0)
             recent_loss_streak = 0
             for t in reversed(sym_trades):
-                if t.get("pnl", 0.0) <= 0:
+                pnl_val = t.get("pnl", 0.0)
+                if pnl_val < 0:
                     recent_loss_streak += 1
-                else:
+                elif pnl_val > 0:
                     break
 
             # Activación de Cooldown Dinámico (Escudo Anti-Rachas)

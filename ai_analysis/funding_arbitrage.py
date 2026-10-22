@@ -21,8 +21,8 @@ class FundingArbitrageScanner:
             "LINK": 0.00011,  # 0.011% por 8h (~12.04% APR anual)
             "NEAR": 0.00020,  # 0.020% por 8h (~21.90% APR anual)
         }
-        self.maker_fee = 0.0002  # 0.02% comisión Maker Binance
-        self.taker_fee = 0.0005  # 0.05% comisión Taker Binance
+        self.maker_fee = 0.0002  # 0.02% comisión Maker estándar
+        self.taker_fee = 0.0005  # 0.05% comisión Taker estándar
 
     def calculate_yield(self, symbol: str, rate_8h: Optional[float] = None) -> Dict[str, Any]:
         """Calcula el rendimiento anualizado APR y APY de una tasa de financiación."""

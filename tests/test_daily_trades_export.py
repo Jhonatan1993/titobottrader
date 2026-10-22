@@ -44,8 +44,8 @@ def test_export_trades_csv_formats():
     assert "ID_Operacion" not in daily_csv
 
     # 3. Filtrado por broker
-    bin_csv = journal.export_trades_csv(broker="BINANCE", mode="complete")
-    assert "BINANCE" in bin_csv
+    iq_csv = journal.export_trades_csv(broker="IQOPTION", mode="complete")
+    assert "IQOPTION" in iq_csv
 
 def test_export_trades_xlsx():
     """
@@ -54,7 +54,7 @@ def test_export_trades_xlsx():
     from trade_journal.report_exporter import generate_trades_xlsx
     journal = TradeJournal()
     
-    xlsx_bytes = generate_trades_xlsx(journal, broker="BINANCE")
+    xlsx_bytes = generate_trades_xlsx(journal, broker="IQOPTION")
     assert len(xlsx_bytes) > 2000
     # Validación cabecera ZIP de archivo XLSX
     assert xlsx_bytes[:4] == b"PK\x03\x04"
@@ -66,7 +66,7 @@ def test_export_trades_pdf():
     from trade_journal.report_exporter import generate_trades_pdf
     journal = TradeJournal()
     
-    pdf_bytes = generate_trades_pdf(journal, broker="BINANCE")
+    pdf_bytes = generate_trades_pdf(journal, broker="IQOPTION")
     assert len(pdf_bytes) > 5000
     # Validación cabecera PDF
     assert pdf_bytes.startswith(b"%PDF-")

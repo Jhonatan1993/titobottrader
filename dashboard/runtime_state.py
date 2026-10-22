@@ -2,9 +2,9 @@ from typing import Any, Dict, List
 
 RUNTIME_STATE: Dict[str, Any] = {
     "connection_status": "DISCONNECTED",
-    "provider": "BINANCE_WS",
-    "symbol": "BTCUSDT",
-    "timeframe": "15m",
+    "provider": "IQOPTION_CFD",
+    "symbol": "EURUSD",
+    "timeframe": "1m",
     "current_price": 0.0,
     "current_signal": "HOLD",
     "signal_score": 0,
@@ -28,3 +28,4 @@ RUNTIME_STATE: Dict[str, Any] = {
     "decision_history": [],
     "market_data_points": 0,
 }
+

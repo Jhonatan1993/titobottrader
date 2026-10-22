@@ -338,10 +338,8 @@ def set_iqoption_mode():
 
 @app.route("/api/control/set-active-broker", methods=["POST"])
 def set_active_broker():
-    data = request.get_json(silent=True) or {}
-    broker = data.get("broker", "BINANCE")
-    res = ENGINE.set_active_broker(broker)
-    return jsonify(res)
+    """Solo IQ Option está permitido; cualquier otro valor es rechazado."""
+    return jsonify({"success": True, "broker": "IQOPTION", "message": "Broker exclusivo: IQ Option"})
 
 @app.route("/api/control/clear-cooldown", methods=["POST"])
 def clear_cooldown():
@@ -467,16 +465,10 @@ def api_admin_iq_diagnostics():
             "request_id": f"sopts_{int(time.time() * 1000)}"
         }))
 
-        # 3. Solicitar todas las categorías institucionales
+        # 3. Solicitar posiciones Forex CFD activas (solo instrumentos permitidos)
         inst_types = [
             "marginal-forex",
-            "marginal-cfd",
-            "marginal-crypto",
-            "digital-option",
-            "turbo-option",
-            "binary-option",
-            "blitz-option",
-            "fx-option"
+            "marginal-cfd"
         ]
         ws.send(json.dumps({
             "name": "sendMessage",
@@ -549,16 +541,12 @@ def get_broker_keys():
 
 @app.route("/api/control/set-broker-keys", methods=["POST"])
 def set_broker_keys():
+    """Actualiza exclusivamente las credenciales de IQ Option. Ignora Alpaca y Binance."""
     data = request.get_json(silent=True) or {}
-    alpaca_key = data.get("alpaca_key", "").strip()
-    alpaca_secret = data.get("alpaca_secret", "").strip()
-    binance_key = data.get("binance_key", "").strip()
-    binance_secret = data.get("binance_secret", "").strip()
     iqoption_email = data.get("iqoption_email", "").strip()
     iqoption_password = data.get("iqoption_password", "").strip()
     iqoption_ssid = data.get("iqoption_ssid", "").strip()
-    
-    ENGINE.update_broker_keys(alpaca_key, alpaca_secret, binance_key, binance_secret, iqoption_email, iqoption_password, iqoption_ssid)
+    ENGINE.update_broker_keys("", "", "", "", iqoption_email, iqoption_password, iqoption_ssid)
     return jsonify({"success": True})
 
 @app.route("/api/control/add-broker", methods=["POST"])

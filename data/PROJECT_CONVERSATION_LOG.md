@@ -145,3 +145,20 @@ Cambios implementados:
 Validación local posterior a los cambios: `105 passed`.
 
 Restricción vigente: se mantiene `PAPER`. En `LIVE_REAL`, cualquier resultado binario y cierre CFD debe confirmarse y reconciliarse contra IQ Option antes de ser acreditado como PnL real. No se ejecutó ninguna conexión, orden, despliegue o reinicio real durante esta implementación.
+
+---
+
+### Sesión 22 de octubre de 2026 — Diagnóstico de binarias, moneda COP y conciliación CFD
+
+**Incidente observado:** El usuario seleccionó `BINARY_OPTIONS` pero el motor no abrió operaciones. Producción confirmó que el selector funcionaba: la entrada estaba bloqueada por circuit breakers. Después se detectó que el límite de pérdida activo estaba configurado en `0`.
+
+**Correcciones desplegadas:**
+1. La interfaz de riesgo usa la moneda real de IQ Option (`COP`) en lugar de etiquetas USD fijas.
+2. El valor `0` con protección activa significa ahora **Tolerancia Cero: entradas reales bloqueadas**; no equivale a ausencia de límite.
+3. El dashboard informa explícitamente `TOLERANCIA CERO: ENTRADAS BLOQUEADAS`.
+4. Un cierre Forex CFD en `LIVE_REAL` no acredita PnL, no libera cupo y no alimenta aprendizaje hasta reconciliar el cierre con IQ Option. La posición queda en `PENDING_CLOSE_RECONCILIATION`.
+5. Se añadió una prueba de regresión que prohíbe registrar PnL local prematuro tras solicitar un cierre real.
+
+**Verificación:** Producción quedó en modo `BINARY_OPTIONS`, moneda `COP`, cero posiciones abiertas, máximo una posición global y nuevas entradas bloqueadas por Tolerancia Cero. La validación local previa al último despliegue finalizó con `107 passed`.
+
+**Regla obligatoria:** Registros históricos que etiqueten TP/SL con PnL incompatible no se deben usar para optimización, métricas, límites diarios o aprendizaje. Solo el PnL conciliado contra evidencia final del broker puede considerarse real.
