@@ -361,12 +361,16 @@ class RealTimeTradingEngine:
                 invested_amt = float(bp.get("invest") or 2000.0)
                 pnl_net = float(bp.get("pnl_net", 0.0))
                 pnl_pct = round((pnl_net / invested_amt) * 100, 2) if invested_amt > 0 else 0.0
+                pos_side = bp.get("side", "BUY")
+                pos_lev = bp.get("leverage", 500)
                 if sym not in self.open_positions:
                     self.open_positions[sym] = {
                         "symbol": sym,
                         "name": asset_obj.get("name", sym),
                         "broker": "IQOPTION",
                         "category": "FOREX",
+                        "side": pos_side,
+                        "leverage": pos_lev,
                         "invested_amount": invested_amt,
                         "entry_price": entry_q if entry_q > 0 else cur_p,
                         "current_price": cur_p,
@@ -381,6 +385,8 @@ class RealTimeTradingEngine:
                     pos = self.open_positions[sym]
                     pos["current_pnl"] = pnl_net
                     pos["current_pnl_percent"] = pnl_pct
+                    pos["side"] = pos_side
+                    pos["leverage"] = pos_lev
                     if entry_q > 0:
                         pos["entry_price"] = entry_q
                     if bp.get("invest"):
@@ -1015,9 +1021,18 @@ class RealTimeTradingEngine:
             
             if category == "FOREX" or pos.get("broker") == "IQOPTION":
                 pos["current_price"] = current_price
-                # Para Forex CFD en IQ Option, el PnL se sincroniza directamente desde el WebSocket (pnl_net).
-                # No se calcula como stock (quantity * price - invested_amount) que daría pérdidas irreales.
-                pos["current_value"] = round(pos["invested_amount"] + pos.get("current_pnl", 0.0), 2)
+                leverage = float(pos.get("leverage", 500))
+                inv = float(pos.get("invested_amount", 0.0))
+                side = str(pos.get("side", "BUY")).upper()
+                if entry_price > 0 and inv > 0:
+                    diff = (current_price - entry_price) if side in ["BUY", "BUY_LONG", "CALL"] else (entry_price - current_price)
+                    # Fórmula institucional exacta de IQ Option para Margen Forex CFD:
+                    live_pnl = round(inv * (diff / entry_price) * leverage, 2)
+                    pos["current_pnl"] = live_pnl
+                    pos["current_value"] = round(max(0.0, inv + live_pnl), 2)
+                    pos["current_pnl_percent"] = round((live_pnl / inv) * 100, 2)
+                else:
+                    pos["current_value"] = round(inv + pos.get("current_pnl", 0.0), 2)
                 pnl_pct = pos.get("current_pnl_percent", 0.0)
             else:
                 current_value = quantity * current_price
@@ -1347,8 +1362,8 @@ class RealTimeTradingEngine:
         if not hasattr(self, "binary_engine"):
             return
 
-        # GATEKEEPER ABSOLUTO: 1 sola operación a la vez
-        if self.binary_engine.has_active_position:
+        # GATEKEEPER ABSOLUTO: 1 sola operación a la vez en toda la cuenta de IQ Option
+        if self.binary_engine.has_active_position or len(self.get_broker_positions("IQOPTION")) > 0:
             return
 
         wallet = self.broker_wallets.get("IQOPTION", {})
@@ -1438,7 +1453,7 @@ class RealTimeTradingEngine:
         # CONTROL ESTRICTO DE CUPOS: Para IQ Option, NUNCA abrir más de 1 posición simultánea
         if broker_id == "IQOPTION":
             forex_open = [p for p in self.open_positions.values() if p.get("broker") == "IQOPTION" or p.get("category") == "FOREX"]
-            if len(forex_open) >= 1:
+            if len(forex_open) >= 1 or (hasattr(self, "binary_engine") and self.binary_engine.has_active_position):
                 return
             if hasattr(self.feed, "iqoption"):
                 b_open = self.feed.iqoption.get_open_positions()
@@ -1867,38 +1882,39 @@ class RealTimeTradingEngine:
         active_b = "IQOPTION"
         wallet = self.broker_wallets.get("IQOPTION", {})
         
-        # Posiciones activas aisladas por modo
-        if getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS" and hasattr(self, "binary_engine"):
-            if self.binary_engine.open_position:
-                b_pos = self.binary_engine.open_position
-                rem_s = max(0, int(b_pos["expiration_timestamp"] - time.time()))
-                cur_price = self.feed.assets.get(b_pos["symbol"], {}).get("price", b_pos["entry_price"])
-                payout_pct = int(round(b_pos.get("payout", 0.85) * 100))
-                active_positions = [{
-                    "symbol": b_pos["symbol"],
-                    "name": f"{b_pos['symbol']} [Turbo {b_pos['direction']}]",
-                    "broker": "IQOPTION",
-                    "category": "OPTIONS",
-                    "side": b_pos["direction"],
-                    "invested_amount": b_pos["amount"],
-                    "entry_price": b_pos["entry_price"],
-                    "current_price": cur_price,
-                    "current_pnl": 0.0,
-                    "current_pnl_percent": 0.0,
-                    "icon": "⏱️",
-                    "direction": b_pos["direction"],
-                    "payout": b_pos["payout"],
-                    "potential_profit": b_pos["potential_profit"],
-                    "status_label": f"Expira en {rem_s}s"
-                }]
-            else:
-                active_positions = []
-        else:
-            active_positions = self.get_broker_positions(active_b)
+        # Posiciones activas de IQ Option: Reúne todas las posiciones reales de margen (Forex CFD) y Opciones Binarias activas (Cero borrado)
+        active_positions = list(self.get_broker_positions(active_b))
+        if hasattr(self, "binary_engine") and self.binary_engine.open_position:
+            b_pos = self.binary_engine.open_position
+            rem_s = max(0, int(b_pos["expiration_timestamp"] - time.time()))
+            cur_price = self.feed.assets.get(b_pos["symbol"], {}).get("price", b_pos["entry_price"])
+            active_positions.append({
+                "symbol": b_pos["symbol"],
+                "name": f"{b_pos['symbol']} [Turbo {b_pos['direction']}]",
+                "broker": "IQOPTION",
+                "category": "OPTIONS",
+                "side": b_pos["direction"],
+                "invested_amount": b_pos["amount"],
+                "entry_price": b_pos["entry_price"],
+                "current_price": cur_price,
+                "current_pnl": 0.0,
+                "current_pnl_percent": 0.0,
+                "icon": "⏱️",
+                "direction": b_pos["direction"],
+                "payout": b_pos["payout"],
+                "potential_profit": b_pos["potential_profit"],
+                "status_label": f"Expira en {rem_s}s"
+            })
         invested = sum(pos["invested_amount"] for pos in active_positions)
         unrealized_pnl = sum(pos.get("current_pnl", 0.0) for pos in active_positions)
-        cash_avail = wallet["cash"]
-        total_equity = self.get_broker_equity(active_b)
+        if active_b == "IQOPTION":
+            # Sincronización real institucional con IQ Option:
+            # "Disponible" = Saldo de efectivo menos margen comprometido en posiciones abiertas y pérdidas flotantes
+            cash_avail = max(0.0, round(wallet.get("cash", 0.0) - invested + min(0.0, unrealized_pnl), 2))
+            total_equity = round(wallet.get("cash", 0.0) + unrealized_pnl, 2)
+        else:
+            cash_avail = wallet["cash"]
+            total_equity = self.get_broker_equity(active_b)
         initial_bal = wallet["initial_balance"]
         active_env = wallet.get("environment", self.execution_environment)
         realized_stats = self.journal.get_statistics(broker=active_b, environment=active_env)

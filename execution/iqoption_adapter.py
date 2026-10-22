@@ -207,7 +207,9 @@ class IQOptionAdapter:
                                     "status": p_status,
                                     "pnl_net": float(p.get("pnl") or ev.get("pnl_net") or 0.0),
                                     "invest": float(p.get("invest") or 0.0),
-                                    "open_quote": float(p.get("open_quote") or ev.get("open_quote_ask") or 0.0)
+                                    "open_quote": float(p.get("open_quote") or ev.get("open_quote_ask") or 0.0),
+                                    "side": str(p.get("side") or ev.get("side") or p.get("direction") or ev.get("direction") or "buy").upper(),
+                                    "leverage": int(p.get("leverage") or ev.get("leverage") or 500)
                                 })
                     if found_profile and found_positions:
                         break

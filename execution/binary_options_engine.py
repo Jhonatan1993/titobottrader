@@ -29,7 +29,7 @@ class BinaryOptionsStrategyEngine:
         self.last_trade_time: Dict[str, float] = {}
         self.cooldown_duration: float = 180.0 # 3 minutos de descanso post-operación
         self.min_payout: float = 0.80 # 80% payout mínimo garantizado
-        self.min_confidence: int = 85 # Exigencia estricta A+
+        self.min_confidence: int = 70 # Confluencia robusta comprobada (Soporte/Resistencia + RSI + Tendencia)
         self.default_duration_min: int = 1 # 1 minuto (Turbo 60s)
         self.total_wins: int = 0
         self.total_losses: int = 0
@@ -120,13 +120,13 @@ class BinaryOptionsStrategyEngine:
         call_score = 0
         # A. Distancia a Soporte (Rebote en suelo técnico)
         dist_support_pct = ((price - support) / price) * 100 if support > 0 else 99
-        if 0.0 <= dist_support_pct <= 0.40:
+        if 0.0 <= dist_support_pct <= 0.60:
             call_score += 35 # Rebote directo en zona de soporte
-        elif dist_support_pct <= 0.80:
-            call_score += 20
+        elif dist_support_pct <= 1.20:
+            call_score += 25
 
-        # B. RSI en zona de reacción compradora (30 - 48 con giro alcista)
-        if 30.0 <= rsi <= 45.0:
+        # B. RSI en zona de reacción compradora (20 - 45 con giro alcista)
+        if 20.0 <= rsi <= 45.0:
             call_score += 30 # Sobreventa óptima para rebote en binarias
         elif 45.0 < rsi <= 55.0:
             call_score += 20 # Rango medio saludable
@@ -141,15 +141,15 @@ class BinaryOptionsStrategyEngine:
         put_score = 0
         # A. Distancia a Resistencia (Rechazo en techo técnico)
         dist_resistance_pct = ((resistance - price) / price) * 100 if resistance > 0 else 99
-        if 0.0 <= dist_resistance_pct <= 0.40:
+        if 0.0 <= dist_resistance_pct <= 0.60:
             put_score += 35 # Rechazo directo en techo técnico
-        elif dist_resistance_pct <= 0.80:
-            put_score += 20
+        elif dist_resistance_pct <= 1.20:
+            put_score += 25
 
-        # B. RSI en zona de reacción vendedora (55 - 70 con agotamiento)
-        if 58.0 <= rsi <= 72.0:
+        # B. RSI en zona de reacción vendedora (55 - 80 con agotamiento)
+        if 55.0 <= rsi <= 80.0:
             put_score += 30 # Sobrecompra ideal para retroceso en 60s
-        elif 45.0 <= rsi < 58.0:
+        elif 45.0 <= rsi < 55.0:
             put_score += 20
 
         # C. EMA y Tendencia
