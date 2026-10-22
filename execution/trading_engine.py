@@ -825,9 +825,13 @@ class RealTimeTradingEngine:
             b_loss_enabled = b_wal.get("max_loss_enabled", b_wal.get("loss_enabled", self.max_loss_enabled))
             
             is_b_loss_triggered = False
-            if b_loss_enabled and b_max_loss > 0.0 and not b_wal.get("loss_limit_reached", False):
-                if b_profit <= -b_max_loss:
+            if b_loss_enabled and b_max_loss > 0.0:
+                if b_profit <= -b_max_loss and not b_wal.get("loss_limit_reached", False):
                     is_b_loss_triggered = True
+                elif b_profit > -b_max_loss and b_wal.get("loss_limit_reached", False) and not (hasattr(self, "iqoption_risk_policy") and self.iqoption_risk_policy.halted):
+                    b_wal["loss_limit_reached"] = False
+                    if b_id == self.active_broker:
+                        self.loss_limit_reached = False
 
             if is_b_loss_triggered:
                 b_wal["loss_limit_reached"] = True
