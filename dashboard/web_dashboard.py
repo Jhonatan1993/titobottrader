@@ -427,14 +427,49 @@ def api_admin_iq_diagnostics():
         ws = websocket.create_connection(ws_url, header=headers, timeout=6, sslopt={"cert_reqs": ssl.CERT_NONE})
         ws.send(json.dumps({"name": "ssid", "msg": iq.ssid}))
         
+        req_id = f"diag_{int(time.time() * 1000)}"
+        ws.send(json.dumps({
+            "name": "sendMessage",
+            "request_id": req_id,
+            "msg": {
+                "name": "portfolio.get-positions",
+                "version": "4.0",
+                "body": {
+                    "instrument_types": ["marginal-forex", "forex", "cfd"],
+                    "limit": 30,
+                    "offset": 0
+                }
+            }
+        }))
+        
+        frames = []
+        st = time.time()
+        while time.time() - st < 3.0:
+            try:
+                r = ws.recv()
+                if r:
+                    d = json.loads(r)
+                    frames.append({
+                        "name": d.get("name"),
+                        "request_id": d.get("request_id"),
+                        "msg_keys": list(d.get("msg", {}).keys()) if isinstance(d.get("msg"), dict) else type(d.get("msg")).__name__,
+                        "msg": d.get("msg")
+                    })
+            except Exception:
+                break
+        ws.close()
+
+        acc = iq.get_account_balances()
         return jsonify({
             "success": True,
             "connected": iq.connected,
             "currency": iq.currency,
-            "real_balance_id": iq.real_balance_id,
-            "practice_balance_id": iq.practice_balance_id,
             "real_amount": iq.real_amount,
-            "practice_amount": iq.practice_amount
+            "open_broker_positions": getattr(iq, "open_broker_positions", []),
+            "positions_synced": getattr(iq, "_positions_synced", False),
+            "engine_open_positions": ENGINE.open_positions,
+            "wallet_iq": ENGINE.broker_wallets.get("IQOPTION", {}),
+            "frames": frames
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
