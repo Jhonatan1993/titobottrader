@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
@@ -8,7 +9,9 @@
     <!-- Fuentes Google Modernas: Inter & JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
     <!-- TradingView Lightweight Charts (Standalone Institucional) -->
     <script src="/static/js/lightweight-charts.standalone.production.js"></script>
     <script>
@@ -24,7 +27,7 @@
             --bg-surface-3: rgba(24, 38, 68, 0.55);
             --border-subtle: rgba(255, 255, 255, 0.08);
             --border-highlight: rgba(240, 185, 11, 0.35);
-            
+
             /* Paleta Obsidian Autonomous Quant */
             --binance-yellow: #F0B90B;
             --binance-gold: #FCD535;
@@ -33,7 +36,7 @@
             --neon-rose: #F43F5E;
             --cyber-cyan: #06B6D4;
             --cyber-cyan-bright: #38BDF8;
-            
+
             --text-primary: #DFE2F0;
             --text-secondary: #94A3B8;
             --text-muted: #64748B;
@@ -41,22 +44,31 @@
             --font-ui: 'Inter', sans-serif;
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-        html, body {
+        html,
+        body {
             width: 100%;
             max-width: 100vw;
             overflow-x: hidden;
             background-color: var(--bg-base);
             font-family: var(--font-ui);
             color: var(--text-primary);
-            background-image: 
+            background-image:
                 radial-gradient(circle at 15% 15%, rgba(6, 182, 212, 0.04) 0%, transparent 45%),
                 radial-gradient(circle at 85% 85%, rgba(240, 185, 11, 0.04) 0%, transparent 45%);
             min-height: 100vh;
         }
 
-        .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums lining-nums; }
+        .mono {
+            font-family: var(--font-mono);
+            font-variant-numeric: tabular-nums lining-nums;
+        }
+
         .container {
             width: 100%;
             max-width: 1440px;
@@ -80,7 +92,12 @@
             box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
         }
 
-        .brand-section { display: flex; align-items: center; gap: 12px; }
+        .brand-section {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
         .brand-logo-img {
             width: 42px;
             height: 42px;
@@ -91,10 +108,12 @@
             flex-shrink: 0;
             transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
+
         .brand-logo-img:hover {
             transform: scale(1.08);
             box-shadow: 0 0 22px rgba(56, 189, 248, 0.7);
         }
+
         .brand-logo {
             width: 38px;
             height: 38px;
@@ -109,6 +128,7 @@
             position: relative;
             flex-shrink: 0;
         }
+
         .brand-logo::after {
             content: '';
             position: absolute;
@@ -133,6 +153,7 @@
             align-items: center;
             gap: 8px;
         }
+
         .brand-info .tagline {
             font-size: 10px;
             color: var(--text-secondary);
@@ -152,6 +173,7 @@
             overflow-x: auto;
             max-width: 100%;
         }
+
         .market-tab {
             padding: 5px 12px;
             font-size: 11px;
@@ -167,10 +189,12 @@
             align-items: center;
             gap: 5px;
         }
+
         .market-tab:hover {
             color: var(--text-primary);
             background: rgba(255, 255, 255, 0.05);
         }
+
         .market-tab.active {
             background: rgba(240, 185, 11, 0.15);
             color: var(--binance-gold);
@@ -178,7 +202,12 @@
             box-shadow: 0 0 10px rgba(240, 185, 11, 0.15);
         }
 
-        .header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
 
         .btn-action {
             display: inline-flex;
@@ -193,30 +222,36 @@
             border: 1px solid transparent;
             white-space: nowrap;
         }
+
         .btn-primary {
             background: var(--binance-yellow);
             color: #070B14;
             border-color: var(--binance-gold);
             box-shadow: 0 0 10px rgba(240, 185, 11, 0.25);
         }
+
         .btn-primary:hover {
             background: #FCD535;
             box-shadow: 0 0 16px rgba(240, 185, 11, 0.45);
         }
+
         .btn-ghost {
             background: rgba(255, 255, 255, 0.05);
             color: var(--text-primary);
             border: 1px solid var(--border-subtle);
         }
+
         .btn-ghost:hover {
             background: rgba(255, 255, 255, 0.1);
             border-color: rgba(255, 255, 255, 0.2);
         }
+
         .btn-danger {
             background: rgba(244, 63, 94, 0.12);
             color: #FDA4AF;
             border-color: rgba(244, 63, 94, 0.35);
         }
+
         .btn-danger:hover {
             background: rgba(244, 63, 94, 0.25);
             box-shadow: 0 0 12px rgba(244, 63, 94, 0.3);
@@ -236,6 +271,7 @@
             border: 1px solid rgba(16, 185, 129, 0.3);
             white-space: nowrap;
         }
+
         .env-pill.real {
             background: rgba(240, 185, 11, 0.15);
             color: var(--binance-gold);
@@ -266,26 +302,31 @@
             margin-bottom: 12px;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
         }
+
         .nav-left {
             display: flex;
             align-items: center;
             gap: 12px;
         }
+
         .brand-title-wrap {
             display: flex;
             flex-direction: column;
             gap: 2px;
         }
+
         .brand-title {
             font-size: 14px;
             font-weight: 800;
             letter-spacing: 0.5px;
             color: #F8FAFC;
         }
+
         .brand-sub {
             color: var(--binance-gold);
             font-weight: 700;
         }
+
         .status-indicator {
             display: flex;
             align-items: center;
@@ -306,6 +347,7 @@
             padding: 3px;
             gap: 4px;
         }
+
         .broker-pill-btn {
             display: flex;
             align-items: center;
@@ -317,18 +359,22 @@
             transition: all 0.18s ease;
             border: 1px solid transparent;
         }
+
         .broker-pill-btn:hover {
             background: rgba(255, 255, 255, 0.04);
             color: #F8FAFC;
         }
+
         .broker-pill-btn:focus {
             outline: none;
         }
+
         .broker-pill-btn.active {
             background: rgba(255, 255, 255, 0.08);
             border: 1px solid var(--border-focus);
             color: #F8FAFC;
         }
+
         .broker-pill-btn.active#broker-tab-binance,
         .broker-pill-btn.active.active-binance {
             background: rgba(240, 185, 11, 0.12);
@@ -336,6 +382,7 @@
             color: #F8FAFC;
             box-shadow: 0 0 12px rgba(240, 185, 11, 0.15);
         }
+
         .broker-pill-btn.active#broker-tab-alpaca,
         .broker-pill-btn.active.active-alpaca {
             background: rgba(56, 189, 248, 0.12);
@@ -343,28 +390,34 @@
             color: #F8FAFC;
             box-shadow: 0 0 12px rgba(56, 189, 248, 0.15);
         }
+
         .broker-pill-icon {
             font-size: 15px;
         }
+
         .broker-pill-meta {
             display: flex;
             flex-direction: column;
             text-align: left;
             line-height: 1.2;
         }
+
         .broker-pill-name {
             font-size: 11px;
             font-weight: 700;
             color: #F1F5F9;
         }
+
         .broker-pill-balance {
             font-size: 10px;
             color: var(--text-muted);
         }
+
         .broker-pill-btn.active .broker-pill-balance {
             color: var(--emerald-win);
             font-weight: 600;
         }
+
         .broker-pill-badge {
             font-size: 8.5px;
             font-weight: 800;
@@ -375,11 +428,13 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
             font-family: var(--font-mono);
         }
+
         .broker-pill-badge.active {
             background: rgba(16, 185, 129, 0.15);
             color: var(--emerald-win);
             border-color: rgba(16, 185, 129, 0.35);
         }
+
         .broker-pill-add {
             display: flex;
             align-items: center;
@@ -392,6 +447,7 @@
             border: 1px dashed rgba(255, 255, 255, 0.15);
             transition: all 0.18s ease;
         }
+
         .broker-pill-add:hover {
             background: rgba(255, 255, 255, 0.08);
             color: #F8FAFC;
@@ -417,16 +473,19 @@
             align-items: center;
             gap: 16px;
         }
+
         @media (max-width: 1200px) {
             .executive-summary-ribbon {
                 grid-template-columns: repeat(3, 1fr);
             }
         }
+
         @media (max-width: 768px) {
             .executive-summary-ribbon {
                 grid-template-columns: repeat(2, 1fr);
             }
         }
+
         .btn-xs-reinvest {
             background: rgba(16, 185, 129, 0.16);
             border: 1px solid rgba(16, 185, 129, 0.45);
@@ -442,12 +501,14 @@
             gap: 4px;
             white-space: nowrap;
         }
+
         .btn-xs-reinvest:hover {
             background: rgba(16, 185, 129, 0.32);
             border-color: #10B981;
             color: #FFFFFF;
             transform: translateY(-1px);
         }
+
         .btn-harvest-pill {
             background: rgba(16, 185, 129, 0.16);
             border: 1px solid rgba(16, 185, 129, 0.45);
@@ -462,18 +523,21 @@
             align-items: center;
             gap: 3px;
         }
+
         .btn-harvest-pill:hover {
             background: #10B981;
             color: #064E3B;
             box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
             transform: translateY(-1px);
         }
+
         .highlight-vault {
             border: 1px solid rgba(16, 185, 129, 0.35) !important;
             background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(14, 21, 38, 0.85) 100%) !important;
             border-radius: 8px !important;
             padding: 6px 10px !important;
         }
+
         .summary-stat-col {
             display: flex;
             flex-direction: column;
@@ -482,10 +546,12 @@
             border-right: 1px solid rgba(255, 255, 255, 0.06);
             padding-right: 14px;
         }
+
         .summary-stat-col:last-child {
             border-right: none;
             padding-right: 0;
         }
+
         .stat-label {
             font-size: 10px;
             font-weight: 700;
@@ -494,18 +560,21 @@
             font-family: var(--font-mono);
             text-transform: uppercase;
         }
+
         .stat-value-row {
             display: flex;
             align-items: baseline;
             gap: 8px;
             flex-wrap: wrap;
         }
+
         .stat-primary-val {
             font-size: 20px;
             font-weight: 800;
             color: #F8FAFC;
             letter-spacing: -0.5px;
         }
+
         .stat-badge {
             font-size: 10.5px;
             font-weight: 700;
@@ -514,10 +583,12 @@
             background: rgba(16, 185, 129, 0.12);
             color: var(--emerald-win);
         }
+
         .stat-badge.negative {
             background: rgba(244, 63, 94, 0.12);
             color: var(--neon-rose);
         }
+
         .stat-subtext {
             font-size: 11px;
             color: #64748B;
@@ -536,6 +607,7 @@
             margin-bottom: 8px;
             padding: 2px 0;
         }
+
         .view-nav-tabs {
             display: inline-flex;
             align-items: center;
@@ -545,6 +617,7 @@
             padding: 3px;
             gap: 4px;
         }
+
         .view-tab-btn {
             display: inline-flex;
             align-items: center;
@@ -560,17 +633,20 @@
             transition: all 0.18s ease;
             font-family: inherit;
         }
+
         .view-tab-btn:hover {
             color: #F8FAFC;
             background: rgba(255, 255, 255, 0.05);
         }
+
         .view-tab-btn.active {
             background: #1E293B;
             color: #F8FAFC;
             font-weight: 700;
             border-color: rgba(255, 255, 255, 0.14);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
         }
+
         .view-tab-badge {
             font-size: 9.5px;
             padding: 1px 6px;
@@ -580,15 +656,18 @@
             font-weight: 600;
             letter-spacing: 0.2px;
         }
+
         .view-tab-btn.active .view-tab-badge {
             background: rgba(56, 189, 248, 0.18);
             color: var(--cyber-cyan-bright);
             border: 1px solid rgba(56, 189, 248, 0.25);
         }
+
         .view-nav-notice {
             font-size: 11.5px;
             color: #94A3B8;
         }
+
         .view-nav-notice strong {
             color: var(--binance-gold);
         }
@@ -598,13 +677,22 @@
             display: none;
             width: 100%;
         }
+
         .workspace-view.active {
             display: block;
             animation: fadeInWorkspaceView 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
+
         @keyframes fadeInWorkspaceView {
-            from { opacity: 0; transform: translateY(4px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(4px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         /* ==================== QUANT INTELLIGENCE & NEWS HUB (LOW-FATIGUE ERGONOMICS) ==================== */
@@ -617,6 +705,7 @@
             box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
             transition: all 0.25s ease;
         }
+
         .quant-hub-header {
             display: flex;
             justify-content: space-between;
@@ -627,12 +716,14 @@
             flex-wrap: wrap;
             gap: 6px;
         }
+
         .quant-tabs-wrapper {
             display: flex;
             align-items: center;
             gap: 4px;
             flex-wrap: wrap;
         }
+
         .quant-tab-btn {
             background: transparent;
             border: 1px solid transparent;
@@ -647,22 +738,26 @@
             gap: 8px;
             transition: all 0.18s ease;
         }
+
         .quant-tab-btn:hover {
             color: var(--text-primary);
             background: rgba(255, 255, 255, 0.04);
         }
+
         .quant-tab-btn.active {
             color: #FFFFFF;
             background: rgba(255, 255, 255, 0.08);
             border-color: rgba(255, 255, 255, 0.14);
-            box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
         }
+
         .quant-tab-badge {
             font-size: 10px;
             padding: 1px 7px;
             border-radius: 10px;
             font-weight: 700;
         }
+
         .btn-toggle-hub {
             background: rgba(255, 255, 255, 0.04);
             border: 1px solid rgba(255, 255, 255, 0.08);
@@ -676,10 +771,12 @@
             gap: 5px;
             transition: all 0.18s ease;
         }
+
         .btn-toggle-hub:hover {
             color: var(--text-primary);
             background: rgba(255, 255, 255, 0.08);
         }
+
         .quant-ticker-strip {
             display: flex;
             align-items: center;
@@ -690,6 +787,7 @@
             font-size: 11px;
             gap: 12px;
         }
+
         .ticker-pill-tag {
             display: inline-flex;
             align-items: center;
@@ -704,6 +802,7 @@
             color: var(--accent-cyan);
             flex-shrink: 0;
         }
+
         .ticker-pulse {
             width: 5px;
             height: 5px;
@@ -711,6 +810,7 @@
             background: var(--accent-cyan);
             box-shadow: 0 0 6px var(--accent-cyan);
         }
+
         .ticker-headline-text {
             color: var(--text-primary);
             white-space: nowrap;
@@ -719,16 +819,20 @@
             flex: 1;
             font-size: 11px;
         }
+
         .quant-hub-body {
             padding: 10px 14px;
             transition: max-height 0.25s ease;
         }
+
         .quant-hub-body.collapsed {
             display: none;
         }
+
         .quant-pane {
             display: none;
         }
+
         .quant-pane.active {
             display: block;
         }
@@ -754,6 +858,7 @@
             margin-top: 6px;
             position: relative;
         }
+
         .progress-bar-fill {
             height: 100%;
             background: linear-gradient(90deg, var(--emerald-dark), var(--emerald-win));
@@ -789,6 +894,7 @@
             padding-bottom: 8px;
             border-bottom: 1px solid var(--border-subtle);
         }
+
         .panel-title {
             font-size: 13px;
             font-weight: 700;
@@ -802,6 +908,7 @@
             align-items: center;
             gap: 6px;
         }
+
         .search-input {
             background: rgba(7, 11, 20, 0.7);
             border: 1px solid var(--border-subtle);
@@ -814,6 +921,7 @@
             width: 130px;
             transition: border-color 0.2s ease;
         }
+
         .search-input:focus {
             border-color: var(--binance-yellow);
         }
@@ -826,18 +934,22 @@
             scrollbar-width: thin;
             scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
         }
+
         .table-container::-webkit-scrollbar {
             height: 4px;
         }
+
         .table-container::-webkit-scrollbar-thumb {
             background: rgba(255, 255, 255, 0.15);
             border-radius: 999px;
         }
+
         .market-table {
             width: 100%;
             border-collapse: collapse;
             font-size: 11px;
         }
+
         .market-table th {
             text-align: left;
             padding: 6px 7px;
@@ -851,12 +963,17 @@
             background: rgba(7, 11, 20, 0.4);
             white-space: nowrap;
         }
-        .market-table th:first-child, .market-table td:first-child {
+
+        .market-table th:first-child,
+        .market-table td:first-child {
             padding-left: 10px;
         }
-        .market-table th:last-child, .market-table td:last-child {
+
+        .market-table th:last-child,
+        .market-table td:last-child {
             padding-right: 10px;
         }
+
         .market-table td {
             padding: 6px 7px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.04);
@@ -864,6 +981,7 @@
             white-space: nowrap;
             transition: background 0.15s ease;
         }
+
         .market-table tr:hover td {
             background: rgba(255, 255, 255, 0.025);
         }
@@ -873,6 +991,7 @@
             align-items: center;
             gap: 6px;
         }
+
         .asset-icon {
             font-size: 13px;
             width: 22px;
@@ -885,7 +1004,12 @@
             border: 1px solid rgba(255, 255, 255, 0.06);
             flex-shrink: 0;
         }
-        .asset-title { font-weight: 700; font-size: 12px; }
+
+        .asset-title {
+            font-weight: 700;
+            font-size: 12px;
+        }
+
         .asset-name {
             font-size: 10px;
             color: var(--text-muted);
@@ -903,28 +1027,36 @@
             font-weight: 600;
             font-family: var(--font-mono);
         }
+
         .cat-tradfi {
             background: rgba(56, 189, 248, 0.12);
             color: var(--cyber-cyan-bright);
             border: 1px solid rgba(56, 189, 248, 0.25);
         }
+
         .cat-crypto {
             background: rgba(240, 185, 11, 0.12);
             color: var(--binance-gold);
             border: 1px solid rgba(240, 185, 11, 0.3);
         }
+
         .cat-etf {
             background: rgba(168, 85, 247, 0.12);
             color: #C084FC;
             border: 1px solid rgba(168, 85, 247, 0.25);
         }
+
         .cat-forex {
             background: rgba(16, 185, 129, 0.12);
             color: #34D399;
             border: 1px solid rgba(16, 185, 129, 0.25);
         }
 
-        .price-text { font-size: 13px; font-weight: 600; }
+        .price-text {
+            font-size: 13px;
+            font-weight: 600;
+        }
+
         .change-pill {
             display: inline-block;
             padding: 2px 6px;
@@ -932,10 +1064,24 @@
             font-size: 10px;
             font-weight: 600;
         }
-        .positive { color: var(--emerald-win); }
-        .positive-bg { background: rgba(0, 245, 155, 0.1); color: var(--emerald-win); }
-        .negative { color: var(--neon-rose); }
-        .negative-bg { background: rgba(244, 63, 94, 0.1); color: var(--neon-rose); }
+
+        .positive {
+            color: var(--emerald-win);
+        }
+
+        .positive-bg {
+            background: rgba(0, 245, 155, 0.1);
+            color: var(--emerald-win);
+        }
+
+        .negative {
+            color: var(--neon-rose);
+        }
+
+        .negative-bg {
+            background: rgba(244, 63, 94, 0.1);
+            color: var(--neon-rose);
+        }
 
         /* Decision Chips */
         .decision-badge {
@@ -948,22 +1094,26 @@
             font-weight: 700;
             font-family: var(--font-mono);
         }
+
         .dec-buy {
             background: rgba(0, 245, 155, 0.15);
             color: var(--emerald-win);
             border: 1px solid rgba(0, 245, 155, 0.4);
             box-shadow: 0 0 8px rgba(0, 245, 155, 0.2);
         }
+
         .dec-hold {
             background: rgba(255, 255, 255, 0.05);
             color: var(--text-secondary);
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
+
         .dec-sell {
             background: rgba(244, 63, 94, 0.15);
             color: var(--neon-rose);
             border: 1px solid rgba(244, 63, 94, 0.4);
         }
+
         .dec-cooldown {
             background: rgba(239, 68, 68, 0.15);
             color: #F87171;
@@ -980,6 +1130,7 @@
             vertical-align: middle;
             margin-right: 4px;
         }
+
         .confidence-fill {
             height: 100%;
             background: linear-gradient(90deg, var(--cyber-cyan), var(--emerald-win));
@@ -1016,6 +1167,7 @@
             color: var(--binance-gold);
             border: 1px solid rgba(240, 185, 11, 0.3);
         }
+
         .slots-visual-bar {
             display: flex;
             gap: 5px;
@@ -1024,6 +1176,7 @@
             padding-bottom: 8px;
             border-bottom: 1px solid var(--border-subtle);
         }
+
         .slot-pill {
             flex: 1;
             height: 5px;
@@ -1032,6 +1185,7 @@
             border: 1px solid rgba(255, 255, 255, 0.04);
             transition: all 0.3s ease;
         }
+
         .slot-pill.active {
             background: linear-gradient(90deg, var(--binance-yellow), #f59e0b);
             border-color: rgba(240, 185, 11, 0.5);
@@ -1052,16 +1206,19 @@
             margin-bottom: 8px;
             transition: all 0.2s ease;
         }
+
         .position-item:hover {
             border-color: rgba(255, 255, 255, 0.15);
             background: rgba(17, 27, 49, 0.45);
         }
+
         .pos-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 6px;
         }
+
         .pos-metrics {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -1070,6 +1227,7 @@
             color: var(--text-secondary);
             margin-bottom: 6px;
         }
+
         .pos-actions {
             display: flex;
             justify-content: space-between;
@@ -1088,6 +1246,7 @@
             flex-direction: column;
             height: 380px;
         }
+
         .terminal-header {
             display: flex;
             justify-content: space-between;
@@ -1096,6 +1255,7 @@
             border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             margin-bottom: 8px;
         }
+
         .terminal-feed {
             flex: 1;
             overflow-y: auto;
@@ -1104,8 +1264,15 @@
             gap: 6px;
             padding-right: 4px;
         }
-        .terminal-feed::-webkit-scrollbar { width: 3px; }
-        .terminal-feed::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 4px; }
+
+        .terminal-feed::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        .terminal-feed::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 4px;
+        }
 
         .thought-item {
             font-size: 11px;
@@ -1115,18 +1282,23 @@
             border-radius: 0 4px 4px 0;
             line-height: 1.35;
         }
+
         .thought-item.TRADE_WIN {
             border-left-color: var(--emerald-win);
             background: rgba(0, 245, 155, 0.04);
         }
+
         .thought-item.TRADE_BUY {
             border-left-color: var(--binance-yellow);
             background: rgba(240, 185, 11, 0.04);
         }
-        .thought-item.TRADE_LOSS, .thought-item.WARNING {
+
+        .thought-item.TRADE_LOSS,
+        .thought-item.WARNING {
             border-left-color: var(--neon-rose);
             background: rgba(244, 63, 94, 0.04);
         }
+
         .thought-time {
             font-size: 9.5px;
             color: var(--text-muted);
@@ -1138,6 +1310,7 @@
             position: relative;
             width: 100%;
         }
+
         .custom-select-trigger {
             width: 100%;
             background: #0B1221;
@@ -1154,15 +1327,19 @@
             transition: all 0.2s ease;
             user-select: none;
         }
-        .custom-select-trigger:hover, .custom-select-container.open .custom-select-trigger {
+
+        .custom-select-trigger:hover,
+        .custom-select-container.open .custom-select-trigger {
             border-color: var(--binance-yellow);
             box-shadow: 0 0 10px rgba(240, 185, 11, 0.2);
         }
+
         .custom-select-trigger .arrow {
             font-size: 10px;
             color: var(--text-secondary);
             transition: transform 0.2s ease;
         }
+
         .custom-select-container.open .custom-select-trigger .arrow {
             transform: rotate(180deg);
             color: var(--binance-yellow);
@@ -1184,9 +1361,11 @@
             gap: 2px;
             backdrop-filter: blur(20px);
         }
+
         .custom-select-container.open .custom-select-menu {
             display: flex;
         }
+
         .custom-option {
             padding: 8px 10px;
             font-size: 11.5px;
@@ -1199,10 +1378,12 @@
             justify-content: space-between;
             transition: all 0.15s ease;
         }
+
         .custom-option:hover {
             background: rgba(240, 185, 11, 0.15);
             color: var(--binance-gold);
         }
+
         .custom-option.selected {
             background: rgba(240, 185, 11, 0.2);
             color: var(--binance-gold);
@@ -1212,7 +1393,10 @@
         /* Modales */
         .modal-overlay {
             position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             background: rgba(0, 0, 0, 0.82);
             backdrop-filter: blur(10px);
             display: flex;
@@ -1224,10 +1408,12 @@
             transition: opacity 0.2s ease;
             padding: 16px;
         }
+
         .modal-overlay.active {
             opacity: 1;
             pointer-events: auto;
         }
+
         .modal-card {
             background: #0B1221;
             border: 1px solid var(--border-highlight);
@@ -1237,9 +1423,11 @@
             padding: 20px;
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
         }
+
         .form-group {
             margin-bottom: 14px;
         }
+
         .form-group label {
             display: block;
             font-size: 11px;
@@ -1247,6 +1435,7 @@
             font-family: var(--font-mono);
             margin-bottom: 5px;
         }
+
         .form-control {
             width: 100%;
             background: rgba(7, 11, 20, 0.8);
@@ -1257,15 +1446,27 @@
             font-family: var(--font-mono);
             font-size: 12px;
         }
+
         .form-control:focus {
             border-color: var(--binance-yellow);
             outline: none;
         }
 
         @keyframes pulse-dot {
-            0% { transform: scale(0.95); opacity: 0.8; }
-            50% { transform: scale(1.15); opacity: 1; }
-            100% { transform: scale(0.95); opacity: 0.8; }
+            0% {
+                transform: scale(0.95);
+                opacity: 0.8;
+            }
+
+            50% {
+                transform: scale(1.15);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(0.95);
+                opacity: 0.8;
+            }
         }
 
         /* ==================== SISTEMA RESPONSIVO PROFESIONAL (MÓVILES, TABLETS Y DESKTOP) ==================== */
@@ -1273,6 +1474,7 @@
             .bento-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
+
             .executive-summary-ribbon {
                 grid-template-columns: repeat(3, 1fr);
                 gap: 12px;
@@ -1283,19 +1485,23 @@
             .container {
                 padding: 10px 14px 24px;
             }
+
             .main-layout {
                 grid-template-columns: 1fr;
                 gap: 14px;
             }
+
             .right-rail {
                 width: 100%;
                 display: grid;
                 grid-template-columns: 1fr 1fr;
                 gap: 14px;
             }
+
             .terminal-card {
                 height: 320px;
             }
+
             .positions-card {
                 height: 320px;
                 overflow-y: auto;
@@ -1303,9 +1509,12 @@
         }
 
         @media (max-width: 768px) {
-            html, body {
+
+            html,
+            body {
                 font-size: 14px;
             }
+
             .container {
                 padding: 8px 10px 20px;
             }
@@ -1318,16 +1527,19 @@
                 padding: 10px 12px;
                 border-radius: 10px;
             }
+
             .nav-left {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
                 width: 100%;
             }
+
             .brand-logo-img {
                 width: 36px;
                 height: 36px;
             }
+
             .brand-title {
                 font-size: 13.5px;
             }
@@ -1342,9 +1554,11 @@
                 gap: 4px;
                 scrollbar-width: none;
             }
+
             .broker-segmented-pill::-webkit-scrollbar {
                 display: none;
             }
+
             .broker-pill-btn {
                 flex: 1 1 0;
                 min-width: 115px;
@@ -1352,14 +1566,18 @@
                 gap: 6px;
                 justify-content: center;
             }
+
             .broker-pill-name {
                 font-size: 10px;
             }
+
             .broker-pill-balance {
                 font-size: 9.5px;
             }
+
             .broker-pill-badge {
-                display: none; /* Ocultar badge en pantallas muy estrechas para evitar apretar el texto */
+                display: none;
+                /* Ocultar badge en pantallas muy estrechas para evitar apretar el texto */
             }
 
             /* Botones de Acción de Cabecera en Móvil */
@@ -1371,6 +1589,7 @@
                 align-items: center;
                 justify-content: space-between;
             }
+
             .nav-right .btn-action,
             .nav-right .env-pill {
                 flex: 1 1 calc(50% - 6px);
@@ -1383,7 +1602,8 @@
                 align-items: center;
                 box-sizing: border-box;
             }
-            .nav-right > div:last-child {
+
+            .nav-right>div:last-child {
                 width: 100%;
                 margin-left: 0 !important;
                 padding-left: 0 !important;
@@ -1403,16 +1623,20 @@
                 padding: 10px 12px;
                 border-radius: 10px;
             }
+
             .summary-stat-col {
                 padding: 4px 2px;
             }
+
             .stat-primary-val {
                 font-size: 18px;
             }
+
             .stat-badge {
                 font-size: 10.5px;
                 padding: 2px 6px;
             }
+
             .stat-subtext {
                 font-size: 10px;
             }
@@ -1423,6 +1647,7 @@
                 align-items: stretch;
                 gap: 8px;
             }
+
             .view-nav-tabs {
                 display: flex;
                 width: 100%;
@@ -1432,9 +1657,11 @@
                 gap: 4px;
                 scrollbar-width: none;
             }
+
             .view-nav-tabs::-webkit-scrollbar {
                 display: none;
             }
+
             .view-tab-btn {
                 flex-shrink: 0;
                 font-size: 11px;
@@ -1446,20 +1673,24 @@
             .candlestick-panel {
                 padding: 10px;
             }
+
             .chart-top-bar {
                 flex-direction: column;
                 align-items: stretch;
                 gap: 8px;
             }
+
             .chart-asset-info {
                 width: 100%;
                 justify-content: space-between;
                 gap: 8px;
             }
+
             .chart-live-price {
                 font-size: 18px;
             }
-            .chart-top-bar > div:last-child {
+
+            .chart-top-bar>div:last-child {
                 width: 100%;
                 display: flex;
                 justify-content: space-between;
@@ -1467,17 +1698,21 @@
                 flex-wrap: wrap;
                 gap: 6px;
             }
+
             #candlestick-chart-container {
                 height: 310px !important;
                 min-height: 280px;
             }
+
             .asset-quick-bar {
                 padding-bottom: 4px;
             }
+
             .quick-pill {
                 padding: 4px 8px;
                 font-size: 10.5px;
             }
+
             .chart-ohlc-legend {
                 font-size: 9.5px;
                 gap: 8px;
@@ -1487,9 +1722,11 @@
             .right-rail {
                 grid-template-columns: 1fr;
             }
+
             .terminal-card {
                 height: 280px;
             }
+
             .positions-card {
                 height: auto;
                 max-height: 380px;
@@ -1502,21 +1739,25 @@
                 width: 100%;
                 display: block;
             }
+
             .market-table {
                 min-width: 580px;
             }
+
             .market-categories-tabs {
                 overflow-x: auto;
                 width: 100%;
                 white-space: nowrap;
                 -webkit-overflow-scrolling: touch;
             }
+
             .filter-controls {
                 width: 100%;
                 flex-direction: column;
                 align-items: stretch !important;
                 gap: 8px;
             }
+
             .filter-controls .search-input {
                 width: 100% !important;
             }
@@ -1526,6 +1767,7 @@
                 padding: 8px;
                 align-items: flex-end;
             }
+
             .modal-card {
                 width: 100% !important;
                 max-width: 100% !important;
@@ -1541,15 +1783,19 @@
                 grid-template-columns: 1fr;
                 gap: 8px;
             }
+
             .stat-primary-val {
                 font-size: 20px;
             }
+
             #candlestick-chart-container {
                 height: 280px !important;
             }
+
             .nav-right .btn-action,
             .nav-right .env-pill {
-                flex: 1 1 100%; /* Botones en fila completa para máxima comodidad táctil */
+                flex: 1 1 100%;
+                /* Botones en fila completa para máxima comodidad táctil */
             }
         }
 
@@ -1566,9 +1812,11 @@
             gap: 9px;
             transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
+
         .candlestick-panel:hover {
             border-color: rgba(240, 185, 11, 0.25);
         }
+
         .chart-top-bar {
             display: flex;
             justify-content: space-between;
@@ -1576,17 +1824,20 @@
             flex-wrap: wrap;
             gap: 10px;
         }
+
         .chart-asset-info {
             display: flex;
             align-items: center;
             gap: 14px;
             flex-wrap: wrap;
         }
+
         .chart-price-display {
             display: flex;
             align-items: baseline;
             gap: 8px;
         }
+
         .chart-live-price {
             font-size: 22px;
             font-weight: 800;
@@ -1594,6 +1845,7 @@
             color: var(--text-primary);
             transition: color 0.25s ease;
         }
+
         .chart-timeframe-group {
             display: flex;
             align-items: center;
@@ -1603,6 +1855,7 @@
             padding: 2px;
             gap: 2px;
         }
+
         .timeframe-pill {
             padding: 3px 9px;
             font-size: 10.5px;
@@ -1615,16 +1868,19 @@
             font-family: var(--font-mono);
             transition: all 0.15s ease;
         }
+
         .timeframe-pill.active {
             background: var(--binance-yellow);
             color: #070B14;
             font-weight: 700;
             box-shadow: 0 0 8px rgba(240, 185, 11, 0.35);
         }
+
         .timeframe-pill:hover:not(.active) {
             color: var(--text-primary);
             background: rgba(255, 255, 255, 0.08);
         }
+
         .asset-quick-bar {
             display: flex;
             gap: 6px;
@@ -1633,13 +1889,16 @@
             scrollbar-width: thin;
             scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
         }
+
         .asset-quick-bar::-webkit-scrollbar {
             height: 3px;
         }
+
         .asset-quick-bar::-webkit-scrollbar-thumb {
             background: rgba(255, 255, 255, 0.15);
             border-radius: 999px;
         }
+
         .quick-pill {
             padding: 4px 10px;
             border-radius: 6px;
@@ -1656,12 +1915,14 @@
             transition: all 0.15s ease;
             user-select: none;
         }
+
         .quick-pill:hover {
             background: rgba(255, 255, 255, 0.08);
             color: var(--text-primary);
             border-color: rgba(255, 255, 255, 0.2);
             transform: translateY(-1px);
         }
+
         .quick-pill.active {
             background: rgba(240, 185, 11, 0.15);
             border-color: var(--binance-yellow);
@@ -1669,6 +1930,7 @@
             font-weight: 700;
             box-shadow: 0 0 10px rgba(240, 185, 11, 0.2);
         }
+
         .chart-ohlc-legend {
             display: flex;
             gap: 12px;
@@ -1682,6 +1944,7 @@
             border-radius: 6px;
             padding: 5px 12px;
         }
+
         .chart-container-box {
             width: 100%;
             height: 380px;
@@ -1691,6 +1954,7 @@
             background: radial-gradient(circle at 50% 50%, rgba(11, 18, 33, 0.85) 0%, rgba(5, 8, 16, 0.95) 100%);
             border: 1px solid rgba(255, 255, 255, 0.06);
         }
+
         .chart-status-strip {
             display: flex;
             align-items: center;
@@ -1701,9 +1965,13 @@
             border-top: 1px solid var(--border-subtle);
             font-size: 11px;
         }
+
         .chart-loading-overlay {
             position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             background: rgba(7, 11, 20, 0.65);
             backdrop-filter: blur(4px);
             display: flex;
@@ -1718,6 +1986,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <!-- ==================== HEADER INSTITUCIONAL UNIFICADO ==================== -->
@@ -1725,7 +1994,8 @@
             <div class="nav-left">
                 <img src="/static/img/titobot_logo.png" alt="TitoBotTrader" class="brand-logo-img">
                 <div class="brand-title-wrap">
-                    <span class="brand-title">TitoBot<span class="brand-sub" style="color:var(--cyber-cyan-bright);">Trader</span></span>
+                    <span class="brand-title">TitoBot<span class="brand-sub"
+                            style="color:var(--cyber-cyan-bright);">Trader</span></span>
                     <div class="status-indicator">
                         <span class="pulse-dot"></span>
                         <span id="system-status-text" class="status-live-text">OPERANDO EN VIVO</span>
@@ -1735,7 +2005,8 @@
 
             <!-- Segmented Broker Capsule (IQ Option Exclusivo) -->
             <div class="broker-segmented-pill" id="broker-segmented-pill">
-                <button class="broker-pill-btn active" id="broker-tab-iqoption" onclick="openCredentialsModal()" title="Click para ver credenciales y conexión de IQ Option">
+                <button class="broker-pill-btn active" id="broker-tab-iqoption" onclick="openCredentialsModal()"
+                    title="Click para ver credenciales y conexión de IQ Option">
                     <span class="broker-pill-icon">📈</span>
                     <div class="broker-pill-meta">
                         <span class="broker-pill-name">IQ Option</span>
@@ -1746,37 +2017,51 @@
             </div>
 
             <div class="nav-right">
-                <span class="env-pill" id="env-badge" onclick="openEnvModal()" style="cursor:pointer;" title="Click para configurar entorno">
+                <span class="env-pill" id="env-badge" onclick="openEnvModal()" style="cursor:pointer;"
+                    title="Click para configurar entorno">
                     🛡️ MODO PAPER
                 </span>
                 <button class="btn-action btn-primary" id="btn-toggle" onclick="toggleEngine()">
                     ⏸️ Pausar
                 </button>
-                <button class="btn-action btn-ghost" onclick="openCredentialsModal()" title="Configurar Usuario, Contraseña y Token SSID de IQ Option" style="border: 1px solid rgba(0, 240, 255, 0.45); color: var(--cyber-cyan-bright); display: inline-flex; align-items: center; gap: 5px; font-weight: 600;">
+                <button class="btn-action btn-ghost" onclick="openCredentialsModal()"
+                    title="Configurar Usuario, Contraseña y Token SSID de IQ Option"
+                    style="border: 1px solid rgba(0, 240, 255, 0.45); color: var(--cyber-cyan-bright); display: inline-flex; align-items: center; gap: 5px; font-weight: 600;">
                     🔑 Conexión IQ Option
                 </button>
-                <button class="btn-action btn-ghost" onclick="openSettingsModal()" title="Límites de Riesgo y Parámetros">
+                <button class="btn-action btn-ghost" onclick="openSettingsModal()"
+                    title="Límites de Riesgo y Parámetros">
                     ⚙️ Ajustes
                 </button>
-                <button class="btn-action btn-ghost" onclick="openExportModal()" title="Exportar histórico diario de transacciones con todas sus métricas" style="border: 1px solid rgba(56, 189, 248, 0.35); color: var(--accent-cyan); display: inline-flex; align-items: center; gap: 5px;">
+                <button class="btn-action btn-ghost" onclick="openExportModal()"
+                    title="Exportar histórico diario de transacciones con todas sus métricas"
+                    style="border: 1px solid rgba(56, 189, 248, 0.35); color: var(--accent-cyan); display: inline-flex; align-items: center; gap: 5px;">
                     📥 Exportar Histórico
                 </button>
-                <button class="btn-action btn-danger" onclick="emergencyClose()" title="Cerrar todas las posiciones de emergencia">
+                <button class="btn-action btn-danger" onclick="emergencyClose()"
+                    title="Cerrar todas las posiciones de emergencia">
                     🛑 Parada
                 </button>
 
                 {% if current_user and current_user.role == 'admin' %}
-                <a href="/admin" class="btn-action btn-ghost" style="border: 1px solid rgba(240, 185, 11, 0.4); color: var(--binance-gold); text-decoration: none; display: inline-flex; align-items: center; gap: 5px; font-weight: 700;" title="Acceder al Panel de Control de Usuarios">
+                <a href="/admin" class="btn-action btn-ghost"
+                    style="border: 1px solid rgba(240, 185, 11, 0.4); color: var(--binance-gold); text-decoration: none; display: inline-flex; align-items: center; gap: 5px; font-weight: 700;"
+                    title="Acceder al Panel de Control de Usuarios">
                     🛡️ Panel Admin
                 </a>
                 {% endif %}
 
-                <div style="display:flex; align-items:center; gap:8px; margin-left:6px; border-left:1px solid var(--border-subtle); padding-left:12px;">
-                    <span style="font-size:12px; color:var(--text-secondary); display:inline-flex; align-items:center; gap:4px;">
+                <div
+                    style="display:flex; align-items:center; gap:8px; margin-left:6px; border-left:1px solid var(--border-subtle); padding-left:12px;">
+                    <span
+                        style="font-size:12px; color:var(--text-secondary); display:inline-flex; align-items:center; gap:4px;">
                         <span>👤</span>
-                        <strong class="mono" style="color:var(--text-primary);">{{ current_user.username if current_user else 'Usuario' }}</strong>
+                        <strong class="mono" style="color:var(--text-primary);">{{ current_user.username if current_user
+                            else 'Usuario' }}</strong>
                     </span>
-                    <a href="/logout" class="btn-action btn-ghost" style="padding: 5px 10px; font-size:12px; color: #FDA4AF; text-decoration:none; border:1px solid rgba(244, 63, 94, 0.25);" title="Cerrar sesión">
+                    <a href="/logout" class="btn-action btn-ghost"
+                        style="padding: 5px 10px; font-size:12px; color: #FDA4AF; text-decoration:none; border:1px solid rgba(244, 63, 94, 0.25);"
+                        title="Cerrar sesión">
                         🚪 Salir
                     </a>
                 </div>
@@ -1797,19 +2082,28 @@
             <div class="summary-stat-col" style="border-left: 2px solid rgba(56, 189, 248, 0.35);">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <span class="stat-label" style="color:var(--accent-cyan); font-weight:700;">🎯 MODO IQ OPTION</span>
-                    <span class="stat-badge mono" id="operating-mode-badge" style="background:rgba(56,189,248,0.15); color:var(--accent-cyan); font-size:9.5px; padding:1px 5px;">FOREX CFD</span>
+                    <span class="stat-badge mono" id="operating-mode-badge"
+                        style="background:rgba(56,189,248,0.15); color:var(--accent-cyan); font-size:9.5px; padding:1px 5px;">FOREX
+                        CFD</span>
                 </div>
                 <div class="stat-value-row" style="margin-top:3px; display:flex; align-items:center; gap:5px;">
-                    <div style="display:inline-flex; background:rgba(15,23,42,0.85); border:1px solid rgba(255,255,255,0.12); border-radius:6px; padding:2px; gap:2px;">
-                        <button id="btn-mode-forex" onclick="switchIQOptionTradingMode('FOREX_CFD')" style="border:none; background:var(--accent-cyan); color:#000; font-weight:700; font-size:10.5px; border-radius:4px; padding:3px 8px; cursor:pointer; transition:all 0.2s;" title="Modo Forex CFD: SL / TP Dinámico sin expiración">
+                    <div
+                        style="display:inline-flex; background:rgba(15,23,42,0.85); border:1px solid rgba(255,255,255,0.12); border-radius:6px; padding:2px; gap:2px;">
+                        <button id="btn-mode-forex" onclick="switchIQOptionTradingMode('FOREX_CFD')"
+                            style="border:none; background:var(--accent-cyan); color:#000; font-weight:700; font-size:10.5px; border-radius:4px; padding:3px 8px; cursor:pointer; transition:all 0.2s;"
+                            title="Modo Forex CFD: SL / TP Dinámico sin expiración">
                             🌐 Forex CFD
                         </button>
-                        <button id="btn-mode-binary" onclick="switchIQOptionTradingMode('BINARY_OPTIONS')" style="border:none; background:transparent; color:var(--text-muted); font-weight:700; font-size:10.5px; border-radius:4px; padding:3px 8px; cursor:pointer; transition:all 0.2s;" title="Modo Opciones Binarias: Turbo 1m-5m · Payout ≥80% · Confluencia A+">
+                        <button id="btn-mode-binary" onclick="switchIQOptionTradingMode('BINARY_OPTIONS')"
+                            style="border:none; background:transparent; color:var(--text-muted); font-weight:700; font-size:10.5px; border-radius:4px; padding:3px 8px; cursor:pointer; transition:all 0.2s;"
+                            title="Modo Opciones Binarias: Turbo 1m-5m · Payout ≥80% · Confluencia A+">
                             ⏱️ Binarias Turbo
                         </button>
                     </div>
                 </div>
-                <span class="stat-subtext mono" id="operating-mode-desc" style="color:var(--text-muted); font-size:9.5px; margin-top:2px;">SL / TP dinámicos sin expiración</span>
+                <span class="stat-subtext mono" id="operating-mode-desc"
+                    style="color:var(--text-muted); font-size:9.5px; margin-top:2px;">SL / TP dinámicos sin
+                    expiración</span>
             </div>
 
             <div class="summary-stat-col">
@@ -1818,14 +2112,17 @@
                     <span class="stat-primary-val mono" id="win-rate" style="color:var(--emerald-win);">0.0%</span>
                     <span class="stat-badge mono" id="realized-pnl">+$0.00 Neto</span>
                 </div>
-                <span class="stat-subtext mono"><span id="win-loss-split">0G / 0P</span> · <span id="trades-count">0 Trades</span></span>
+                <span class="stat-subtext mono"><span id="win-loss-split">0G / 0P</span> · <span id="trades-count">0
+                        Trades</span></span>
             </div>
 
             <div class="summary-stat-col">
                 <span class="stat-label">POSICIONES EN CARTERA</span>
                 <div class="stat-value-row">
                     <span class="stat-primary-val mono" id="open-pos-count">0 / 1</span>
-                    <span class="stat-badge mono" style="color:var(--text-secondary); background:rgba(255,255,255,0.06);" id="cooldown-counter">0 Cooldowns</span>
+                    <span class="stat-badge mono"
+                        style="color:var(--text-secondary); background:rgba(255,255,255,0.06);" id="cooldown-counter">0
+                        Cooldowns</span>
                 </div>
                 <span class="stat-subtext" id="slots-helper-text">0 activas · 1 cupo libre</span>
             </div>
@@ -1833,10 +2130,13 @@
             <div class="summary-stat-col">
                 <span class="stat-label">GESTIÓN DE RIESGO</span>
                 <div class="stat-value-row">
-                    <span class="stat-primary-val mono" style="font-size:16px; color:var(--emerald-win);">+<span id="target-usd">10</span> USD</span>
-                    <span class="stat-badge mono" id="loss-usd-badge" style="color:#FDA4AF; background:rgba(244,63,94,0.12);">-<span id="loss-usd">5</span> USD</span>
+                    <span class="stat-primary-val mono" style="font-size:16px; color:var(--emerald-win);">+<span
+                            id="target-usd">10</span> <span id="risk-currency">COP</span></span>
+                    <span class="stat-badge mono" id="loss-usd-badge"
+                        style="color:#FDA4AF; background:rgba(244,63,94,0.12);">-<span id="loss-usd">5</span> <span
+                            class="risk-currency">COP</span></span>
                 </div>
-                <span class="stat-subtext mono" id="loss-remaining-text">$5.00 Margen</span>
+                <span class="stat-subtext mono" id="loss-remaining-text">COP 5.00 de margen</span>
                 <div class="progress-bar-container" style="display:none;">
                     <div class="progress-bar-fill" id="target-progress-fill" style="width: 0%;"></div>
                     <span id="target-progress-text">0%</span>
@@ -1846,10 +2146,13 @@
             <div class="summary-stat-col">
                 <span class="stat-label">MOTOR CUANTITATIVO</span>
                 <div class="stat-value-row">
-                    <span class="stat-primary-val mono" style="font-size:16px; color:var(--binance-gold);"><span id="profit-factor">1.97x</span></span>
-                    <span class="badge-mastery" id="mastery-badge" style="font-size:9.5px; padding:2px 6px;">🌱 CADETE</span>
+                    <span class="stat-primary-val mono" style="font-size:16px; color:var(--binance-gold);"><span
+                            id="profit-factor">1.97x</span></span>
+                    <span class="badge-mastery" id="mastery-badge" style="font-size:9.5px; padding:2px 6px;">🌱
+                        CADETE</span>
                 </div>
-                <span class="stat-subtext mono">Exp: <span id="expectancy-val" style="color:var(--emerald-win);">+$0.00</span> / trade</span>
+                <span class="stat-subtext mono">Exp: <span id="expectancy-val"
+                        style="color:var(--emerald-win);">+$0.00</span> / trade</span>
             </div>
         </div>
 
@@ -1857,7 +2160,7 @@
         <div class="main-layout" style="margin-top: 14px;">
             <!-- PANEL IZQUIERDO: PESTAÑAS ERGONÓMICAS (GRÁFICA / RADAR / MACRO HUB) -->
             <div class="left-main-col" style="display:flex; flex-direction:column; gap:10px; min-width:0;">
-                
+
                 <!-- ==================== BARRA DE PESTAÑAS (ZERO SCROLL) ==================== -->
                 <div class="view-navigation-bar">
                     <div class="view-nav-tabs">
@@ -1871,7 +2174,8 @@
                         </button>
                         <button class="view-tab-btn" id="view-tab-macro" onclick="switchMainView('macro')">
                             <span>🌐 Macro & Noticias en Vivo</span>
-                            <span class="view-tab-badge mono" id="ws-badge-macro" style="color:var(--emerald-win);">FLASH EN VIVO</span>
+                            <span class="view-tab-badge mono" id="ws-badge-macro"
+                                style="color:var(--emerald-win);">FLASH EN VIVO</span>
                         </button>
                         <button class="view-tab-btn" id="view-tab-history" onclick="switchMainView('history')">
                             <span>📑 Histórico por Día</span>
@@ -1880,10 +2184,14 @@
                     </div>
 
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <button class="view-tab-btn" onclick="openExportModal()" style="font-size:11px; padding:6px 12px; border-radius:6px; color:var(--accent-cyan); border:1px solid rgba(56,189,248,0.25);" title="Descargar histórico de transacciones en CSV o JSON">
+                        <button class="view-tab-btn" onclick="openExportModal()"
+                            style="font-size:11px; padding:6px 12px; border-radius:6px; color:var(--accent-cyan); border:1px solid rgba(56,189,248,0.25);"
+                            title="Descargar histórico de transacciones en CSV o JSON">
                             <span>📥 Exportar CSV</span>
                         </button>
-                        <button class="view-tab-btn" id="view-tab-all" onclick="switchMainView('all')" style="font-size:11px; padding:6px 12px; border-radius:6px;" title="Ver todas las secciones apiladas (vista extendida)">
+                        <button class="view-tab-btn" id="view-tab-all" onclick="switchMainView('all')"
+                            style="font-size:11px; padding:6px 12px; border-radius:6px;"
+                            title="Ver todas las secciones apiladas (vista extendida)">
                             <span>🗖 Ver Todo</span>
                         </button>
                     </div>
@@ -1898,14 +2206,19 @@
                                     <span id="chart-asset-icon" style="font-size:24px;">💶</span>
                                     <div>
                                         <div style="display:flex; align-items:center; gap:6px;">
-                                            <span id="chart-asset-symbol" style="font-size:16px; font-weight:800; font-family:var(--font-mono); letter-spacing:0.5px;">EURUSD</span>
+                                            <span id="chart-asset-symbol"
+                                                style="font-size:16px; font-weight:800; font-family:var(--font-mono); letter-spacing:0.5px;">EURUSD</span>
                                             <span id="chart-asset-badge" class="cat-chip cat-forex">💱 Forex</span>
-                                            <span id="chart-feed-badge" class="mono" style="font-size:9.5px; padding:1px 6px; border-radius:3px; background:rgba(16,185,129,0.15); color:var(--emerald-win); border:1px solid rgba(16,185,129,0.3);">● EN VIVO</span>
+                                            <span id="chart-feed-badge" class="mono"
+                                                style="font-size:9.5px; padding:1px 6px; border-radius:3px; background:rgba(16,185,129,0.15); color:var(--emerald-win); border:1px solid rgba(16,185,129,0.3);">●
+                                                EN VIVO</span>
                                         </div>
-                                        <div id="chart-asset-name" style="font-size:11px; color:var(--text-muted); font-weight:500;">EUR / USD</div>
+                                        <div id="chart-asset-name"
+                                            style="font-size:11px; color:var(--text-muted); font-weight:500;">EUR / USD
+                                        </div>
                                     </div>
                                 </div>
-                                
+
                                 <div class="chart-price-display">
                                     <span id="chart-current-price" class="mono chart-live-price">$0.00</span>
                                     <span id="chart-change-pill" class="change-pill mono positive-bg">+0.00%</span>
@@ -1915,19 +2228,26 @@
                             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                                 <!-- Selector de Temporalidad -->
                                 <div class="chart-timeframe-group">
-                                    <button class="timeframe-pill active" id="tf-1m" onclick="setChartTimeframe('1m')">1m</button>
-                                    <button class="timeframe-pill" id="tf-5m" onclick="setChartTimeframe('5m')">5m</button>
-                                    <button class="timeframe-pill" id="tf-15m" onclick="setChartTimeframe('15m')">15m</button>
-                                    <button class="timeframe-pill" id="tf-1h" onclick="setChartTimeframe('1h')">1h</button>
+                                    <button class="timeframe-pill active" id="tf-1m"
+                                        onclick="setChartTimeframe('1m')">1m</button>
+                                    <button class="timeframe-pill" id="tf-5m"
+                                        onclick="setChartTimeframe('5m')">5m</button>
+                                    <button class="timeframe-pill" id="tf-15m"
+                                        onclick="setChartTimeframe('15m')">15m</button>
+                                    <button class="timeframe-pill" id="tf-1h"
+                                        onclick="setChartTimeframe('1h')">1h</button>
                                 </div>
 
                                 <!-- Selector Completo de Activos -->
-                                <select id="chart-asset-select" class="search-input" style="padding:4px 8px; font-size:11px; width:auto; cursor:pointer;" onchange="selectCandleAsset(this.value)">
+                                <select id="chart-asset-select" class="search-input"
+                                    style="padding:4px 8px; font-size:11px; width:auto; cursor:pointer;"
+                                    onchange="selectCandleAsset(this.value)">
                                     <!-- Opciones inyectadas dinámicamente -->
                                 </select>
 
                                 <!-- Maximizar -->
-                                <button class="btn-action btn-ghost" onclick="toggleFullscreenChart()" style="padding:4px 9px; font-size:11px;" title="Pantalla Completa">
+                                <button class="btn-action btn-ghost" onclick="toggleFullscreenChart()"
+                                    style="padding:4px 9px; font-size:11px;" title="Pantalla Completa">
                                     ⛶ Maximizar
                                 </button>
                             </div>
@@ -1940,12 +2260,18 @@
 
                         <!-- Barra de Información de Velas OHLCV en vivo -->
                         <div class="chart-ohlc-legend" id="chart-ohlc-legend">
-                            <span>O: <span class="mono" id="ohlc-open" style="color:var(--text-primary);">$0.00</span></span>
-                            <span>H: <span class="mono" id="ohlc-high" style="color:var(--emerald-win);">$0.00</span></span>
-                            <span>L: <span class="mono" id="ohlc-low" style="color:var(--neon-rose);">$0.00</span></span>
-                            <span>C: <span class="mono" id="ohlc-close" style="color:var(--text-primary);">$0.00</span></span>
-                            <span>Vol: <span class="mono" id="ohlc-vol" style="color:var(--text-secondary);">0</span></span>
-                            <span id="chart-position-legend" style="margin-left:auto; display:none; color:var(--binance-gold); font-weight:600;">
+                            <span>O: <span class="mono" id="ohlc-open"
+                                    style="color:var(--text-primary);">$0.00</span></span>
+                            <span>H: <span class="mono" id="ohlc-high"
+                                    style="color:var(--emerald-win);">$0.00</span></span>
+                            <span>L: <span class="mono" id="ohlc-low"
+                                    style="color:var(--neon-rose);">$0.00</span></span>
+                            <span>C: <span class="mono" id="ohlc-close"
+                                    style="color:var(--text-primary);">$0.00</span></span>
+                            <span>Vol: <span class="mono" id="ohlc-vol"
+                                    style="color:var(--text-secondary);">0</span></span>
+                            <span id="chart-position-legend"
+                                style="margin-left:auto; display:none; color:var(--binance-gold); font-weight:600;">
                                 💼 En Cartera
                             </span>
                         </div>
@@ -1960,12 +2286,17 @@
                         <!-- Tira de métricas cuantitativas del activo -->
                         <div class="chart-status-strip">
                             <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-                                <span class="mono" style="font-size:10.5px;">🟢 Soporte: <strong id="chart-support-val" style="color:var(--cyber-cyan);">$0.00</strong></span>
-                                <span class="mono" style="font-size:10.5px;">🔴 Resistencia: <strong id="chart-resistance-val" style="color:var(--neon-rose);">$0.00</strong></span>
-                                <span class="mono" style="font-size:10.5px;">⚡ RSI: <strong id="chart-rsi-val">50.0</strong></span>
-                                <span class="mono" style="font-size:10.5px;">🤖 IA: <strong id="chart-ai-decision" style="color:var(--binance-gold);">HOLD</strong></span>
+                                <span class="mono" style="font-size:10.5px;">🟢 Soporte: <strong id="chart-support-val"
+                                        style="color:var(--cyber-cyan);">$0.00</strong></span>
+                                <span class="mono" style="font-size:10.5px;">🔴 Resistencia: <strong
+                                        id="chart-resistance-val" style="color:var(--neon-rose);">$0.00</strong></span>
+                                <span class="mono" style="font-size:10.5px;">⚡ RSI: <strong
+                                        id="chart-rsi-val">50.0</strong></span>
+                                <span class="mono" style="font-size:10.5px;">🤖 IA: <strong id="chart-ai-decision"
+                                        style="color:var(--binance-gold);">HOLD</strong></span>
                             </div>
-                            <div id="chart-position-strip" style="font-size:10.5px; color:var(--text-muted); font-family:var(--font-mono);">
+                            <div id="chart-position-strip"
+                                style="font-size:10.5px; color:var(--text-muted); font-family:var(--font-mono);">
                                 Sin posición abierta en este activo.
                             </div>
                         </div>
@@ -1974,32 +2305,52 @@
 
                 <!-- PESTAÑA 2: RADAR DE EMPRESAS Y ESTADO IA (HOLD / COMPRA / VENTA) -->
                 <div class="workspace-view" id="view-radar">
-                    <section class="radar-panel" id="radar-panel" style="background:#0E1526; border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:16px;">
-                        <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+                    <section class="radar-panel" id="radar-panel"
+                        style="background:#0E1526; border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:16px;">
+                        <div class="panel-header"
+                            style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
                             <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-                                <div class="panel-title" style="font-size:13.5px; font-weight:800; color:#F8FAFC; display:flex; align-items:center; gap:8px;">
+                                <div class="panel-title"
+                                    style="font-size:13.5px; font-weight:800; color:#F8FAFC; display:flex; align-items:center; gap:8px;">
                                     <span>🏢 Empresas & Activos Monitoreados por IA</span>
-                                    <span id="asset-count-badge" class="mono" style="font-size:11px; color:var(--text-muted);">(24 Activos)</span>
+                                    <span id="asset-count-badge" class="mono"
+                                        style="font-size:11px; color:var(--text-muted);">(24 Activos)</span>
                                 </div>
                                 <!-- Selector de Categorías Rápido -->
-                                <div class="market-categories-tabs" style="display:flex; gap:4px; background:#080D1A; padding:3px; border-radius:7px; border:1px solid rgba(255,255,255,0.08);">
-                                    <button class="market-tab active" data-cat="ALL" onclick="setCategoryFilter('ALL')">🌐 Todos <span id="cat-count-all" class="mono" style="font-size:9.5px; opacity:0.8;">(24)</span></button>
-                                    <button class="market-tab" data-cat="TRADFI" onclick="setCategoryFilter('TRADFI')">🏛️ Empresas Wall Street <span id="cat-count-tradfi" class="mono" style="font-size:9.5px; opacity:0.8;">(11)</span></button>
-                                    <button class="market-tab" data-cat="CRYPTO" onclick="setCategoryFilter('CRYPTO')">🪙 Cripto 24/7 <span id="cat-count-crypto" class="mono" style="font-size:9.5px; opacity:0.8;">(10)</span></button>
-                                    <button class="market-tab" data-cat="ETF" onclick="setCategoryFilter('ETF')">📊 ETFs <span id="cat-count-etf" class="mono" style="font-size:9.5px; opacity:0.8;">(3)</span></button>
+                                <div class="market-categories-tabs"
+                                    style="display:flex; gap:4px; background:#080D1A; padding:3px; border-radius:7px; border:1px solid rgba(255,255,255,0.08);">
+                                    <button class="market-tab active" data-cat="ALL"
+                                        onclick="setCategoryFilter('ALL')">🌐 Todos <span id="cat-count-all"
+                                            class="mono" style="font-size:9.5px; opacity:0.8;">(24)</span></button>
+                                    <button class="market-tab" data-cat="TRADFI"
+                                        onclick="setCategoryFilter('TRADFI')">🏛️ Empresas Wall Street <span
+                                            id="cat-count-tradfi" class="mono"
+                                            style="font-size:9.5px; opacity:0.8;">(11)</span></button>
+                                    <button class="market-tab" data-cat="CRYPTO"
+                                        onclick="setCategoryFilter('CRYPTO')">🪙 Cripto 24/7 <span id="cat-count-crypto"
+                                            class="mono" style="font-size:9.5px; opacity:0.8;">(10)</span></button>
+                                    <button class="market-tab" data-cat="ETF" onclick="setCategoryFilter('ETF')">📊 ETFs
+                                        <span id="cat-count-etf" class="mono"
+                                            style="font-size:9.5px; opacity:0.8;">(3)</span></button>
                                 </div>
                             </div>
 
                             <div class="filter-controls" style="display:flex; align-items:center; gap:8px;">
-                                <input type="text" id="radar-search" class="search-input" placeholder="🔍 Buscar activo (ej: EURUSD, GBPUSD, NVDA)..." oninput="renderMarketTable()" style="background:#080D1A; border:1px solid rgba(255,255,255,0.12); border-radius:6px; color:#F8FAFC; padding:6px 12px; font-size:11px; width:250px;">
-                                <button class="btn-action btn-ghost" onclick="recalibrateLearner()" style="padding:6px 12px; font-size:11px;">🧠 Recalibrar IA</button>
+                                <input type="text" id="radar-search" class="search-input"
+                                    placeholder="🔍 Buscar activo (ej: EURUSD, GBPUSD, NVDA)..."
+                                    oninput="renderMarketTable()"
+                                    style="background:#080D1A; border:1px solid rgba(255,255,255,0.12); border-radius:6px; color:#F8FAFC; padding:6px 12px; font-size:11px; width:250px;">
+                                <button class="btn-action btn-ghost" onclick="recalibrateLearner()"
+                                    style="padding:6px 12px; font-size:11px;">🧠 Recalibrar IA</button>
                             </div>
                         </div>
 
-                        <div class="table-container" style="overflow-x:auto; max-height:460px; overflow-y:auto; border-radius:6px; border:1px solid rgba(255,255,255,0.04);">
+                        <div class="table-container"
+                            style="overflow-x:auto; max-height:460px; overflow-y:auto; border-radius:6px; border:1px solid rgba(255,255,255,0.04);">
                             <table class="market-table" style="width:100%; border-collapse:collapse;">
                                 <thead>
-                                    <tr style="border-bottom:1px solid rgba(255,255,255,0.1); color:#94A3B8; font-size:10.5px; text-transform:uppercase; text-align:left; position:sticky; top:0; background:#0B1220; z-index:5;">
+                                    <tr
+                                        style="border-bottom:1px solid rgba(255,255,255,0.1); color:#94A3B8; font-size:10.5px; text-transform:uppercase; text-align:left; position:sticky; top:0; background:#0B1220; z-index:5;">
                                         <th style="padding:9px 8px;">Empresa / Símbolo</th>
                                         <th style="padding:9px 8px;">Mercado / Broker</th>
                                         <th style="padding:9px 8px;">Precio en Vivo</th>
@@ -2021,50 +2372,71 @@
 
                 <!-- PESTAÑA 3: SECCIÓN DE NOTICIAS & MACRO SHIELD (COLLAPSIBLE / BAJO PERFIL) -->
                 <div class="workspace-view" id="view-macro">
-                    <div class="quant-hub-card" id="quant-hub-card" style="background:#0E1526; border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:16px; margin-top:0;">
-                        <div class="quant-ticker-strip" style="display:flex; align-items:center; gap:10px; background:#080D1A; padding:8px 12px; border-radius:8px; margin-bottom:12px; border:1px solid rgba(255,255,255,0.06);">
-                            <div class="ticker-pill-tag" style="font-size:10px; font-weight:800; color:var(--emerald-win); display:flex; align-items:center; gap:5px;">
+                    <div class="quant-hub-card" id="quant-hub-card"
+                        style="background:#0E1526; border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:16px; margin-top:0;">
+                        <div class="quant-ticker-strip"
+                            style="display:flex; align-items:center; gap:10px; background:#080D1A; padding:8px 12px; border-radius:8px; margin-bottom:12px; border:1px solid rgba(255,255,255,0.06);">
+                            <div class="ticker-pill-tag"
+                                style="font-size:10px; font-weight:800; color:var(--emerald-win); display:flex; align-items:center; gap:5px;">
                                 <span class="ticker-pulse"></span> FLASH EN VIVO:
                             </div>
-                            <div class="ticker-headline-text" id="quant-ticker-text" style="font-size:11.5px; color:#F8FAFC; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                            <div class="ticker-headline-text" id="quant-ticker-text"
+                                style="font-size:11.5px; color:#F8FAFC; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                                 Sincronizando flujo en vivo de noticias institucionales...
                             </div>
-                            <span class="mono" id="news-sentiment-gauge" style="font-size:10.5px; padding:2px 8px; border-radius:10px; background:rgba(16,185,129,0.15); color:var(--emerald-win); font-weight:600; flex-shrink:0;">
+                            <span class="mono" id="news-sentiment-gauge"
+                                style="font-size:10.5px; padding:2px 8px; border-radius:10px; background:rgba(16,185,129,0.15); color:var(--emerald-win); font-weight:600; flex-shrink:0;">
                                 Sentimiento: +0.42
                             </span>
                         </div>
 
-                        <div class="quant-hub-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <div class="quant-hub-header"
+                            style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                             <div class="quant-tabs-wrapper" style="display:inline-flex; gap:6px;">
-                                <button class="quant-tab-btn active" id="tab-btn-regime" onclick="switchQuantTab('regime', this)" style="padding:5px 10px; font-size:11px; border-radius:5px;">
+                                <button class="quant-tab-btn active" id="tab-btn-regime"
+                                    onclick="switchQuantTab('regime', this)"
+                                    style="padding:5px 10px; font-size:11px; border-radius:5px;">
                                     <span>🌐 Régimen</span>
-                                    <span class="mono quant-tab-badge" id="global-regime-badge" style="background:rgba(6,182,212,0.15); color:var(--accent-cyan); font-size:9.5px;">🚀 Tendencia</span>
+                                    <span class="mono quant-tab-badge" id="global-regime-badge"
+                                        style="background:rgba(6,182,212,0.15); color:var(--accent-cyan); font-size:9.5px;">🚀
+                                        Tendencia</span>
                                 </button>
-                                <button class="quant-tab-btn" id="tab-btn-funding" onclick="switchQuantTab('funding', this)" style="padding:5px 10px; font-size:11px; border-radius:5px;">
+                                <button class="quant-tab-btn" id="tab-btn-funding"
+                                    onclick="switchQuantTab('funding', this)"
+                                    style="padding:5px 10px; font-size:11px; border-radius:5px;">
                                     <span>💰 Arbitrage</span>
-                                    <span class="mono quant-tab-badge" id="top-funding-badge" style="background:rgba(240,185,11,0.15); color:var(--binance-gold); font-size:9.5px;">SOL: +19.7%</span>
+                                    <span class="mono quant-tab-badge" id="top-funding-badge"
+                                        style="background:rgba(240,185,11,0.15); color:var(--binance-gold); font-size:9.5px;">SOL:
+                                        +19.7%</span>
                                 </button>
-                                <button class="quant-tab-btn" id="tab-btn-news" onclick="switchQuantTab('news', this)" style="padding:5px 10px; font-size:11px; border-radius:5px;">
+                                <button class="quant-tab-btn" id="tab-btn-news" onclick="switchQuantTab('news', this)"
+                                    style="padding:5px 10px; font-size:11px; border-radius:5px;">
                                     <span>📰 Noticias</span>
-                                    <span class="mono quant-tab-badge" id="macro-shield-badge" style="background:rgba(16,185,129,0.15); color:var(--emerald-win); font-size:9.5px;">🛡️ Estable</span>
+                                    <span class="mono quant-tab-badge" id="macro-shield-badge"
+                                        style="background:rgba(16,185,129,0.15); color:var(--emerald-win); font-size:9.5px;">🛡️
+                                        Estable</span>
                                 </button>
                             </div>
-                            <div style="font-size:11px; color:var(--text-muted);" id="macro-shield-desc">Monitoreo continuo de eventos macro.</div>
+                            <div style="font-size:11px; color:var(--text-muted);" id="macro-shield-desc">Monitoreo
+                                continuo de eventos macro.</div>
                         </div>
 
                         <div class="quant-hub-body" id="quant-hub-body" style="margin-top:8px;">
                             <div class="quant-pane active" id="pane-regime">
-                                <div style="font-size:11.5px; color:var(--text-secondary); line-height:1.4;" id="global-regime-desc">
+                                <div style="font-size:11.5px; color:var(--text-secondary); line-height:1.4;"
+                                    id="global-regime-desc">
                                     Clasificación automática de régimen de mercado activa.
                                 </div>
                             </div>
                             <div class="quant-pane" id="pane-funding">
-                                <div style="font-size:11.5px; color:var(--text-secondary); line-height:1.4;" id="top-funding-desc">
+                                <div style="font-size:11.5px; color:var(--text-secondary); line-height:1.4;"
+                                    id="top-funding-desc">
                                     Estrategia Cash & Carry Delta-Neutral en Binance.
                                 </div>
                             </div>
                             <div class="quant-pane" id="pane-news">
-                                <div id="news-headlines-container" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:6px; max-height:160px; overflow-y:auto;">
+                                <div id="news-headlines-container"
+                                    style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:6px; max-height:160px; overflow-y:auto;">
                                 </div>
                             </div>
                         </div>
@@ -2074,69 +2446,113 @@
                 <!-- PESTAÑA 4: HISTÓRICO Y MÉTRICAS DE TRANSACCIONES POR DÍA -->
                 <div class="workspace-view" id="view-history">
                     <section class="card" style="padding:16px 20px; display:flex; flex-direction:column; gap:14px;">
-                        
+
                         <!-- Barra Superior: Título & Botones de Exportación Directa -->
-                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; border-bottom:1px solid var(--border-subtle); padding-bottom:12px;">
+                        <div
+                            style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; border-bottom:1px solid var(--border-subtle); padding-bottom:12px;">
                             <div>
-                                <h3 style="font-size:15px; font-weight:700; display:flex; align-items:center; gap:8px; margin:0 0 4px 0;">
+                                <h3
+                                    style="font-size:15px; font-weight:700; display:flex; align-items:center; gap:8px; margin:0 0 4px 0;">
                                     <span>📑 Histórico de Transacciones y Métricas por Día</span>
-                                    <span class="mono" id="history-total-days-badge" style="font-size:11px; padding:2px 8px; border-radius:12px; background:rgba(56,189,248,0.12); color:var(--cyber-cyan-bright); font-weight:700;">Cargando...</span>
+                                    <span class="mono" id="history-total-days-badge"
+                                        style="font-size:11px; padding:2px 8px; border-radius:12px; background:rgba(56,189,248,0.12); color:var(--cyber-cyan-bright); font-weight:700;">Cargando...</span>
                                 </h3>
-                                <p style="font-size:11px; color:var(--text-muted); margin:0;" id="history-broker-subtitle">
-                                    Métricas cuantitativas consolidadas del broker activo (Win Rate, PnL, Profit Factor, Volumen).
+                                <p style="font-size:11px; color:var(--text-muted); margin:0;"
+                                    id="history-broker-subtitle">
+                                    Métricas cuantitativas consolidadas del broker activo (Win Rate, PnL, Profit Factor,
+                                    Volumen).
                                 </p>
                             </div>
 
                             <!-- Botonera de Exportación Directa -->
                             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                                <span class="mono" id="history-active-broker-pill" style="font-size:11px; padding:5px 12px; border-radius:6px; font-weight:700; background:rgba(240,185,11,0.12); color:var(--binance-gold); border:1px solid rgba(240,185,11,0.3); display:inline-flex; align-items:center; gap:6px;">
+                                <span class="mono" id="history-active-broker-pill"
+                                    style="font-size:11px; padding:5px 12px; border-radius:6px; font-weight:700; background:rgba(240,185,11,0.12); color:var(--binance-gold); border:1px solid rgba(240,185,11,0.3); display:inline-flex; align-items:center; gap:6px;">
                                     <span>🪙</span> <span>Binance Spot</span>
                                 </span>
-                                <button class="btn-action btn-primary" onclick="downloadTradesExport('pdf')" style="font-size:11px; padding:6px 12px; display:inline-flex; align-items:center; gap:5px; background:linear-gradient(135deg, #EF4444, #B91C1C); border-color:#EF4444;" title="Descargar Reporte Institucional en PDF con gráficos de barras de rendimiento y métricas">
+                                <button class="btn-action btn-primary" onclick="downloadTradesExport('pdf')"
+                                    style="font-size:11px; padding:6px 12px; display:inline-flex; align-items:center; gap:5px; background:linear-gradient(135deg, #EF4444, #B91C1C); border-color:#EF4444;"
+                                    title="Descargar Reporte Institucional en PDF con gráficos de barras de rendimiento y métricas">
                                     <span>📕 Reporte PDF</span>
                                 </button>
-                                <button class="btn-action btn-primary" onclick="downloadTradesExport('xlsx')" style="font-size:11px; padding:6px 12px; display:inline-flex; align-items:center; gap:5px; background:linear-gradient(135deg, #10B981, #047857); border-color:#10B981;" title="Descargar Libro Excel (.xlsx) con tablas formateadas y gráficos interactivos de barras">
+                                <button class="btn-action btn-primary" onclick="downloadTradesExport('xlsx')"
+                                    style="font-size:11px; padding:6px 12px; display:inline-flex; align-items:center; gap:5px; background:linear-gradient(135deg, #10B981, #047857); border-color:#10B981;"
+                                    title="Descargar Libro Excel (.xlsx) con tablas formateadas y gráficos interactivos de barras">
                                     <span>📊 Excel (.xlsx)</span>
                                 </button>
-                                <button class="btn-action btn-ghost" onclick="downloadTradesExport('complete')" style="font-size:11px; padding:6px 11px;" title="Descargar CSV completo con resumen diario y operaciones">
+                                <button class="btn-action btn-ghost" onclick="downloadTradesExport('complete')"
+                                    style="font-size:11px; padding:6px 11px;"
+                                    title="Descargar CSV completo con resumen diario y operaciones">
                                     <span>📥 CSV</span>
                                 </button>
-                                <button class="btn-action btn-ghost" onclick="downloadTradesExport('json')" style="font-size:11px; padding:6px 9px;" title="Descargar histórico en JSON">
+                                <button class="btn-action btn-ghost" onclick="downloadTradesExport('json')"
+                                    style="font-size:11px; padding:6px 9px;" title="Descargar histórico en JSON">
                                     <span>{ } JSON</span>
                                 </button>
                             </div>
                         </div>
 
                         <!-- Mini Strip de Métricas Globales del Histórico -->
-                        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:10px;">
-                            <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-radius:8px; padding:10px 12px;">
-                                <div style="font-size:10px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Días Operados</div>
-                                <div class="mono" id="hist-kpi-days" style="font-size:17px; font-weight:700; color:var(--text-primary); margin-top:2px;">-</div>
+                        <div
+                            style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:10px;">
+                            <div
+                                style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-radius:8px; padding:10px 12px;">
+                                <div
+                                    style="font-size:10px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">
+                                    Días Operados</div>
+                                <div class="mono" id="hist-kpi-days"
+                                    style="font-size:17px; font-weight:700; color:var(--text-primary); margin-top:2px;">
+                                    -</div>
                             </div>
-                            <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-radius:8px; padding:10px 12px;">
-                                <div style="font-size:10px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Total Trades</div>
-                                <div class="mono" id="hist-kpi-trades" style="font-size:17px; font-weight:700; color:var(--text-primary); margin-top:2px;">-</div>
+                            <div
+                                style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-radius:8px; padding:10px 12px;">
+                                <div
+                                    style="font-size:10px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">
+                                    Total Trades</div>
+                                <div class="mono" id="hist-kpi-trades"
+                                    style="font-size:17px; font-weight:700; color:var(--text-primary); margin-top:2px;">
+                                    -</div>
                             </div>
-                            <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-radius:8px; padding:10px 12px;">
-                                <div style="font-size:10px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Win Rate Global</div>
-                                <div class="mono" id="hist-kpi-winrate" style="font-size:17px; font-weight:700; color:var(--emerald-win); margin-top:2px;">-</div>
+                            <div
+                                style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-radius:8px; padding:10px 12px;">
+                                <div
+                                    style="font-size:10px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">
+                                    Win Rate Global</div>
+                                <div class="mono" id="hist-kpi-winrate"
+                                    style="font-size:17px; font-weight:700; color:var(--emerald-win); margin-top:2px;">-
+                                </div>
                             </div>
-                            <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-radius:8px; padding:10px 12px;">
-                                <div style="font-size:10px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">PnL Neto Acumulado</div>
-                                <div class="mono" id="hist-kpi-pnl" style="font-size:17px; font-weight:700; margin-top:2px;">-</div>
+                            <div
+                                style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-radius:8px; padding:10px 12px;">
+                                <div
+                                    style="font-size:10px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">
+                                    PnL Neto Acumulado</div>
+                                <div class="mono" id="hist-kpi-pnl"
+                                    style="font-size:17px; font-weight:700; margin-top:2px;">-</div>
                             </div>
-                            <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-radius:8px; padding:10px 12px;">
-                                <div style="font-size:10px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Volumen Invertido</div>
-                                <div class="mono" id="hist-kpi-volume" style="font-size:17px; font-weight:700; color:var(--binance-gold); margin-top:2px;">-</div>
+                            <div
+                                style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-radius:8px; padding:10px 12px;">
+                                <div
+                                    style="font-size:10px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">
+                                    Volumen Invertido</div>
+                                <div class="mono" id="hist-kpi-volume"
+                                    style="font-size:17px; font-weight:700; color:var(--binance-gold); margin-top:2px;">
+                                    -</div>
                             </div>
-                            <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-radius:8px; padding:10px 12px;">
-                                <div style="font-size:10px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Profit Factor</div>
-                                <div class="mono" id="hist-kpi-pf" style="font-size:17px; font-weight:700; color:var(--text-primary); margin-top:2px;">-</div>
+                            <div
+                                style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-radius:8px; padding:10px 12px;">
+                                <div
+                                    style="font-size:10px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">
+                                    Profit Factor</div>
+                                <div class="mono" id="hist-kpi-pf"
+                                    style="font-size:17px; font-weight:700; color:var(--text-primary); margin-top:2px;">
+                                    -</div>
                             </div>
                         </div>
 
                         <!-- Contenedor de Días (Tarjetas con Acordeón) -->
-                        <div id="history-days-container" style="display:flex; flex-direction:column; gap:10px; margin-top:4px;">
+                        <div id="history-days-container"
+                            style="display:flex; flex-direction:column; gap:10px; margin-top:4px;">
                             <div style="text-align:center; padding:32px; color:var(--text-muted); font-size:12px;">
                                 Cargando histórico por día...
                             </div>
@@ -2152,95 +2568,117 @@
                 <div class="positions-card">
                     <div class="panel-header" style="margin-bottom:6px; padding-bottom:6px;">
                         <div>
-                            <div class="panel-title" style="font-size:12.5px; display:flex; align-items:center; gap:6px;">
+                            <div class="panel-title"
+                                style="font-size:12.5px; display:flex; align-items:center; gap:6px;">
                                 <span>💼 Posiciones en Cartera</span>
                                 <span class="mono pos-slots-badge" id="rail-open-pos-count">0 / 1 Cupo</span>
                             </div>
-                            <div style="font-size:9.5px; color:var(--text-muted); margin-top:2px;" id="rail-slots-helper-text">
+                            <div style="font-size:9.5px; color:var(--text-muted); margin-top:2px;"
+                                id="rail-slots-helper-text">
                                 0 activas · 1 cupo libre (Máx. 1 controlada)
                             </div>
                         </div>
-                            <div style="display:flex; align-items:center; gap:6px;">
-                                <span class="mono" id="unrealized-pnl-header" style="font-size:12px; font-weight:700;">$0.00</span>
-                            </div>
-                            <div style="font-size:9px; color:var(--text-muted); font-family:var(--font-mono);">PnL Flotante</div>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <span class="mono" id="unrealized-pnl-header"
+                                style="font-size:12px; font-weight:700;">$0.00</span>
                         </div>
-                    </div>
-
-                    <!-- Indicador visual de 1 cupo de riesgo controlado -->
-                    <div class="slots-visual-bar" id="slots-visual-bar" title="Máximo 1 operación de riesgo simultáneo permitida para proteger el capital">
-                        <div class="slot-pill" title="Cupo 1: Libre"></div>
-                    </div>
-
-                    <div id="positions-list">
-                        <div style="text-align:center; padding:18px; color:var(--text-muted); font-size:11px;">
-                            No hay posiciones abiertas actualmente.
+                        <div style="font-size:9px; color:var(--text-muted); font-family:var(--font-mono);">PnL Flotante
                         </div>
                     </div>
                 </div>
 
-                <!-- Terminal Cognitivo Streaming -->
-                <div class="terminal-card">
-                    <div class="terminal-header">
-                        <span style="font-size:11.5px; font-weight:700; display:flex; align-items:center; gap:6px; font-family:var(--font-mono);">
-                            <span style="color:var(--binance-yellow);">●</span> STREAMING NEURAL COGNITION
-                        </span>
-                        <span class="mono" style="font-size:9.5px; color:var(--text-muted);">AUTO-REINFORCED</span>
-                    </div>
-                    <div class="terminal-feed" id="terminal-feed">
-                        <!-- Pensamientos del agente -->
+                <!-- Indicador visual de 1 cupo de riesgo controlado -->
+                <div class="slots-visual-bar" id="slots-visual-bar"
+                    title="Máximo 1 operación de riesgo simultáneo permitida para proteger el capital">
+                    <div class="slot-pill" title="Cupo 1: Libre"></div>
+                </div>
+
+                <div id="positions-list">
+                    <div style="text-align:center; padding:18px; color:var(--text-muted); font-size:11px;">
+                        No hay posiciones abiertas actualmente.
                     </div>
                 </div>
-            </aside>
         </div>
+
+        <!-- Terminal Cognitivo Streaming -->
+        <div class="terminal-card">
+            <div class="terminal-header">
+                <span
+                    style="font-size:11.5px; font-weight:700; display:flex; align-items:center; gap:6px; font-family:var(--font-mono);">
+                    <span style="color:var(--binance-yellow);">●</span> STREAMING NEURAL COGNITION
+                </span>
+                <span class="mono" style="font-size:9.5px; color:var(--text-muted);">AUTO-REINFORCED</span>
+            </div>
+            <div class="terminal-feed" id="terminal-feed">
+                <!-- Pensamientos del agente -->
+            </div>
+        </div>
+        </aside>
+    </div>
     </div>
 
     <!-- ==================== MODAL DE AJUSTES (CON TABS: RIESGO Y CREDENCIALES IQ OPTION) ==================== -->
     <div class="modal-overlay" id="settings-modal" onclick="handleBackdropClick(event, 'settings-modal')">
         <div class="modal-card" style="max-width: 520px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--border-subtle); padding-bottom:8px;">
+            <div
+                style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--border-subtle); padding-bottom:8px;">
                 <h3 id="settings-modal-title" style="margin:0; font-size:16px;">⚙️ Ajustes & Configuración</h3>
-                <button class="btn-action btn-ghost" onclick="closeModals()" style="padding:2px 8px; font-size:14px;">✕</button>
+                <button class="btn-action btn-ghost" onclick="closeModals()"
+                    style="padding:2px 8px; font-size:14px;">✕</button>
             </div>
-            
+
             <!-- Selector de Pestañas en Ajustes -->
-            <div style="display:flex; gap:8px; margin-bottom:14px; background:rgba(255,255,255,0.03); padding:4px; border-radius:8px; border:1px solid var(--border-subtle);">
-                <button type="button" class="btn-action active" id="tab-btn-risk" onclick="switchSettingsTab('risk')" style="flex:1; font-size:12px; padding:6px; font-weight:600;">
+            <div
+                style="display:flex; gap:8px; margin-bottom:14px; background:rgba(255,255,255,0.03); padding:4px; border-radius:8px; border:1px solid var(--border-subtle);">
+                <button type="button" class="btn-action active" id="tab-btn-risk" onclick="switchSettingsTab('risk')"
+                    style="flex:1; font-size:12px; padding:6px; font-weight:600;">
                     ⚙️ Gestión de Riesgo
                 </button>
-                <button type="button" class="btn-action btn-ghost" id="tab-btn-credentials" onclick="switchSettingsTab('credentials')" style="flex:1; font-size:12px; padding:6px; font-weight:600; color:var(--cyber-cyan-bright);">
+                <button type="button" class="btn-action btn-ghost" id="tab-btn-credentials"
+                    onclick="switchSettingsTab('credentials')"
+                    style="flex:1; font-size:12px; padding:6px; font-weight:600; color:var(--cyber-cyan-bright);">
                     🔐 Credenciales IQ Option
                 </button>
             </div>
 
             <!-- Tab 1: Riesgo & Circuit Breakers -->
             <div id="settings-tab-risk">
-                <div id="settings-modal-user-info" style="display:none; margin-bottom:12px; font-size:11.5px; padding:8px 12px; background:rgba(0,240,255,0.06); border:1px solid rgba(0,240,255,0.25); border-radius:6px; color:var(--cyber-cyan-bright);"></div>
+                <div id="settings-modal-user-info"
+                    style="display:none; margin-bottom:12px; font-size:11.5px; padding:8px 12px; background:rgba(0,240,255,0.06); border:1px solid rgba(0,240,255,0.25); border-radius:6px; color:var(--cyber-cyan-bright);">
+                </div>
                 <div class="form-group">
-                    <label>Meta de Ganancia Automática (USD)</label>
+                    <label>Meta de Ganancia Automática (<span class="risk-currency">COP</span>)</label>
                     <input type="number" id="modal-profit-target" class="form-control" value="500">
                 </div>
                 <div class="form-group">
-                    <label>Límite Máximo de Pérdida de Seguridad (USD)</label>
+                    <label>Límite Máximo de Pérdida de Seguridad (<span class="risk-currency">COP</span>)</label>
                     <input type="number" id="modal-max-loss" class="form-control" value="0" min="0" step="any">
-                    <div style="font-size:10px; color:var(--text-muted); margin-top:3px;">(0 = Tolerancia Cero: no se permite perder ni un solo dólar; o define el límite máximo en USD)</div>
+                    <div style="font-size:10px; color:var(--text-muted); margin-top:3px;">0 activa Tolerancia Cero y
+                        bloquea nuevas entradas reales. Usa un valor positivo para permitir operar con pérdida diaria
+                        acotada.</div>
                 </div>
                 <div class="form-group" style="margin-top:14px; margin-bottom:14px;">
-                    <label style="display:flex; justify-content:space-between; align-items:center; font-weight:700; margin-bottom:8px;">
+                    <label
+                        style="display:flex; justify-content:space-between; align-items:center; font-weight:700; margin-bottom:8px;">
                         <span>Modo Operativo IQ Option</span>
-                        <span style="font-size:10px; padding:2px 8px; border-radius:10px; font-weight:700; background:rgba(0,240,255,0.12); color:var(--cyber-cyan-bright); border:1px solid rgba(0,240,255,0.25);">
+                        <span
+                            style="font-size:10px; padding:2px 8px; border-radius:10px; font-weight:700; background:rgba(0,240,255,0.12); color:var(--cyber-cyan-bright); border:1px solid rgba(0,240,255,0.25);">
                             LÓGICAS 100% AISLADAS
                         </span>
                     </label>
 
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                         <!-- Tarjeta Forex CFD -->
-                        <div id="card-mode-forex" onclick="selectModalIQMode('FOREX_CFD')" style="border-radius:8px; padding:12px; cursor:pointer; transition:all 0.2s; border:2px solid var(--accent-cyan); background:rgba(56,189,248,0.12);">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                <span style="font-weight:700; font-size:12.5px; color:#FFF; display:flex; align-items:center; gap:6px;">
+                        <div id="card-mode-forex" onclick="selectModalIQMode('FOREX_CFD')"
+                            style="border-radius:8px; padding:12px; cursor:pointer; transition:all 0.2s; border:2px solid var(--accent-cyan); background:rgba(56,189,248,0.12);">
+                            <div
+                                style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                <span
+                                    style="font-weight:700; font-size:12.5px; color:#FFF; display:flex; align-items:center; gap:6px;">
                                     <span>🌐</span> Forex CFD
                                 </span>
-                                <span id="badge-mode-forex" style="font-size:9.5px; font-weight:800; padding:2px 6px; border-radius:8px; background:var(--accent-cyan); color:#0B0E17;">
+                                <span id="badge-mode-forex"
+                                    style="font-size:9.5px; font-weight:800; padding:2px 6px; border-radius:8px; background:var(--accent-cyan); color:#0B0E17;">
                                     ACTIVO
                                 </span>
                             </div>
@@ -2250,12 +2688,16 @@
                         </div>
 
                         <!-- Tarjeta Binarias Turbo -->
-                        <div id="card-mode-binary" onclick="selectModalIQMode('BINARY_OPTIONS')" style="border-radius:8px; padding:12px; cursor:pointer; transition:all 0.2s; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.02);">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                <span style="font-weight:700; font-size:12.5px; color:#CBD5E1; display:flex; align-items:center; gap:6px;">
+                        <div id="card-mode-binary" onclick="selectModalIQMode('BINARY_OPTIONS')"
+                            style="border-radius:8px; padding:12px; cursor:pointer; transition:all 0.2s; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.02);">
+                            <div
+                                style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                <span
+                                    style="font-weight:700; font-size:12.5px; color:#CBD5E1; display:flex; align-items:center; gap:6px;">
                                     <span>⏱️</span> Binarias Turbo
                                 </span>
-                                <span id="badge-mode-binary" style="font-size:9.5px; font-weight:800; padding:2px 6px; border-radius:8px; background:rgba(255,255,255,0.1); color:#94A3B8;">
+                                <span id="badge-mode-binary"
+                                    style="font-size:9.5px; font-weight:800; padding:2px 6px; border-radius:8px; background:rgba(255,255,255,0.1); color:#94A3B8;">
                                     INACTIVO
                                 </span>
                             </div>
@@ -2274,10 +2716,12 @@
                             <span class="arrow">▼</span>
                         </div>
                         <div class="custom-select-menu">
-                            <div class="custom-option selected" data-value="LIVE_REAL" onclick="selectSettingsEnvOption('LIVE_REAL', '🔥 Modo Dinero Real (IQ Option Cuenta Real)')">
+                            <div class="custom-option selected" data-value="LIVE_REAL"
+                                onclick="selectSettingsEnvOption('LIVE_REAL', '🔥 Modo Dinero Real (IQ Option Cuenta Real)')">
                                 <span>🔥 Modo Dinero Real (IQ Option Cuenta Real)</span>
                             </div>
-                            <div class="custom-option" data-value="PAPER" onclick="selectSettingsEnvOption('PAPER', '🛡️ Modo Práctica / Demo (IQ Option $10,000 USD)')">
+                            <div class="custom-option" data-value="PAPER"
+                                onclick="selectSettingsEnvOption('PAPER', '🛡️ Modo Práctica / Demo (IQ Option $10,000 USD)')">
                                 <span>🛡️ Modo Práctica / Demo (IQ Option $10,000 USD)</span>
                             </div>
                         </div>
@@ -2292,35 +2736,49 @@
 
             <!-- Tab 2: Credenciales de IQ Option (Email, Contraseña, Token SSID) -->
             <div id="settings-tab-credentials" style="display:none;">
-                <div style="background:rgba(0,240,255,0.04); border:1px solid rgba(0,240,255,0.2); border-radius:8px; padding:14px; margin-bottom:12px;">
+                <div
+                    style="background:rgba(0,240,255,0.04); border:1px solid rgba(0,240,255,0.2); border-radius:8px; padding:14px; margin-bottom:12px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                        <span style="font-size:12px; font-weight:700; color:var(--cyber-cyan-bright); display:flex; align-items:center; gap:6px;">
+                        <span
+                            style="font-size:12px; font-weight:700; color:var(--cyber-cyan-bright); display:flex; align-items:center; gap:6px;">
                             🔐 Autenticación de IQ Option
                         </span>
-                        <span class="mono" style="font-size:10px; color:var(--emerald-win);" id="settings-iqoption-badge">CONEXIÓN CONFIGURABLE</span>
+                        <span class="mono" style="font-size:10px; color:var(--emerald-win);"
+                            id="settings-iqoption-badge">CONEXIÓN CONFIGURABLE</span>
                     </div>
                     <p style="font-size:11px; color:#94A3B8; margin-bottom:12px; line-height:1.4;">
-                        Ingresa tu correo y contraseña de IQ Option, o directamente tu Token SSID de sesión para conectar en vivo sin bloqueos de firewall en el VPS.
+                        Ingresa tu correo y contraseña de IQ Option, o directamente tu Token SSID de sesión para
+                        conectar en vivo sin bloqueos de firewall en el VPS.
                     </p>
                     <div class="form-group" style="margin-bottom:10px;">
-                        <label style="font-size:11px; color:#FFF; font-weight:600;">📧 Correo Electrónico (Email de tu cuenta IQ Option)</label>
-                        <input type="email" id="modal-iqoption-email-settings" class="form-control" placeholder="tu_correo@gmail.com">
+                        <label style="font-size:11px; color:#FFF; font-weight:600;">📧 Correo Electrónico (Email de tu
+                            cuenta IQ Option)</label>
+                        <input type="email" id="modal-iqoption-email-settings" class="form-control"
+                            placeholder="tu_correo@gmail.com">
                     </div>
                     <div class="form-group" style="margin-bottom:10px;">
                         <label style="font-size:11px; color:#FFF; font-weight:600;">🔑 Contraseña de IQ Option</label>
-                        <input type="password" id="modal-iqoption-password-settings" class="form-control" placeholder="Tu contraseña de IQ Option">
+                        <input type="password" id="modal-iqoption-password-settings" class="form-control"
+                            placeholder="Tu contraseña de IQ Option">
                     </div>
                     <div class="form-group" style="margin-bottom:4px;">
-                        <label style="font-size:11px; color:#FFF; font-weight:600; display:flex; justify-content:space-between; align-items:center;">
-                            <span>🎟️ Token SSID de Sesión <strong style="color:var(--cyber-cyan-bright);">(Recomendado para VPS)</strong></span>
-                            <span onclick="alert('🔑 Cómo obtener tu Token SSID en 10 segundos:\n\n1. Inicia sesión en iqoption.com en tu navegador.\n2. Presiona F12 (o Clic derecho > Inspeccionar) e ingresa a la pestaña \'Consola\'.\n3. Escribe o pega:\n   copy(document.cookie.match(/ssid=([^;]+)/)[1])\n   y presiona Enter.\n4. ¡Listo! Ya quedó copiado en tu portapapeles. Pégalo aquí en este campo.')" style="color:var(--cyber-cyan-bright); cursor:pointer; text-decoration:underline; font-size:10px;">¿Cómo obtenerlo?</span>
+                        <label
+                            style="font-size:11px; color:#FFF; font-weight:600; display:flex; justify-content:space-between; align-items:center;">
+                            <span>🎟️ Token SSID de Sesión <strong style="color:var(--cyber-cyan-bright);">(Recomendado
+                                    para VPS)</strong></span>
+                            <span
+                                onclick="alert('🔑 Cómo obtener tu Token SSID en 10 segundos:\n\n1. Inicia sesión en iqoption.com en tu navegador.\n2. Presiona F12 (o Clic derecho > Inspeccionar) e ingresa a la pestaña \'Consola\'.\n3. Escribe o pega:\n   copy(document.cookie.match(/ssid=([^;]+)/)[1])\n   y presiona Enter.\n4. ¡Listo! Ya quedó copiado en tu portapapeles. Pégalo aquí en este campo.')"
+                                style="color:var(--cyber-cyan-bright); cursor:pointer; text-decoration:underline; font-size:10px;">¿Cómo
+                                obtenerlo?</span>
                         </label>
-                        <input type="password" id="modal-iqoption-ssid-settings" class="form-control" placeholder="Pega tu Token SSID (Bypassea cualquier firewall del VPS)">
+                        <input type="password" id="modal-iqoption-ssid-settings" class="form-control"
+                            placeholder="Pega tu Token SSID (Bypassea cualquier firewall del VPS)">
                     </div>
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
                     <button class="btn-action btn-ghost" onclick="closeModals()">Cancelar</button>
-                    <button class="btn-action btn-primary" onclick="saveIQOptionCredentialsFromSettings()">💾 Guardar y Conectar IQ Option</button>
+                    <button class="btn-action btn-primary" onclick="saveIQOptionCredentialsFromSettings()">💾 Guardar y
+                        Conectar IQ Option</button>
                 </div>
             </div>
         </div>
@@ -2329,11 +2787,12 @@
     <!-- ==================== MODAL DE ENTORNO Y BROKERS (CON CUSTOM DROPDOWN) ==================== -->
     <div class="modal-overlay" id="env-modal" onclick="handleBackdropClick(event, 'env-modal')">
         <div class="modal-card">
-            <h3 id="env-modal-title" style="margin-bottom:12px; font-size:16px; display:flex; align-items:center; justify-content:space-between;">
+            <h3 id="env-modal-title"
+                style="margin-bottom:12px; font-size:16px; display:flex; align-items:center; justify-content:space-between;">
                 <span>🔐 Entorno de Operación:</span>
                 <span id="env-modal-broker-name" style="font-size:14px; font-weight:700;"></span>
             </h3>
-            
+
             <div class="form-group">
                 <label id="env-modal-select-label">Modo Operativo para este Broker</label>
                 <!-- Custom Dropdown Elegante para Entorno -->
@@ -2350,46 +2809,62 @@
             </div>
 
             <!-- Configuración de Saldo Simulado (Paper) para Brokers aplicables -->
-            <div id="paper-balance-container" style="display:none; margin-top:12px; margin-bottom:12px; background:rgba(16,185,129,0.05); border:1px solid rgba(16,185,129,0.2); border-radius:8px; padding:12px;">
+            <div id="paper-balance-container"
+                style="display:none; margin-top:12px; margin-bottom:12px; background:rgba(16,185,129,0.05); border:1px solid rgba(16,185,129,0.2); border-radius:8px; padding:12px;">
                 <p id="modal-paper-desc" style="font-size:11px; color:var(--emerald-win); margin-bottom:8px;">
                     🛡️ Modo Simulación / Práctica: Configura el capital de prueba para operar sin riesgo.
                 </p>
                 <div class="form-group" style="margin-bottom:0;">
                     <label style="font-size:10.5px;">Capital Inicial para Modo Simulación (USD)</label>
-                    <input type="number" id="modal-paper-balance" class="form-control" placeholder="10.00" step="0.01" value="10.00">
+                    <input type="number" id="modal-paper-balance" class="form-control" placeholder="10.00" step="0.01"
+                        value="10.00">
                 </div>
             </div>
 
             <!-- Sección Alpaca (Wall Street) -->
-            <div id="modal-alpaca-section" style="display:none; border-top:1px solid var(--border-subtle); padding-top:12px;">
-                <div style="background:rgba(56,189,248,0.05); border:1px solid rgba(56,189,248,0.2); border-radius:8px; padding:12px; margin-bottom:12px;">
+            <div id="modal-alpaca-section"
+                style="display:none; border-top:1px solid var(--border-subtle); padding-top:12px;">
+                <div
+                    style="background:rgba(56,189,248,0.05); border:1px solid rgba(56,189,248,0.2); border-radius:8px; padding:12px; margin-bottom:12px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <span style="font-size:12px; font-weight:700; color:var(--cyber-cyan-bright); display:flex; align-items:center; gap:6px;">🏛️ Alpaca Markets (Wall Street TradFi)</span>
-                        <span class="mono" style="font-size:10px; color:var(--cyber-cyan-bright);" id="modal-alpaca-status-badge">CONECTADO</span>
+                        <span
+                            style="font-size:12px; font-weight:700; color:var(--cyber-cyan-bright); display:flex; align-items:center; gap:6px;">🏛️
+                            Alpaca Markets (Wall Street TradFi)</span>
+                        <span class="mono" style="font-size:10px; color:var(--cyber-cyan-bright);"
+                            id="modal-alpaca-status-badge">CONECTADO</span>
                     </div>
-                    <p id="modal-alpaca-desc" style="font-size:11px; color:#94A3B8; margin-bottom:10px; line-height:1.4;">
+                    <p id="modal-alpaca-desc"
+                        style="font-size:11px; color:#94A3B8; margin-bottom:10px; line-height:1.4;">
                         Configura tus credenciales de Alpaca para operar acciones y ETFs de Wall Street.
                     </p>
                     <div class="form-group" style="margin-bottom:8px;">
                         <label style="font-size:10.5px;">Alpaca API Key ID</label>
-                        <input type="text" id="modal-alpaca-key" class="form-control" placeholder="PKW6SLNFTRIU... (Paper) o AK... (Real)">
+                        <input type="text" id="modal-alpaca-key" class="form-control"
+                            placeholder="PKW6SLNFTRIU... (Paper) o AK... (Real)">
                     </div>
                     <div class="form-group" style="margin-bottom:0;">
                         <label style="font-size:10.5px;">Alpaca Secret Key</label>
-                        <input type="password" id="modal-alpaca-secret" class="form-control" placeholder="2ECcHKuWLyu...">
+                        <input type="password" id="modal-alpaca-secret" class="form-control"
+                            placeholder="2ECcHKuWLyu...">
                     </div>
                 </div>
             </div>
 
             <!-- Sección Binance (Cripto 24/7) -->
-            <div id="modal-binance-section" style="display:none; border-top:1px solid var(--border-subtle); padding-top:12px;">
+            <div id="modal-binance-section"
+                style="display:none; border-top:1px solid var(--border-subtle); padding-top:12px;">
 
-                <div id="binance-keys-container" style="background:rgba(240,185,11,0.05); border:1px solid rgba(240,185,11,0.2); border-radius:8px; padding:12px;">
+                <div id="binance-keys-container"
+                    style="background:rgba(240,185,11,0.05); border:1px solid rgba(240,185,11,0.2); border-radius:8px; padding:12px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <span style="font-size:12px; font-weight:700; color:var(--binance-gold); display:flex; align-items:center; gap:6px;">🪙 Binance Spot (Cripto)</span>
-                        <span class="mono" style="font-size:10px; color:var(--emerald-win);" id="modal-binance-status-badge">CONECTADO</span>
+                        <span
+                            style="font-size:12px; font-weight:700; color:var(--binance-gold); display:flex; align-items:center; gap:6px;">🪙
+                            Binance Spot (Cripto)</span>
+                        <span class="mono" style="font-size:10px; color:var(--emerald-win);"
+                            id="modal-binance-status-badge">CONECTADO</span>
                     </div>
-                    <p id="modal-binance-desc" style="font-size:11px; color:#94A3B8; margin-bottom:10px; line-height:1.4;">
+                    <p id="modal-binance-desc"
+                        style="font-size:11px; color:#94A3B8; margin-bottom:10px; line-height:1.4;">
                         Configura las claves API para operar o consultar saldos en Binance Spot.
                     </p>
                     <div class="form-group" style="margin-bottom:8px;">
@@ -2398,35 +2873,51 @@
                     </div>
                     <div class="form-group" style="margin-bottom:0;">
                         <label style="font-size:10.5px;">Binance Secret Key</label>
-                        <input type="password" id="modal-binance-secret" class="form-control" placeholder="Secret Key de Binance">
+                        <input type="password" id="modal-binance-secret" class="form-control"
+                            placeholder="Secret Key de Binance">
                     </div>
                 </div>
             </div>
 
             <!-- Sección IQ Option (Forex / CFDs) -->
-            <div id="modal-iqoption-section" style="display:none; border-top:1px solid var(--border-subtle); padding-top:12px;">
-                <div style="background:rgba(16,185,129,0.05); border:1px solid rgba(16,185,129,0.2); border-radius:8px; padding:12px;">
+            <div id="modal-iqoption-section"
+                style="display:none; border-top:1px solid var(--border-subtle); padding-top:12px;">
+                <div
+                    style="background:rgba(16,185,129,0.05); border:1px solid rgba(16,185,129,0.2); border-radius:8px; padding:12px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <span style="font-size:12px; font-weight:700; color:var(--emerald-win); display:flex; align-items:center; gap:6px;">📈 IQ Option (Forex / Opciones)</span>
-                        <span class="mono" style="font-size:10px; color:var(--emerald-win);" id="modal-iqoption-status-badge">CONECTADO</span>
+                        <span
+                            style="font-size:12px; font-weight:700; color:var(--emerald-win); display:flex; align-items:center; gap:6px;">📈
+                            IQ Option (Forex / Opciones)</span>
+                        <span class="mono" style="font-size:10px; color:var(--emerald-win);"
+                            id="modal-iqoption-status-badge">CONECTADO</span>
                     </div>
-                    <p id="modal-iqoption-desc" style="font-size:11px; color:#94A3B8; margin-bottom:10px; line-height:1.4;">
-                        Configura tus credenciales para operar en <strong>Modo Práctica (Demo $10,000 USD)</strong> o en <strong>Modo Dinero Real</strong> en IQ Option.
+                    <p id="modal-iqoption-desc"
+                        style="font-size:11px; color:#94A3B8; margin-bottom:10px; line-height:1.4;">
+                        Configura tus credenciales para operar en <strong>Modo Práctica (Demo $10,000 USD)</strong> o en
+                        <strong>Modo Dinero Real</strong> en IQ Option.
                     </p>
                     <div class="form-group" style="margin-bottom:8px;">
                         <label style="font-size:10.5px;">Correo Electrónico (Email de tu cuenta)</label>
-                        <input type="email" id="modal-iqoption-email" class="form-control" placeholder="tu_correo@gmail.com">
+                        <input type="email" id="modal-iqoption-email" class="form-control"
+                            placeholder="tu_correo@gmail.com">
                     </div>
                     <div class="form-group" style="margin-bottom:8px;">
                         <label style="font-size:10.5px;">Contraseña de IQ Option</label>
-                        <input type="password" id="modal-iqoption-password" class="form-control" placeholder="Tu contraseña de IQ Option">
+                        <input type="password" id="modal-iqoption-password" class="form-control"
+                            placeholder="Tu contraseña de IQ Option">
                     </div>
                     <div class="form-group" style="margin-bottom:0;">
-                        <label style="font-size:10.5px; display:flex; justify-content:space-between; align-items:center;">
-                            <span>Token SSID de Sesión <strong style="color:var(--cyber-cyan-bright);">(Recomendado para VPS)</strong></span>
-                            <span onclick="alert('🔑 Cómo obtener tu Token SSID en 10 segundos:\n\n1. Inicia sesión en iqoption.com desde tu navegador en tu PC.\n2. Presiona F12 (o Clic derecho > Inspeccionar) e ingresa a la pestaña \'Consola\'.\n3. Escribe o pega:\n   copy(document.cookie.match(/ssid=([^;]+)/)[1])\n   y presiona Enter.\n4. ¡Listo! Ya quedó copiado en tu portapapeles. Pégalo aquí en este campo.')" style="color:var(--cyber-cyan-bright); cursor:pointer; text-decoration:underline;">¿Cómo obtenerlo?</span>
+                        <label
+                            style="font-size:10.5px; display:flex; justify-content:space-between; align-items:center;">
+                            <span>Token SSID de Sesión <strong style="color:var(--cyber-cyan-bright);">(Recomendado para
+                                    VPS)</strong></span>
+                            <span
+                                onclick="alert('🔑 Cómo obtener tu Token SSID en 10 segundos:\n\n1. Inicia sesión en iqoption.com desde tu navegador en tu PC.\n2. Presiona F12 (o Clic derecho > Inspeccionar) e ingresa a la pestaña \'Consola\'.\n3. Escribe o pega:\n   copy(document.cookie.match(/ssid=([^;]+)/)[1])\n   y presiona Enter.\n4. ¡Listo! Ya quedó copiado en tu portapapeles. Pégalo aquí en este campo.')"
+                                style="color:var(--cyber-cyan-bright); cursor:pointer; text-decoration:underline;">¿Cómo
+                                obtenerlo?</span>
                         </label>
-                        <input type="password" id="modal-iqoption-ssid" class="form-control" placeholder="Pega tu Token SSID (Bypassea cualquier firewall del VPS)">
+                        <input type="password" id="modal-iqoption-ssid" class="form-control"
+                            placeholder="Pega tu Token SSID (Bypassea cualquier firewall del VPS)">
                     </div>
                 </div>
             </div>
@@ -2437,7 +2928,8 @@
                 </button>
                 <div style="display:flex; gap:8px;">
                     <button class="btn-action btn-ghost" onclick="closeModals()">Cerrar</button>
-                    <button class="btn-action btn-primary" onclick="saveEnvAndKeys()" id="modal-save-env-btn">Guardar y Conectar</button>
+                    <button class="btn-action btn-primary" onclick="saveEnvAndKeys()" id="modal-save-env-btn">Guardar y
+                        Conectar</button>
                 </div>
             </div>
         </div>
@@ -2447,48 +2939,70 @@
     <div class="modal-overlay" id="transfer-vault-modal" onclick="handleBackdropClick(event, 'transfer-vault-modal')">
         <div class="modal-card" style="max-width: 480px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-                <h3 style="margin:0; font-size:16px; color:var(--emerald-win); display:flex; align-items:center; gap:8px;">
+                <h3
+                    style="margin:0; font-size:16px; color:var(--emerald-win); display:flex; align-items:center; gap:8px;">
                     <span>🏛️ Bóveda de Ganancias Protegidas</span>
                 </h3>
-                <span class="stat-badge mono" style="background:rgba(16,185,129,0.2); color:var(--emerald-win); font-size:10px; padding:2px 6px;">🔒 INTOCABLE</span>
+                <span class="stat-badge mono"
+                    style="background:rgba(16,185,129,0.2); color:var(--emerald-win); font-size:10px; padding:2px 6px;">🔒
+                    INTOCABLE</span>
             </div>
 
-            <div style="background:rgba(16, 185, 129, 0.07); border:1px solid rgba(16, 185, 129, 0.25); border-radius:10px; padding:12px; margin-bottom:14px;">
+            <div
+                style="background:rgba(16, 185, 129, 0.07); border:1px solid rgba(16, 185, 129, 0.25); border-radius:10px; padding:12px; margin-bottom:14px;">
                 <div style="font-size:12px; color:#CBD5E1; line-height:1.5;">
-                    🛡️ <strong style="color:#FFF;">Regla de Protección de Capital:</strong> Las ganancias generadas por el bot se acumulan aquí y están <strong>100% blindadas</strong> para que nunca sean arriesgadas en operaciones automáticas. Solo cuando tú lo decidas puedes pasar este dinero al capital de operaciones.
+                    🛡️ <strong style="color:#FFF;">Regla de Protección de Capital:</strong> Las ganancias generadas por
+                    el bot se acumulan aquí y están <strong>100% blindadas</strong> para que nunca sean arriesgadas en
+                    operaciones automáticas. Solo cuando tú lo decidas puedes pasar este dinero al capital de
+                    operaciones.
                 </div>
             </div>
 
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
-                <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:10px;">
-                    <span style="font-size:10px; color:#94A3B8; text-transform:uppercase; font-weight:700;">Ganancias en Bóveda</span>
-                    <div class="mono" id="modal-vault-avail" style="font-size:18px; font-weight:700; color:var(--emerald-win); margin-top:3px;">+$0.35 USD</div>
+                <div
+                    style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:10px;">
+                    <span style="font-size:10px; color:#94A3B8; text-transform:uppercase; font-weight:700;">Ganancias en
+                        Bóveda</span>
+                    <div class="mono" id="modal-vault-avail"
+                        style="font-size:18px; font-weight:700; color:var(--emerald-win); margin-top:3px;">+$0.35 USD
+                    </div>
                 </div>
-                <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:10px;">
-                    <span style="font-size:10px; color:#94A3B8; text-transform:uppercase; font-weight:700;">Capital Operativo Base</span>
-                    <div class="mono" id="modal-vault-base" style="font-size:18px; font-weight:700; color:var(--binance-gold); margin-top:3px;">$30.00 USD</div>
+                <div
+                    style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:10px;">
+                    <span style="font-size:10px; color:#94A3B8; text-transform:uppercase; font-weight:700;">Capital
+                        Operativo Base</span>
+                    <div class="mono" id="modal-vault-base"
+                        style="font-size:18px; font-weight:700; color:var(--binance-gold); margin-top:3px;">$30.00 USD
+                    </div>
                 </div>
             </div>
 
             <div class="form-group" style="margin-bottom:12px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                    <label style="font-size:11px; margin-bottom:0; color:#E2E8F0;">Monto a transferir a capital operativo:</label>
-                    <button type="button" class="btn-xs-reinvest" onclick="setTransferVaultAll()" style="font-size:10px; padding:2px 6px;">
+                    <label style="font-size:11px; margin-bottom:0; color:#E2E8F0;">Monto a transferir a capital
+                        operativo:</label>
+                    <button type="button" class="btn-xs-reinvest" onclick="setTransferVaultAll()"
+                        style="font-size:10px; padding:2px 6px;">
                         Transferir Todo (100%)
                     </button>
                 </div>
                 <div style="position:relative;">
-                    <input type="number" id="transfer-vault-input" class="form-control mono" placeholder="0.00" step="0.01" min="0.01" style="font-size:15px; font-weight:700; color:#FFF; padding-left:26px;">
-                    <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#94A3B8; font-family:monospace; font-weight:700;">$</span>
+                    <input type="number" id="transfer-vault-input" class="form-control mono" placeholder="0.00"
+                        step="0.01" min="0.01" style="font-size:15px; font-weight:700; color:#FFF; padding-left:26px;">
+                    <span
+                        style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#94A3B8; font-family:monospace; font-weight:700;">$</span>
                 </div>
                 <span style="font-size:10.5px; color:#94A3B8; margin-top:5px; display:block;">
-                    Este monto se descontará de la bóveda y se sumará a tu capital disponible para que el bot abra más operaciones.
+                    Este monto se descontará de la bóveda y se sumará a tu capital disponible para que el bot abra más
+                    operaciones.
                 </span>
             </div>
 
             <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
                 <button class="btn-action btn-ghost" onclick="closeModals()">Cancelar</button>
-                <button class="btn-action" id="btn-submit-vault-transfer" style="background:linear-gradient(135deg, #059669 0%, #10B981 100%); color:#fff; border:none; font-weight:700; padding:8px 16px; border-radius:6px; cursor:pointer;" onclick="submitTransferVault()">
+                <button class="btn-action" id="btn-submit-vault-transfer"
+                    style="background:linear-gradient(135deg, #059669 0%, #10B981 100%); color:#fff; border:none; font-weight:700; padding:8px 16px; border-radius:6px; cursor:pointer;"
+                    onclick="submitTransferVault()">
                     💼 Confirmar Transferencia
                 </button>
             </div>
@@ -2502,16 +3016,19 @@
                 <h3 style="margin:0; font-size:16px; display:flex; align-items:center; gap:8px;">
                     <span>➕ Conectar Nuevo Broker o Exchange</span>
                 </h3>
-                <button class="btn-action btn-ghost" onclick="closeModals()" style="padding:2px 8px; font-size:12px;">✕</button>
+                <button class="btn-action btn-ghost" onclick="closeModals()"
+                    style="padding:2px 8px; font-size:12px;">✕</button>
             </div>
-            
+
             <p style="font-size:11.5px; color:var(--text-secondary); margin-bottom:14px; line-height:1.45;">
-                Arquitectura <strong>Multi-Broker Aislada</strong>: Cada broker opera con su propio libro contable, saldo y órdenes independientes. Cambiar de uno a otro no interrumpe ninguna orden activa.
+                Arquitectura <strong>Multi-Broker Aislada</strong>: Cada broker opera con su propio libro contable,
+                saldo y órdenes independientes. Cambiar de uno a otro no interrumpe ninguna orden activa.
             </p>
 
             <div class="form-group" style="margin-bottom:12px;">
                 <label>Broker / Exchange a Conectar</label>
-                <select id="new-broker-select" class="form-control" onchange="onBrokerSelectChange()" style="background:#0F172A; color:#F8FAFC; border:1px solid rgba(255,255,255,0.14); padding:9px 12px; border-radius:6px; width:100%; font-size:12.5px;">
+                <select id="new-broker-select" class="form-control" onchange="onBrokerSelectChange()"
+                    style="background:#0F172A; color:#F8FAFC; border:1px solid rgba(255,255,255,0.14); padding:9px 12px; border-radius:6px; width:100%; font-size:12.5px;">
                     <option value="ALPACA">🏛️ Alpaca Markets (Wall Street / Acciones & ETFs)</option>
                     <option value="BINANCE">🪙 Binance Spot (Criptomonedas 24/7)</option>
                     <option value="BYBIT">⚡ Bybit (Cripto & Derivados)</option>
@@ -2528,11 +3045,14 @@
 
             <div class="form-group" style="margin-bottom:14px;">
                 <label id="new-broker-secret-label">API Secret / Private Token</label>
-                <input type="password" id="new-broker-secret" class="form-control" placeholder="Pega tu Secret Key privada">
+                <input type="password" id="new-broker-secret" class="form-control"
+                    placeholder="Pega tu Secret Key privada">
             </div>
 
-            <div id="new-broker-hint" style="background:rgba(56,189,248,0.06); border:1px solid rgba(56,189,248,0.2); border-radius:6px; padding:10px 12px; margin-bottom:16px; font-size:11px; color:var(--text-secondary); line-height:1.4;">
-                🔒 <strong>Aislamiento Total de Capital:</strong> Cada broker opera con su propio libro contable, saldo y órdenes independientes 24/7 sin mezclar fondos.
+            <div id="new-broker-hint"
+                style="background:rgba(56,189,248,0.06); border:1px solid rgba(56,189,248,0.2); border-radius:6px; padding:10px 12px; margin-bottom:16px; font-size:11px; color:var(--text-secondary); line-height:1.4;">
+                🔒 <strong>Aislamiento Total de Capital:</strong> Cada broker opera con su propio libro contable, saldo
+                y órdenes independientes 24/7 sin mezclar fondos.
             </div>
 
             <div style="display:flex; justify-content:flex-end; gap:8px;">
@@ -2543,37 +3063,46 @@
     </div>
 
     <!-- ==================== MODAL DE GRÁFICO MAXIMIZADO (FULLSCREEN) ==================== -->
-    <div class="modal-overlay" id="chart-fullscreen-modal" onclick="handleBackdropClick(event, 'chart-fullscreen-modal')">
-        <div class="modal-card" style="width:95vw; max-width:1440px; height:88vh; display:flex; flex-direction:column; padding:16px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--border-subtle); padding-bottom:10px;">
+    <div class="modal-overlay" id="chart-fullscreen-modal"
+        onclick="handleBackdropClick(event, 'chart-fullscreen-modal')">
+        <div class="modal-card"
+            style="width:95vw; max-width:1440px; height:88vh; display:flex; flex-direction:column; padding:16px;">
+            <div
+                style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--border-subtle); padding-bottom:10px;">
                 <div style="display:flex; align-items:center; gap:12px;">
                     <span id="fs-chart-icon" style="font-size:26px;">💶</span>
                     <div>
                         <div style="display:flex; align-items:center; gap:8px;">
-                            <span id="fs-chart-symbol" style="font-size:18px; font-weight:800; font-family:var(--font-mono);">EURUSD</span>
+                            <span id="fs-chart-symbol"
+                                style="font-size:18px; font-weight:800; font-family:var(--font-mono);">EURUSD</span>
                             <span id="fs-chart-name" style="font-size:12px; color:var(--text-muted);">EUR / USD</span>
                             <span id="fs-chart-badge" class="cat-chip cat-forex">💱 Forex</span>
                         </div>
                     </div>
                     <div style="display:flex; align-items:baseline; gap:8px; margin-left:14px;">
-                        <span id="fs-chart-price" class="mono" style="font-size:20px; font-weight:800; color:var(--text-primary);">$0.00</span>
+                        <span id="fs-chart-price" class="mono"
+                            style="font-size:20px; font-weight:800; color:var(--text-primary);">$0.00</span>
                         <span id="fs-chart-change" class="change-pill mono positive-bg">+0.00%</span>
                     </div>
                 </div>
 
                 <div style="display:flex; align-items:center; gap:10px;">
                     <div class="chart-timeframe-group">
-                        <button class="timeframe-pill fs-tf active" id="fs-tf-1m" onclick="setChartTimeframe('1m')">1m</button>
+                        <button class="timeframe-pill fs-tf active" id="fs-tf-1m"
+                            onclick="setChartTimeframe('1m')">1m</button>
                         <button class="timeframe-pill fs-tf" id="fs-tf-5m" onclick="setChartTimeframe('5m')">5m</button>
-                        <button class="timeframe-pill fs-tf" id="fs-tf-15m" onclick="setChartTimeframe('15m')">15m</button>
+                        <button class="timeframe-pill fs-tf" id="fs-tf-15m"
+                            onclick="setChartTimeframe('15m')">15m</button>
                         <button class="timeframe-pill fs-tf" id="fs-tf-1h" onclick="setChartTimeframe('1h')">1h</button>
                     </div>
-                    <button class="btn-action btn-ghost" onclick="toggleFullscreenChart()" style="padding:4px 10px; font-size:12px;">✕ Cerrar</button>
+                    <button class="btn-action btn-ghost" onclick="toggleFullscreenChart()"
+                        style="padding:4px 10px; font-size:12px;">✕ Cerrar</button>
                 </div>
             </div>
 
             <!-- Contenedor del gráfico en pantalla gigante -->
-            <div id="fullscreen-chart-container" style="flex:1; width:100%; border-radius:8px; overflow:hidden; background:radial-gradient(circle at 50% 50%, rgba(11, 18, 33, 0.85) 0%, rgba(5, 8, 16, 0.95) 100%); border:1px solid rgba(255,255,255,0.06);">
+            <div id="fullscreen-chart-container"
+                style="flex:1; width:100%; border-radius:8px; overflow:hidden; background:radial-gradient(circle at 50% 50%, rgba(11, 18, 33, 0.85) 0%, rgba(5, 8, 16, 0.95) 100%); border:1px solid rgba(255,255,255,0.06);">
             </div>
         </div>
     </div>
@@ -2581,21 +3110,26 @@
     <!-- ==================== MODAL DE EXPORTACIÓN DE HISTÓRICO POR DÍA ==================== -->
     <div class="modal-overlay" id="export-modal" onclick="handleBackdropClick(event, 'export-modal')">
         <div class="modal-card" style="max-width:540px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--border-subtle); padding-bottom:10px;">
+            <div
+                style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--border-subtle); padding-bottom:10px;">
                 <h3 style="font-size:16px; margin:0; display:flex; align-items:center; gap:8px;">
                     <span>📥 Exportar Histórico por Día</span>
                 </h3>
-                <button class="btn-action btn-ghost" onclick="closeModals()" style="padding:2px 8px; font-size:12px;">✕</button>
+                <button class="btn-action btn-ghost" onclick="closeModals()"
+                    style="padding:2px 8px; font-size:12px;">✕</button>
             </div>
-            
+
             <p style="font-size:11.5px; color:#94A3B8; margin-bottom:16px; line-height:1.4;">
-                Descarga el registro completo de transacciones agrupadas por día con todas sus métricas cuantitativas (Win Rate, PnL, Profit Factor, Volumen invertido y desglose de cada trade).
+                Descarga el registro completo de transacciones agrupadas por día con todas sus métricas cuantitativas
+                (Win Rate, PnL, Profit Factor, Volumen invertido y desglose de cada trade).
             </p>
 
             <div class="form-group">
                 <label>Broker de la Exportación</label>
-                <div style="padding:10px 14px; border-radius:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); font-size:12px; font-weight:700; display:flex; align-items:center; gap:8px;" id="export-modal-broker-display">
-                    <span style="color:var(--binance-gold); display:flex; align-items:center; gap:6px;"><span>🪙</span> <span>Binance Spot (Cripto 24/7)</span></span>
+                <div style="padding:10px 14px; border-radius:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); font-size:12px; font-weight:700; display:flex; align-items:center; gap:8px;"
+                    id="export-modal-broker-display">
+                    <span style="color:var(--binance-gold); display:flex; align-items:center; gap:6px;"><span>🪙</span>
+                        <span>Binance Spot (Cripto 24/7)</span></span>
                 </div>
                 <input type="hidden" id="export-modal-broker" value="BINANCE">
             </div>
@@ -2603,57 +3137,78 @@
             <div class="form-group" style="margin-top:14px;">
                 <label>Formato y Estructura del Reporte</label>
                 <div style="display:flex; flex-direction:column; gap:8px; margin-top:6px;">
-                    <label style="display:flex; align-items:flex-start; gap:10px; padding:10px 12px; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.3); border-radius:8px; cursor:pointer;">
+                    <label
+                        style="display:flex; align-items:flex-start; gap:10px; padding:10px 12px; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.3); border-radius:8px; cursor:pointer;">
                         <input type="radio" name="export_mode" value="pdf" checked style="margin-top:3px;">
                         <div>
-                            <div style="font-size:12px; font-weight:700; color:#F87171; display:flex; align-items:center; gap:6px;">
+                            <div
+                                style="font-size:12px; font-weight:700; color:#F87171; display:flex; align-items:center; gap:6px;">
                                 <span>📕 Reporte Gráfico Institucional (PDF)</span>
-                                <span class="mono" style="font-size:9px; padding:1px 5px; border-radius:3px; background:rgba(239,68,68,0.2); color:#FCA5A5;">RECOMENDADO</span>
+                                <span class="mono"
+                                    style="font-size:9px; padding:1px 5px; border-radius:3px; background:rgba(239,68,68,0.2); color:#FCA5A5;">RECOMENDADO</span>
                             </div>
-                            <div style="font-size:11px; color:#94A3B8; margin-top:2px;">Documento ejecutivo con <b>gráficos de barras de rendimiento diario (PnL)</b>, tasa de acierto, tarjetas de KPIs y tablas de auditoría.</div>
+                            <div style="font-size:11px; color:#94A3B8; margin-top:2px;">Documento ejecutivo con
+                                <b>gráficos de barras de rendimiento diario (PnL)</b>, tasa de acierto, tarjetas de KPIs
+                                y tablas de auditoría.</div>
                         </div>
                     </label>
 
-                    <label style="display:flex; align-items:flex-start; gap:10px; padding:10px 12px; background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.3); border-radius:8px; cursor:pointer;">
+                    <label
+                        style="display:flex; align-items:flex-start; gap:10px; padding:10px 12px; background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.3); border-radius:8px; cursor:pointer;">
                         <input type="radio" name="export_mode" value="xlsx" style="margin-top:3px;">
                         <div>
-                            <div style="font-size:12px; font-weight:700; color:#34D399; display:flex; align-items:center; gap:6px;">
+                            <div
+                                style="font-size:12px; font-weight:700; color:#34D399; display:flex; align-items:center; gap:6px;">
                                 <span>📊 Libro de Trabajo con Gráficos Nativos (Excel .xlsx)</span>
-                                <span class="mono" style="font-size:9px; padding:1px 5px; border-radius:3px; background:rgba(16,185,129,0.2); color:#6EE7B7;">INTERACTIVO</span>
+                                <span class="mono"
+                                    style="font-size:9px; padding:1px 5px; border-radius:3px; background:rgba(16,185,129,0.2); color:#6EE7B7;">INTERACTIVO</span>
                             </div>
-                            <div style="font-size:11px; color:#94A3B8; margin-top:2px;">2 hojas formateadas: Resumen Diario con <b>gráficos de barras interactivos nativos de Excel</b> + Hoja de Detalle de Operaciones.</div>
+                            <div style="font-size:11px; color:#94A3B8; margin-top:2px;">2 hojas formateadas: Resumen
+                                Diario con <b>gráficos de barras interactivos nativos de Excel</b> + Hoja de Detalle de
+                                Operaciones.</div>
                         </div>
                     </label>
 
-                    <label style="display:flex; align-items:flex-start; gap:10px; padding:10px 12px; background:rgba(56,189,248,0.06); border:1px solid rgba(56,189,248,0.25); border-radius:8px; cursor:pointer;">
+                    <label
+                        style="display:flex; align-items:flex-start; gap:10px; padding:10px 12px; background:rgba(56,189,248,0.06); border:1px solid rgba(56,189,248,0.25); border-radius:8px; cursor:pointer;">
                         <input type="radio" name="export_mode" value="complete" style="margin-top:3px;">
                         <div>
-                            <div style="font-size:12px; font-weight:700; color:var(--cyber-cyan-bright);">🌟 Reporte Integral en CSV (Excel / Sheets)</div>
-                            <div style="font-size:11px; color:#94A3B8; margin-top:2px;">Archivo de texto delimitado con resumen por día y desglose individual completo.</div>
+                            <div style="font-size:12px; font-weight:700; color:var(--cyber-cyan-bright);">🌟 Reporte
+                                Integral en CSV (Excel / Sheets)</div>
+                            <div style="font-size:11px; color:#94A3B8; margin-top:2px;">Archivo de texto delimitado con
+                                resumen por día y desglose individual completo.</div>
                         </div>
                     </label>
 
-                    <label style="display:flex; align-items:flex-start; gap:10px; padding:10px 12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); border-radius:8px; cursor:pointer;">
+                    <label
+                        style="display:flex; align-items:flex-start; gap:10px; padding:10px 12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); border-radius:8px; cursor:pointer;">
                         <input type="radio" name="export_mode" value="daily_summary" style="margin-top:3px;">
                         <div>
-                            <div style="font-size:12px; font-weight:700; color:var(--text-primary);">📊 Solo Resumen Diario de Métricas (CSV)</div>
-                            <div style="font-size:11px; color:#94A3B8; margin-top:2px;">Una fila por jornada: Win Rate, PnL Neto, Profit Factor, Volumen Invertido y Extremos.</div>
+                            <div style="font-size:12px; font-weight:700; color:var(--text-primary);">📊 Solo Resumen
+                                Diario de Métricas (CSV)</div>
+                            <div style="font-size:11px; color:#94A3B8; margin-top:2px;">Una fila por jornada: Win Rate,
+                                PnL Neto, Profit Factor, Volumen Invertido y Extremos.</div>
                         </div>
                     </label>
 
-                    <label style="display:flex; align-items:flex-start; gap:10px; padding:10px 12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); border-radius:8px; cursor:pointer;">
+                    <label
+                        style="display:flex; align-items:flex-start; gap:10px; padding:10px 12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); border-radius:8px; cursor:pointer;">
                         <input type="radio" name="export_mode" value="json" style="margin-top:3px;">
                         <div>
-                            <div style="font-size:12px; font-weight:700; color:var(--text-primary);">{ } Histórico Estructurado JSON</div>
-                            <div style="font-size:11px; color:#94A3B8; margin-top:2px;">Archivo JSON nativo estructurado por días y operaciones para análisis automatizado.</div>
+                            <div style="font-size:12px; font-weight:700; color:var(--text-primary);">{ } Histórico
+                                Estructurado JSON</div>
+                            <div style="font-size:11px; color:#94A3B8; margin-top:2px;">Archivo JSON nativo estructurado
+                                por días y operaciones para análisis automatizado.</div>
                         </div>
                     </label>
                 </div>
             </div>
 
-            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:20px; border-top:1px solid var(--border-subtle); padding-top:14px;">
+            <div
+                style="display:flex; justify-content:flex-end; gap:8px; margin-top:20px; border-top:1px solid var(--border-subtle); padding-top:14px;">
                 <button class="btn-action btn-ghost" onclick="closeModals()">Cancelar</button>
-                <button class="btn-action btn-primary" onclick="executeModalExport()" style="display:inline-flex; align-items:center; gap:6px;">
+                <button class="btn-action btn-primary" onclick="executeModalExport()"
+                    style="display:inline-flex; align-items:center; gap:6px;">
                     <span>📥 Descargar Archivo</span>
                 </button>
             </div>
@@ -2818,14 +3373,14 @@
             const isForex = ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD', 'EURGBP', 'EURJPY', 'GBPJPY'].includes(currentCandleSymbol) || currentCandleSymbol.includes('USD') || currentCandleSymbol.includes('EUR') || currentCandleSymbol.includes('GBP');
             const isJpy = currentCandleSymbol.includes('JPY');
             const dec = isForex ? (isJpy ? 3 : 5) : (close < 1 ? 4 : 2);
-            const fmt = v => typeof v === 'number' ? `$${v.toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec})}` : '$0.00';
-            
+            const fmt = v => typeof v === 'number' ? `$${v.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })}` : '$0.00';
+
             const oEl = document.getElementById('ohlc-open');
             const hEl = document.getElementById('ohlc-high');
             const lEl = document.getElementById('ohlc-low');
             const cEl = document.getElementById('ohlc-close');
             const vEl = document.getElementById('ohlc-vol');
-            
+
             if (oEl) oEl.innerText = fmt(open);
             if (hEl) hEl.innerText = fmt(high);
             if (lEl) lEl.innerText = fmt(low);
@@ -2833,7 +3388,7 @@
                 cEl.innerText = fmt(close);
                 cEl.style.color = (close >= open) ? 'var(--emerald-win)' : 'var(--neon-rose)';
             }
-            if (vEl) vEl.innerText = typeof vol === 'number' ? vol.toLocaleString('en-US', {maximumFractionDigits:1}) : vol;
+            if (vEl) vEl.innerText = typeof vol === 'number' ? vol.toLocaleString('en-US', { maximumFractionDigits: 1 }) : vol;
         }
 
         async function fetchCandleData(symbol, timeframe, isInitial = false) {
@@ -2886,7 +3441,7 @@
                 if (symEl) symEl.innerText = data.symbol;
                 if (nameEl) nameEl.innerText = data.name;
                 if (iconEl) iconEl.innerText = data.icon || '📈';
-                
+
                 if (badgeEl) {
                     if (data.category === 'TRADFI_STOCK') {
                         badgeEl.className = 'cat-chip cat-tradfi';
@@ -2903,15 +3458,15 @@
                     }
                 }
 
-                if (priceEl) priceEl.innerText = `$${(data.price || 0).toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec})}`;
+                if (priceEl) priceEl.innerText = `$${(data.price || 0).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })}`;
                 if (chgEl) {
                     const chg = data.change_percent || 0;
                     chgEl.className = `change-pill mono ${chg >= 0 ? 'positive-bg' : 'negative-bg'}`;
                     chgEl.innerText = `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`;
                 }
 
-                if (suppEl) suppEl.innerText = `$${(data.support || 0).toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec})}`;
-                if (resEl) resEl.innerText = `$${(data.resistance || 0).toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec})}`;
+                if (suppEl) suppEl.innerText = `$${(data.support || 0).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })}`;
+                if (resEl) resEl.innerText = `$${(data.resistance || 0).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })}`;
                 if (rsiEl) rsiEl.innerText = (data.rsi || 50.0).toFixed(1);
                 if (decEl) {
                     decEl.innerText = `${data.ai_decision} (${data.ai_confidence || 50}%)`;
@@ -2986,7 +3541,7 @@
             if (!candleSeries) return;
 
             candlePriceLines.forEach(line => {
-                try { candleSeries.removePriceLine(line); } catch (e) {}
+                try { candleSeries.removePriceLine(line); } catch (e) { }
             });
             candlePriceLines = [];
 
@@ -3082,7 +3637,7 @@
 
             const priceEl = document.getElementById('chart-current-price');
             const chgEl = document.getElementById('chart-change-pill');
-            if (priceEl) priceEl.innerText = `$${p.toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec})}`;
+            if (priceEl) priceEl.innerText = `$${p.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })}`;
             if (chgEl) {
                 const chg = asset.change_percent || 0;
                 chgEl.className = `change-pill mono ${chg >= 0 ? 'positive-bg' : 'negative-bg'}`;
@@ -3161,7 +3716,7 @@
         function initCandleAssetSelectors(assets) {
             if (!assets || assets.length === 0) return;
             const currentBroker = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'BINANCE';
-            
+
             // Si no ha cambiado de broker y ya fue inicializado, sincronizar solo la clase activa de los pills
             if (lastCatalogBroker === currentBroker && candleCatalogInitialized) {
                 document.querySelectorAll('.quick-pill').forEach(pill => {
@@ -3189,12 +3744,12 @@
             const quickBar = document.getElementById('asset-quick-bar');
             if (quickBar) {
                 // Activos prioritarios estrictos por broker (CERO mezcla)
-                const brokerPills = (currentBroker === 'ALPACA') 
+                const brokerPills = (currentBroker === 'ALPACA')
                     ? ['NVDA', 'TSLA', 'AAPL', 'META', 'AMZN', 'GOOGL', 'MSFT', 'AMD', 'SPY', 'QQQ', 'INTC', 'MU']
                     : ((currentBroker === 'IQOPTION')
                         ? ['EURUSD', 'GBPUSD', 'USDJPY', 'EURJPY', 'GBPJPY', 'AUDUSD', 'USDCAD', 'EURGBP']
                         : ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA', 'AVAX', 'LINK', 'NEAR']);
-                
+
                 let pillsHtml = '';
                 brokerPills.forEach(sym => {
                     const item = assets.find(a => a.symbol === sym);
@@ -3368,7 +3923,7 @@
                     badgeEl.innerText = '🏛️ TradFi';
                 }
             }
-            if (priceEl) priceEl.innerText = `$${(data.price || 0).toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec})}`;
+            if (priceEl) priceEl.innerText = `$${(data.price || 0).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })}`;
             if (chgEl) {
                 const chg = data.change_percent || 0;
                 chgEl.className = `change-pill mono ${chg >= 0 ? 'positive-bg' : 'negative-bg'}`;
@@ -3461,11 +4016,11 @@
                         const bName = bInfo.name || 'IQ Option';
                         const bEq = (bInfo.equity !== undefined) ? bInfo.equity : 0;
                         const activeClass = 'active';
-                        
+
                         const userTag = bInfo.logged_user ? `<span style="font-size:9.5px; color:#A0AEC0; font-weight:normal; max-width:95px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="Cuenta: ${bInfo.logged_user}">(${bInfo.logged_user})</span>` : '';
-                        
+
                         const bCurr = bInfo.currency || 'COP';
-                        const formattedEq = bCurr === 'COP' ? `COP ${bEq.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}` : `$${bEq.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} USD`;
+                        const formattedEq = bCurr === 'COP' ? `COP ${bEq.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `$${bEq.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
 
                         pillsHtml += `
                             <button type="button" class="broker-pill-btn ${activeClass}" id="broker-tab-${bId.toLowerCase()}" onclick="selectActiveBroker('${bId}')" title="Operaciones de ${bName} ${bInfo.logged_user ? '(' + bInfo.logged_user + ')' : ''}">
@@ -3478,7 +4033,7 @@
                             </button>
                         `;
                     });
-                    
+
                     pillsContainer.innerHTML = pillsHtml;
                 } else {
                     // Actualización fluida sin destruir el DOM ni causar parpadeo/rebotes
@@ -3492,7 +4047,7 @@
                         const isBin = (bId === 'BINANCE');
                         const isAlp = (bId === 'ALPACA');
                         const bCurr = bInfo.currency || (bId === 'IQOPTION' ? 'COP' : 'USD');
-                        const formattedEq = bCurr === 'COP' ? `COP ${bEq.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}` : `$${bEq.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} USD`;
+                        const formattedEq = bCurr === 'COP' ? `COP ${bEq.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `$${bEq.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
 
                         if (eqEl) {
                             eqEl.innerText = formattedEq;
@@ -3532,12 +4087,12 @@
             // Métricas Bento & Bóveda
             const activeCurr = fin.currency || (activeBroker === 'IQOPTION' ? 'COP' : 'USD');
             const currSym = activeCurr === 'COP' ? 'COP ' : '$';
-            document.getElementById('total-equity').innerText = `${currSym}${(fin.total_equity || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
-            
+            document.getElementById('total-equity').innerText = `${currSym}${(fin.total_equity || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
             const baseCap = fin.operating_capital_base !== undefined ? fin.operating_capital_base : (fin.initial_balance || 0);
             const availCash = fin.cash_available || 0;
             const unPnL = fin.unrealized_pnl || 0;
-            let cashSubtext = `Base: ${currSym}${baseCap.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} · Disp: ${currSym}${availCash.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+            let cashSubtext = `Base: ${currSym}${baseCap.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · Disp: ${currSym}${availCash.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
             if (Math.abs(unPnL) >= 0.01) {
                 const unPnLSign = unPnL >= 0 ? '+' : '';
                 cashSubtext += ` · Flotante: <span style="color:${unPnL >= 0 ? 'var(--emerald-win)' : 'var(--neon-rose)'}">${unPnLSign}${currSym}${unPnL.toFixed(2)}</span>`;
@@ -3589,7 +4144,7 @@
             const pnlUsd = fin.total_profit_usd || 0;
             const pnlPct = fin.total_profit_percent || 0;
             const pnlEl = document.getElementById('total-pnl-usd');
-            pnlEl.innerText = `${pnlUsd >= 0 ? '+' : ''}${currSym}${pnlUsd.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%)`;
+            pnlEl.innerText = `${pnlUsd >= 0 ? '+' : ''}${currSym}${pnlUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%)`;
             pnlEl.className = pnlUsd >= 0 ? 'mono positive' : 'mono negative';
 
             // Cuantitativo & Kelly
@@ -3609,7 +4164,7 @@
             const splitText = ties > 0 ? `${wins}G / ${losses}P / ${ties}E` : `${wins}G / ${losses}P`;
             document.getElementById('win-loss-split').innerText = splitText;
             const realPnl = fin.realized_pnl || 0;
-            document.getElementById('realized-pnl').innerText = `${realPnl >= 0 ? '+' : ''}${currSym}${realPnl.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} Neto`;
+            document.getElementById('realized-pnl').innerText = `${realPnl >= 0 ? '+' : ''}${currSym}${realPnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Neto`;
             document.getElementById('realized-pnl').className = realPnl >= 0 ? 'mono positive' : 'mono negative';
 
             // Circuit Breakers
@@ -3617,7 +4172,10 @@
             const rawMaxLoss = (sys.max_loss_amount !== undefined && sys.max_loss_amount !== null) ? Number(sys.max_loss_amount) : 0;
             const isLossEnabled = sys.max_loss_enabled !== false;
 
-            document.getElementById('target-usd').innerText = targetAmount;
+            const riskCurrency = activeCurr === 'COP' ? 'COP' : 'USD';
+            document.querySelectorAll('.risk-currency').forEach(el => el.innerText = riskCurrency);
+            document.getElementById('risk-currency').innerText = riskCurrency;
+            document.getElementById('target-usd').innerText = targetAmount.toLocaleString('en-US', { maximumFractionDigits: 2 });
             const lossBadge = document.getElementById('loss-usd-badge');
             if (isLossEnabled) {
                 if (lossBadge) {
@@ -3625,16 +4183,16 @@
                     lossBadge.style.color = '#FDA4AF';
                     lossBadge.style.borderColor = 'rgba(244,63,94,0.3)';
                     if (rawMaxLoss === 0) {
-                        lossBadge.innerHTML = `-<span id="loss-usd">0</span> USD (Cero Pérdidas)`;
+                        lossBadge.innerHTML = `-<span id="loss-usd">0</span> ${riskCurrency} (Entradas bloqueadas)`;
                     } else {
-                        lossBadge.innerHTML = `-<span id="loss-usd">${rawMaxLoss}</span> USD`;
+                        lossBadge.innerHTML = `-<span id="loss-usd">${rawMaxLoss.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span> ${riskCurrency}`;
                     }
                 }
                 if (rawMaxLoss === 0) {
-                    document.getElementById('loss-remaining-text').innerText = `🛡️ Tolerancia Cero (0 Pérdidas)`;
+                    document.getElementById('loss-remaining-text').innerText = `🛡️ Tolerancia Cero: nuevas entradas bloqueadas`;
                 } else {
-                    const lossRemaining = Math.max(0, rawMaxLoss + pnlUsd);
-                    document.getElementById('loss-remaining-text').innerText = `$${lossRemaining.toFixed(2)} Margen`;
+                    const lossRemaining = Math.max(0, rawMaxLoss + realPnl);
+                    document.getElementById('loss-remaining-text').innerText = `${riskCurrency} ${lossRemaining.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} de margen`;
                 }
             } else {
                 if (lossBadge) {
@@ -3674,7 +4232,7 @@
             // Técnicas Cuantitativas Avanzadas
             const funding = data.funding_arbitrage || {};
             const macroShield = data.news_macro_shield || {};
-            
+
             if (funding.top_opportunity) {
                 const topOpp = funding.top_opportunity;
                 document.getElementById('top-funding-badge').innerText = `${topOpp.symbol}: +${topOpp.apr_percent}% APR`;
@@ -3771,7 +4329,7 @@
             const tradfiCount = latestMarketData.filter(i => i.category === 'TRADFI_STOCK').length;
             const cryptoCount = latestMarketData.filter(i => i.category === 'CRYPTO').length;
             const etfCount = latestMarketData.filter(i => i.category === 'ETF').length;
-            
+
             const badgeEl = document.getElementById('asset-count-badge');
             if (badgeEl) badgeEl.innerText = `(${latestMarketData.length} Activos)`;
             const wsBadgeRadar = document.getElementById('ws-badge-radar');
@@ -3824,7 +4382,7 @@
                 const chg = item.change_percent || 0;
                 const chgClass = chg >= 0 ? 'positive-bg' : 'negative-bg';
                 const chgSign = chg >= 0 ? '+' : '';
-                
+
                 let catBadge = '';
                 if (item.category === 'TRADFI_STOCK') {
                     catBadge = `<span class="cat-chip cat-tradfi" title="Operable vía Alpaca Markets">🏛️ Wall Street</span>`;
@@ -3874,7 +4432,7 @@
                             </div>
                         </td>
                         <td>${catBadge}</td>
-                        <td class="mono price-text" style="color:#F8FAFC; font-weight:600;">$${(item.price || 0).toLocaleString('en-US', {minimumFractionDigits: item.price < 1 ? 4 : 2, maximumFractionDigits: item.price < 1 ? 4 : 2})}</td>
+                        <td class="mono price-text" style="color:#F8FAFC; font-weight:600;">$${(item.price || 0).toLocaleString('en-US', { minimumFractionDigits: item.price < 1 ? 4 : 2, maximumFractionDigits: item.price < 1 ? 4 : 2 })}</td>
                         <td><span class="change-pill mono ${chgClass}">${chgSign}${chg.toFixed(2)}%</span></td>
                         <td class="mono" style="font-size:11px;">
                             <span style="color:var(--text-primary);">RSI ${item.rsi || 50}</span>
@@ -3903,10 +4461,10 @@
                                 <button class="btn-action btn-ghost" style="padding:3px 8px; font-size:10.5px; border-radius:4px;" onclick="selectCandleAsset('${item.symbol}')" title="Ver Gráfico de Velas">
                                     📈 Velas
                                 </button>
-                                ${item.is_open ? 
-                                    `<button class="btn-action btn-danger" style="padding:3px 8px; font-size:10.5px; border-radius:4px;" onclick="closeSinglePosition('${item.symbol}')">Cerrar</button>` :
-                                    ''
-                                }
+                                ${item.is_open ?
+                        `<button class="btn-action btn-danger" style="padding:3px 8px; font-size:10.5px; border-radius:4px;" onclick="closeSinglePosition('${item.symbol}')">Cerrar</button>` :
+                        ''
+                    }
                             </div>
                         </td>
                     </tr>
@@ -4140,7 +4698,7 @@
         // Acciones del Motor
         async function toggleEngine() {
             const activeBroker = currentActiveBroker || (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'BINANCE';
-            await fetch('/api/control/toggle', { 
+            await fetch('/api/control/toggle', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ broker: activeBroker })
@@ -4152,7 +4710,7 @@
             const activeBroker = currentActiveBroker || (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'BINANCE';
             const bName = (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.brokers && latestSystemData.system_status.brokers[activeBroker] && latestSystemData.system_status.brokers[activeBroker].name) || activeBroker;
             if (confirm(`¿Confirmas la PARADA DE EMERGENCIA para ${bName}? Se cerrarán las posiciones y se detendrán las operaciones de este broker (los demás brokers continuarán funcionando normalmente).`)) {
-                await fetch('/api/control/emergency-close', { 
+                await fetch('/api/control/emergency-close', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ broker: activeBroker })
@@ -4296,7 +4854,7 @@
                 const brokerInfo = (sys.brokers && sys.brokers[activeBroker]) || {};
                 const brokerIcon = brokerInfo.icon || (activeBroker === 'IQOPTION' ? '📈' : '🪙');
                 const brokerName = brokerInfo.name || activeBroker;
-                
+
                 const titleEl = document.getElementById('settings-modal-title');
                 if (titleEl) {
                     titleEl.innerText = `⚙️ Ajustes & Configuración (${brokerIcon} ${brokerName})`;
@@ -4528,25 +5086,25 @@
             const activeBroker = sys.active_broker || 'BINANCE';
             const brokers = sys.brokers || {};
             const brokerInfo = brokers[activeBroker] || {};
-            
+
             const currentVault = brokerInfo.profit_vault !== undefined ? brokerInfo.profit_vault : (fin.profit_vault || 0);
             const currentBase = brokerInfo.initial_balance !== undefined ? brokerInfo.initial_balance : (fin.operating_capital_base || fin.initial_balance || 30.0);
-            
+
             const availEl = document.getElementById('modal-vault-avail');
             if (availEl) {
-                availEl.innerText = `+$${currentVault.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} USD`;
+                availEl.innerText = `+$${currentVault.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
             }
             const baseEl = document.getElementById('modal-vault-base');
             if (baseEl) {
-                baseEl.innerText = `$${currentBase.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} USD`;
+                baseEl.innerText = `$${currentBase.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
             }
-            
+
             const inputEl = document.getElementById('transfer-vault-input');
             if (inputEl) {
                 inputEl.value = currentVault > 0 ? currentVault.toFixed(2) : '';
                 inputEl.max = currentVault.toFixed(2);
             }
-            
+
             document.getElementById('transfer-vault-modal').classList.add('active');
         }
 
@@ -4557,7 +5115,7 @@
             const brokers = sys.brokers || {};
             const brokerInfo = brokers[activeBroker] || {};
             const currentVault = brokerInfo.profit_vault !== undefined ? brokerInfo.profit_vault : (fin.profit_vault || 0);
-            
+
             const inputEl = document.getElementById('transfer-vault-input');
             if (inputEl) {
                 inputEl.value = currentVault.toFixed(2);
@@ -4570,18 +5128,18 @@
             const inputEl = document.getElementById('transfer-vault-input');
             const rawVal = inputEl ? inputEl.value : '';
             const amount = parseFloat(rawVal);
-            
+
             if (isNaN(amount) || amount <= 0) {
                 alert('⚠️ Por favor ingresa un monto válido mayor a $0.00 para transferir.');
                 return;
             }
-            
+
             const btn = document.getElementById('btn-submit-vault-transfer');
             if (btn) {
                 btn.disabled = true;
                 btn.innerText = 'Transfiriendo...';
             }
-            
+
             try {
                 const res = await fetch('/api/control/transfer-vault', {
                     method: 'POST',
@@ -4811,11 +5369,11 @@
             if (kpiWr) kpiWr.innerText = `${globalWinRate}%`;
             const pnlEl = document.getElementById('hist-kpi-pnl');
             if (pnlEl) {
-                pnlEl.innerText = `${totalPnl >= 0 ? '+' : ''}$${totalPnl.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+                pnlEl.innerText = `${totalPnl >= 0 ? '+' : ''}$${totalPnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                 pnlEl.style.color = totalPnl >= 0 ? 'var(--emerald-win)' : 'var(--neon-rose)';
             }
             const kpiVol = document.getElementById('hist-kpi-volume');
-            if (kpiVol) kpiVol.innerText = `$${totalVol.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+            if (kpiVol) kpiVol.innerText = `$${totalVol.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
             const kpiPf = document.getElementById('hist-kpi-pf');
             if (kpiPf) kpiPf.innerText = `${globalPf}x`;
             const badgeEl = document.getElementById('history-total-days-badge');
@@ -4840,8 +5398,8 @@
                 const pnlColor = pnl >= 0 ? 'var(--emerald-win)' : 'var(--neon-rose)';
                 const pnlBg = pnl >= 0 ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)';
                 const wrColor = (d.win_rate >= 50) ? 'var(--emerald-win)' : ((d.win_rate >= 40) ? 'var(--binance-gold)' : 'var(--neon-rose)');
-                const brokerChip = d.broker === 'BINANCE' 
-                    ? '<span class="cat-chip cat-crypto" style="font-size:10px;">🪙 Binance</span>' 
+                const brokerChip = d.broker === 'BINANCE'
+                    ? '<span class="cat-chip cat-crypto" style="font-size:10px;">🪙 Binance</span>'
                     : (d.broker === 'ALPACA' ? '<span class="cat-chip cat-tradfi" style="font-size:10px;">🏛️ Alpaca</span>' : (d.broker === 'IQOPTION' ? '<span class="cat-chip cat-forex" style="font-size:10px;">💱 IQ Option</span>' : '<span class="cat-chip" style="font-size:10px; background:rgba(255,255,255,0.06); color:#94A3B8;">🌐 Multibroker</span>'));
 
                 html += `
@@ -4896,14 +5454,14 @@
                             </thead>
                             <tbody>
                                 ${d.trades.map(t => {
-                                    const tPnl = t.pnl || 0.0;
-                                    const tSign = tPnl >= 0 ? '+' : '';
-                                    const tColor = tPnl >= 0 ? 'var(--emerald-win)' : 'var(--neon-rose)';
-                                    const tPct = t.pnl_percent || 0.0;
-                                    const tTime = (t.closed_at || t.opened_at || '').substring(11, 19) || '-';
-                                    const bTag = (t.broker === 'BINANCE' || t.category === 'CRYPTO') ? '🪙 Binance' : '🏛️ Alpaca';
-                                    const resClass = tPnl > 0 ? 'mono positive' : (tPnl < 0 ? 'mono negative' : 'mono');
-                                    return `
+                    const tPnl = t.pnl || 0.0;
+                    const tSign = tPnl >= 0 ? '+' : '';
+                    const tColor = tPnl >= 0 ? 'var(--emerald-win)' : 'var(--neon-rose)';
+                    const tPct = t.pnl_percent || 0.0;
+                    const tTime = (t.closed_at || t.opened_at || '').substring(11, 19) || '-';
+                    const bTag = (t.broker === 'BINANCE' || t.category === 'CRYPTO') ? '🪙 Binance' : '🏛️ Alpaca';
+                    const resClass = tPnl > 0 ? 'mono positive' : (tPnl < 0 ? 'mono negative' : 'mono');
+                    return `
                                         <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
                                             <td class="mono" style="padding:6px 8px; color:var(--text-muted);">${tTime}</td>
                                             <td class="mono" style="padding:6px 8px; color:#94A3B8;">${t.id}</td>
@@ -4924,7 +5482,7 @@
                                             </td>
                                         </tr>
                                     `;
-                                }).join('')}
+                }).join('')}
                             </tbody>
                         </table>
                     </div>
@@ -4982,7 +5540,7 @@
             const broker = document.getElementById('export-modal-broker').value || currentHistoryBroker || 'BINANCE';
             const modeEl = document.querySelector('input[name="export_mode"]:checked');
             const mode = modeEl ? modeEl.value : 'pdf';
-            
+
             if (mode === 'xlsx') {
                 window.location.href = `/api/export/trades-xlsx?broker=${broker}`;
             } else if (mode === 'pdf') {
@@ -4998,7 +5556,7 @@
         async function selectActiveBroker(brokerId) {
             if (!brokerId) return;
             const bKey = brokerId.toUpperCase();
-            
+
             // 1. FIJAR ESTADO GLOBAL INMEDIATAMENTE
             currentActiveBroker = bKey;
             if (latestSystemData && latestSystemData.system_status) {
@@ -5153,7 +5711,7 @@
                 if (activeBroker === 'ALPACA') {
                     const alpaca_key = document.getElementById('modal-alpaca-key') ? document.getElementById('modal-alpaca-key').value.trim() : "";
                     const alpaca_secret = document.getElementById('modal-alpaca-secret') ? document.getElementById('modal-alpaca-secret').value.trim() : "";
-                    
+
                     if (alpaca_key || alpaca_secret) {
                         await fetch('/api/control/set-broker-keys', {
                             method: 'POST',
@@ -5298,4 +5856,5 @@
         fetchState();
     </script>
 </body>
+
 </html>

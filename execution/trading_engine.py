@@ -70,6 +70,7 @@ class RealTimeTradingEngine:
             profit_target_enabled=self.profit_target_enabled,
             max_loss_enabled=self.max_loss_enabled,
             max_open_positions=1,
+            zero_loss_blocks_entries=self.execution_environment == "LIVE_REAL",
         )
 
         self.feed = MultiAssetMarketFeed()
@@ -172,6 +173,9 @@ class RealTimeTradingEngine:
         self.cash_balance = active_wallet["cash"]
         self.initial_balance = active_wallet["initial_balance"]
         self.execution_environment = active_wallet.get("environment", "PAPER")
+        self.iqoption_risk_policy.zero_loss_blocks_entries = (
+            self.execution_environment == "LIVE_REAL"
+        )
 
         self.binary_engine = BinaryOptionsStrategyEngine(
             iqoption_adapter=getattr(self.feed, "iqoption", None),
@@ -582,6 +586,7 @@ class RealTimeTradingEngine:
                         "error": f"Error conectando a IQ Option: {conn.get('error', 'Credenciales inválidas')}. Se mantiene en Modo Demo/Paper."
                     }
                 self.broker_wallets["IQOPTION"]["environment"] = "LIVE_REAL"
+                self.iqoption_risk_policy.zero_loss_blocks_entries = True
                 self.broker_config["iqoption_environment"] = "LIVE_REAL"
                 real_bal = float(conn.get("real_balance") if conn.get("real_balance") is not None else conn.get("balance", 0.0))
                 self.broker_wallets["IQOPTION"]["cash"] = real_bal
@@ -605,6 +610,7 @@ class RealTimeTradingEngine:
                 return {"success": True, "broker": "IQOPTION", "environment": "LIVE_REAL", "equity": real_bal, "user": user_label}
             else:
                 self.broker_wallets["IQOPTION"]["environment"] = "PAPER"
+                self.iqoption_risk_policy.zero_loss_blocks_entries = False
                 self.broker_config["iqoption_environment"] = "PAPER"
                 if hasattr(self.feed, "iqoption"):
                     self.feed.iqoption.set_environment("PAPER")

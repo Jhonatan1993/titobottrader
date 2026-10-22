@@ -53,6 +53,21 @@ def test_halts_after_daily_loss_limit():
     assert policy.snapshot()["realized_pnl"] == -20.0
 
 
+def test_zero_loss_limit_with_protection_enabled_blocks_entries():
+    """Tolerancia cero no equivale a ausencia de límite: bloquea nuevas entradas."""
+    policy = IQOptionRiskPolicy(
+        profit_target_amount=100.0,
+        max_loss_amount=0.0,
+        max_loss_enabled=True,
+        zero_loss_blocks_entries=True,
+    )
+
+    decision = policy.can_open(active_positions=0)
+
+    assert decision.allowed is False
+    assert decision.reason == "TOLERANCIA_CERO_BLOQUEA_NUEVAS_ENTRADAS"
+
+
 def test_disabled_limits_do_not_block_entries():
     policy = IQOptionRiskPolicy(
         profit_target_amount=1.0,

@@ -28,12 +28,14 @@ class IQOptionRiskPolicy:
         profit_target_enabled: bool = True,
         max_loss_enabled: bool = True,
         max_open_positions: int = 1,
+        zero_loss_blocks_entries: bool = False,
     ) -> None:
         self.max_open_positions = 1 if max_open_positions != 1 else max_open_positions
         self.profit_target_amount = max(0.0, float(profit_target_amount))
         self.max_loss_amount = max(0.0, float(max_loss_amount))
         self.profit_target_enabled = bool(profit_target_enabled)
         self.max_loss_enabled = bool(max_loss_enabled)
+        self.zero_loss_blocks_entries = bool(zero_loss_blocks_entries)
         self._day = self._today()
         self.realized_pnl = 0.0
         self.halted_reason: Optional[str] = None
@@ -64,9 +66,19 @@ class IQOptionRiskPolicy:
         self._refresh_halt()
 
     def _refresh_halt(self) -> None:
-        if self.profit_target_enabled and self.profit_target_amount > 0 and self.realized_pnl >= self.profit_target_amount:
+        if (
+            self.zero_loss_blocks_entries
+            and self.max_loss_enabled
+            and self.max_loss_amount == 0
+        ):
+            self.halted_reason = "TOLERANCIA_CERO_BLOQUEA_NUEVAS_ENTRADAS"
+        elif self.profit_target_enabled and self.profit_target_amount > 0 and self.realized_pnl >= self.profit_target_amount:
             self.halted_reason = "META_DIARIA_ALCANZADA"
-        elif self.max_loss_enabled and self.max_loss_amount > 0 and self.realized_pnl <= -self.max_loss_amount:
+        elif (
+            self.max_loss_enabled
+            and self.max_loss_amount > 0
+            and self.realized_pnl <= -self.max_loss_amount
+        ):
             self.halted_reason = "LIMITE_PERDIDA_DIARIA_ALCANZADO"
         else:
             self.halted_reason = None
@@ -98,6 +110,7 @@ class IQOptionRiskPolicy:
             "max_loss_enabled": self.max_loss_enabled,
             "max_loss_amount": self.max_loss_amount,
             "max_open_positions": 1,
+            "zero_loss_blocks_entries": self.zero_loss_blocks_entries,
             "halted": bool(self.halted_reason),
             "halted_reason": self.halted_reason,
         }
