@@ -1274,6 +1274,8 @@ class RealTimeTradingEngine:
         for sym, pos in list(self.open_positions.items()):
             pos_b = pos.get("broker") or ("BINANCE" if pos.get("category") == "CRYPTO" else ("IQOPTION" if pos.get("category") == "FOREX" else "ALPACA"))
             pos_wal = self.broker_wallets.get(pos_b, {})
+            if pos.get("execution_state") == "PENDING_CLOSE_RECONCILIATION":
+                continue
             if not pos_wal.get("is_running", True):
                 continue
             asset = market_state.get(sym)
@@ -1736,6 +1738,45 @@ class RealTimeTradingEngine:
         invested = pos["invested_amount"]
         entry_p = pos.get("entry_price", exit_price)
         broker_id = pos.get("broker", self.active_broker)
+
+        # En dinero real, nunca se acredita PnL local ni se libera el cupo
+        # hasta que la siguiente reconciliación confirme el cierre en IQ Option.
+        wallet = self.broker_wallets.get(broker_id, self.broker_wallets.get("IQOPTION", {}))
+        is_broker_live = wallet.get("environment") == "LIVE_REAL"
+        if broker_id == "IQOPTION" and is_broker_live:
+            pos_id = pos.get("broker_order_id") or pos.get("position_id") or pos.get("id")
+            if not pos_id:
+                self.open_positions[symbol] = pos
+                self.agent._add_thought(
+                    f"⚠️ Cierre de {symbol} bloqueado: falta identificador de posición IQ Option. Reconciliación requerida.",
+                    "WARNING",
+                    symbol,
+                    "⚠️",
+                )
+                return
+
+            close_res = self.feed.iqoption.close_position(str(pos_id))
+            if not close_res.get("success"):
+                self.open_positions[symbol] = pos
+                self.agent._add_thought(
+                    f"⚠️ Cierre IQ Option no confirmado para {symbol}: {close_res.get('error', 'sin confirmación')}. Posición retenida.",
+                    "WARNING",
+                    symbol,
+                    "⚠️",
+                )
+                return
+
+            pos["execution_state"] = "PENDING_CLOSE_RECONCILIATION"
+            pos["close_requested_at"] = time.time()
+            pos["close_reason"] = decision_data.get("reason_simple", "Cierre solicitado")
+            self.open_positions[symbol] = pos
+            self.agent._add_thought(
+                f"📤 Cierre enviado a IQ Option para {symbol}. PnL y cupo quedan pendientes de reconciliación del broker.",
+                "INFO",
+                symbol,
+                "📤",
+            )
+            return
 
         if broker_id == "IQOPTION":
             pos_side = pos.get("side", "BUY_LONG").upper()
