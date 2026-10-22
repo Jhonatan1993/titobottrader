@@ -183,6 +183,7 @@ class RealTimeTradingEngine:
             learner=self.agent.learner,
             initial_balance=self.initial_balance
         )
+        self._apply_iqoption_daily_halt()
         self.agent.update_learning_from_disk()
         self._record_equity_snapshot()
 
@@ -2039,13 +2040,17 @@ class RealTimeTradingEngine:
             total_profit = round(vault_val + unrealized_pnl, 2)
             total_profit_pct = round((total_profit / initial_bal) * 100, 2) if initial_bal > 0 else 0.0
 
+        risk_snapshot = self.iqoption_risk_policy.snapshot()
+        self._apply_iqoption_daily_halt()
         broker_running = wallet.get("is_running", True)
-        if broker_running:
-            status_text = "OPERANDO EN VIVO (24/7)"
-        elif wallet.get("target_reached"):
+        if risk_snapshot.get("halted_reason") == "TOLERANCIA_CERO_BLOQUEA_NUEVAS_ENTRADAS":
+            status_text = "🛡️ TOLERANCIA CERO: ENTRADAS BLOQUEADAS"
+        elif risk_snapshot.get("halted_reason") == "META_DIARIA_ALCANZADA":
             status_text = "🏆 META DE GANANCIA LOGRADA (DETENIDO)"
-        elif wallet.get("loss_limit_reached"):
+        elif risk_snapshot.get("halted_reason") == "LIMITE_PERDIDA_DIARIA_ALCANZADO":
             status_text = "🛑 LÍMITE PÉRDIDA ALCANZADO (DETENIDO)"
+        elif broker_running:
+            status_text = "OPERANDO EN VIVO (24/7)"
         else:
             status_text = "EN PAUSA"
 
@@ -2177,7 +2182,7 @@ class RealTimeTradingEngine:
                 "max_loss_enabled": self.max_loss_enabled,
                 "max_loss_amount": wallet.get("max_loss_amount", self.max_loss_amount),
                 "loss_limit_reached": self.loss_limit_reached,
-                "risk_policy": self.iqoption_risk_policy.snapshot(),
+                "risk_policy": risk_snapshot,
                 "brokers": brokers_dict,
                 "broker_connections": {
                     "iqoption": iqoption_status
