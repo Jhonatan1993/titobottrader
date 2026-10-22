@@ -441,6 +441,20 @@ def api_admin_iq_diagnostics():
                 "version": "1.0"
             }
         }))
+        inst_types = ["marginal-forex", "marginal-cfd", "marginal-crypto", "digital-option", "turbo-option", "binary-option"]
+        ws.send(json.dumps({
+            "name": "sendMessage",
+            "request_id": f"pos_{int(time.time() * 1000)}",
+            "msg": {
+                "name": "portfolio.get-positions",
+                "version": "4.0",
+                "body": {
+                    "instrument_types": inst_types,
+                    "limit": 30,
+                    "offset": 0
+                }
+            }
+        }))
         ws.send(json.dumps({
             "name": "sendMessage",
             "request_id": f"hist_{int(time.time() * 1000)}",
@@ -448,8 +462,8 @@ def api_admin_iq_diagnostics():
                 "name": "portfolio.get-history-positions",
                 "version": "2.0",
                 "body": {
-                    "instrument_types": ["marginal-forex", "forex", "cfd"],
-                    "limit": 10,
+                    "instrument_types": inst_types,
+                    "limit": 5,
                     "offset": 0
                 }
             }
