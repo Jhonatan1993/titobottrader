@@ -4517,11 +4517,26 @@
         // Acciones del Motor
         async function toggleEngine() {
             const activeBroker = currentActiveBroker || (latestSystemData && latestSystemData.system_status && latestSystemData.system_status.active_broker) || 'IQOPTION';
-            await fetch('/api/control/toggle', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ broker: activeBroker })
-            });
+            const isCurrentlyRunning = isRunningState;
+            const targetEndpoint = isCurrentlyRunning ? '/api/control/toggle' : '/api/control/resume';
+            try {
+                const res = await fetch(targetEndpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ broker: activeBroker })
+                });
+                const data = await res.json();
+                if (data && data.success) {
+                    isRunningState = data.is_running;
+                    const btn = document.getElementById('btn-toggle');
+                    if (btn) {
+                        btn.innerHTML = isRunningState ? '⏸️ Pausar' : '▶️ Reanudar';
+                        btn.className = isRunningState ? 'btn-action btn-primary' : 'btn-action btn-ghost';
+                    }
+                }
+            } catch (e) {
+                console.error("Error en toggleEngine:", e);
+            }
             fetchState();
         }
 

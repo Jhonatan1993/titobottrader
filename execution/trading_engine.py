@@ -1566,36 +1566,58 @@ class RealTimeTradingEngine:
         # El motor general sigue activo si al menos un broker continúa operando
         self.is_running = any(w.get("is_running", True) for w in self.broker_wallets.values())
 
-    def toggle_pause(self, broker: Optional[str] = None) -> bool:
+    def resume_trading(self, broker: Optional[str] = None) -> bool:
         target_b = (broker or self.active_broker).upper()
         b_wal = self.broker_wallets.get(target_b, self.broker_wallets.get("IQOPTION", {}))
         b_name = b_wal.get("name", target_b)
 
-        currently_running = b_wal.get("is_running", True)
-        new_running_state = not currently_running
-        b_wal["is_running"] = new_running_state
+        b_wal["is_running"] = True
+        b_wal["target_reached"] = False
+        b_wal["loss_limit_reached"] = False
+        self.target_reached = False
+        self.loss_limit_reached = False
+        self.is_running = True
 
-        if new_running_state:
-            b_wal["target_reached"] = False
-            b_wal["loss_limit_reached"] = False
-            self.target_reached = False
-            self.loss_limit_reached = False
-            if getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS":
-                self.iqoption_risk_policy.zero_loss_blocks_entries = False
-            self.agent._add_thought(
-                f"▶️ [{b_name}] Operaciones REANUDADAS para este broker. Escáner y ejecuciones activas.",
-                "INFO",
-                icon="▶️"
-            )
+        if hasattr(self, "iqoption_risk_policy"):
+            self.iqoption_risk_policy.reset_halt()
+
+        self.agent._add_thought(
+            f"▶️ [{b_name}] Operaciones REANUDADAS MANUALMENTE por el usuario. Bloqueos levantados, escáner y entradas activas.",
+            "INFO",
+            icon="▶️"
+        )
+        return True
+
+    def pause_trading(self, broker: Optional[str] = None) -> bool:
+        target_b = (broker or self.active_broker).upper()
+        b_wal = self.broker_wallets.get(target_b, self.broker_wallets.get("IQOPTION", {}))
+        b_name = b_wal.get("name", target_b)
+
+        b_wal["is_running"] = False
+        self.is_running = any(w.get("is_running", False) for w in self.broker_wallets.values())
+
+        self.agent._add_thought(
+            f"⏸️ [{b_name}] Operaciones PAUSADAS MANUALMENTE. No se realizarán nuevas compras ni ventas en {b_name}.",
+            "INFO",
+            icon="⏸️"
+        )
+        return False
+
+    def toggle_pause(self, broker: Optional[str] = None) -> bool:
+        target_b = (broker or self.active_broker).upper()
+        b_wal = self.broker_wallets.get(target_b, self.broker_wallets.get("IQOPTION", {}))
+        
+        # Si el bot está pausado, o si está bloqueado por límite de pérdida o meta, la acción del usuario SIEMPRE es REANUDAR
+        is_halted = (
+            not b_wal.get("is_running", True)
+            or b_wal.get("loss_limit_reached")
+            or b_wal.get("target_reached")
+            or (hasattr(self, "iqoption_risk_policy") and bool(self.iqoption_risk_policy.halted_reason))
+        )
+        if is_halted:
+            return self.resume_trading(broker=target_b)
         else:
-            self.agent._add_thought(
-                f"⏸️ [{b_name}] Operaciones PAUSADAS. No se realizarán nuevas compras ni ventas en {b_name}.",
-                "INFO",
-                icon="⏸️"
-            )
-
-        self.is_running = new_running_state
-        return new_running_state
+            return self.pause_trading(broker=target_b)
 
     def get_state(self) -> Dict[str, Any]:
         active_b = "IQOPTION"

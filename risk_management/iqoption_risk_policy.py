@@ -94,6 +94,12 @@ class IQOptionRiskPolicy:
             return RiskDecision(False, "MAXIMO_GLOBAL_DE_UNA_POSICION")
         return RiskDecision(True)
 
+    def reset_halt(self) -> None:
+        """Permite que la acción explícita del usuario ('Reanudar') reactive el bot inmediatamente."""
+        self.halted_reason = None
+        self.realized_pnl = 0.0
+        self.zero_loss_blocks_entries = False
+
     def record_closed_trade(self, pnl: float) -> None:
         self._roll_day()
         self.realized_pnl = round(self.realized_pnl + float(pnl), 8)

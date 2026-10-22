@@ -113,6 +113,7 @@ def check_authentication():
         "/api/control/recalibrate",
         "/api/control/clear-cooldown",
         "/api/control/toggle",
+        "/api/control/resume",
         "/api/trade/",
         "/api/news/evaluate"
     )
@@ -284,7 +285,26 @@ def toggle_state():
     data = request.get_json(silent=True) or {}
     broker = data.get("broker") or ENGINE.active_broker
     is_run = ENGINE.toggle_pause(broker=broker)
-    return jsonify({"success": True, "is_running": is_run, "broker": broker, "target_reached": ENGINE.target_reached})
+    return jsonify({
+        "success": True, 
+        "is_running": is_run, 
+        "broker": broker, 
+        "target_reached": ENGINE.target_reached,
+        "loss_limit_reached": getattr(ENGINE, "loss_limit_reached", False)
+    })
+
+@app.route("/api/control/resume", methods=["POST"])
+def resume_state():
+    data = request.get_json(silent=True) or {}
+    broker = data.get("broker") or ENGINE.active_broker
+    is_run = ENGINE.resume_trading(broker=broker)
+    return jsonify({
+        "success": True, 
+        "is_running": is_run, 
+        "broker": broker, 
+        "target_reached": ENGINE.target_reached,
+        "loss_limit_reached": getattr(ENGINE, "loss_limit_reached", False)
+    })
 
 @app.route("/api/control/emergency-close", methods=["POST"])
 def emergency_close():
