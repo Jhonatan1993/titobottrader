@@ -1693,6 +1693,19 @@ class RealTimeTradingEngine:
 
         # Enrutamiento de orden de venta real en Binance (Autónomo para cada broker)
         is_broker_live = (wallet.get("environment") == "LIVE_REAL")
+
+        # Enrutamiento de orden de cierre real en IQ Option (Cierre inmediato de Forex CFD en el broker)
+        if broker_id == "IQOPTION" and is_broker_live and hasattr(self.feed, "iqoption"):
+            pos_id = pos.get("broker_order_id") or pos.get("position_id")
+            if pos_id:
+                close_res = self.feed.iqoption.close_position(str(pos_id))
+                self.agent._add_thought(
+                    f"📤 CIERRE REAL ENVIADO A IQ OPTION: {symbol} (Orden #{pos_id}). Estado: {close_res.get('status', 'OK')}",
+                    "INFO",
+                    symbol,
+                    "📤"
+                )
+
         if broker_id == "BINANCE" and is_broker_live:
             self.feed.binance.live_trading_enabled = True
             pair = asset.get("binance_pair", f"{symbol}USDT")

@@ -29,7 +29,7 @@ class BinaryOptionsStrategyEngine:
         self.last_trade_time: Dict[str, float] = {}
         self.cooldown_duration: float = 180.0 # 3 minutos de descanso post-operación
         self.min_payout: float = 0.80 # 80% payout mínimo garantizado
-        self.min_confidence: int = 70 # Confluencia robusta comprobada (Soporte/Resistencia + RSI + Tendencia)
+        self.min_confidence: int = 55 # Confluencia robusta comprobada (Tendencia + Momentum RSI + Confirmación IA)
         self.default_duration_min: int = 1 # 1 minuto (Turbo 60s)
         self.total_wins: int = 0
         self.total_losses: int = 0
@@ -95,9 +95,11 @@ class BinaryOptionsStrategyEngine:
                 "reason": f"Activo en enfriamiento post-operación ({rem}s restantes) para rotación segura."
             }
 
-        # 3. Análisis de Mecha y Rechazo de Precio (Velas previas si están disponibles)
+        # 3. Análisis de Mecha y Dirección de Vela
         has_bullish_rejection = False
         has_bearish_rejection = False
+        last_candle_green = False
+        last_candle_red = False
         if candles and len(candles) >= 1:
             prev = candles[-1]
             c_open = float(prev.get("open", price))
@@ -109,69 +111,106 @@ class BinaryOptionsStrategyEngine:
             lower_wick = min(c_open, c_close) - c_low
             upper_wick = c_high - max(c_open, c_close)
 
-            # Mecha inferior >= 35% del rango total indica absorción compradora
+            if c_close > c_open:
+                last_candle_green = True
+            elif c_close < c_open:
+                last_candle_red = True
+
             if (lower_wick / total_range) >= 0.35 and lower_wick > body:
                 has_bullish_rejection = True
-            # Mecha superior >= 35% del rango total indica absorción vendedora
             if (upper_wick / total_range) >= 0.35 and upper_wick > body:
                 has_bearish_rejection = True
 
+        change_pct = float(asset.get("change_percent", 0.0))
+        trend_status = str(asset.get("trend_status", "")).upper()
+        regime = str(asset.get("regime", "")).upper()
+        ai_dec = str(asset.get("ai_decision", "")).upper()
+        ai_conf = int(asset.get("ai_confidence", 50))
+
         # 4. Cálculo de Confluencia para CALL (Compra / Sube)
         call_score = 0
-        # A. Distancia a Soporte (Rebote en suelo técnico)
+        # A. Soporte Técnico
         dist_support_pct = ((price - support) / price) * 100 if support > 0 else 99
         if 0.0 <= dist_support_pct <= 0.60:
             call_score += 35 # Rebote directo en zona de soporte
         elif dist_support_pct <= 1.20:
-            call_score += 25
+            call_score += 20
 
-        # B. RSI en zona de reacción compradora (20 - 45 con giro alcista)
-        if 20.0 <= rsi <= 45.0:
-            call_score += 30 # Sobreventa óptima para rebote en binarias
-        elif 45.0 < rsi <= 55.0:
-            call_score += 20 # Rango medio saludable
+        # B. Momentum y Reversión RSI
+        if rsi <= 38.0:
+            call_score += 30 # Fuerte sobreventa (rebote inmediato)
+        elif rsi <= 48.0:
+            call_score += 20 # Zona propensa a rebote
+        elif rsi > 52.0 and change_pct > 0:
+            call_score += 15 # Momentum comprador
 
-        # C. EMA y Tendencia
+        # C. Tendencia y Dirección
+        if "ALCISTA" in trend_status or "UP" in regime or change_pct > 0.05:
+            call_score += 20
         if price >= ema20 or ema20 >= ema50:
             call_score += 15
+
+        # D. Confirmación de Velas
+        if last_candle_green:
+            call_score += 10
         if has_bullish_rejection:
             call_score += 20
 
+        # E. Confluencia Cerebro IA
+        if ai_dec in ["BUY", "CALL"]:
+            call_score += 15
+        if ai_conf >= 60 and call_score > 30:
+            call_score += 10
+
         # 5. Cálculo de Confluencia para PUT (Venta / Baja)
         put_score = 0
-        # A. Distancia a Resistencia (Rechazo en techo técnico)
+        # A. Resistencia Técnica
         dist_resistance_pct = ((resistance - price) / price) * 100 if resistance > 0 else 99
         if 0.0 <= dist_resistance_pct <= 0.60:
             put_score += 35 # Rechazo directo en techo técnico
         elif dist_resistance_pct <= 1.20:
-            put_score += 25
-
-        # B. RSI en zona de reacción vendedora (55 - 80 con agotamiento)
-        if 55.0 <= rsi <= 80.0:
-            put_score += 30 # Sobrecompra ideal para retroceso en 60s
-        elif 45.0 <= rsi < 55.0:
             put_score += 20
 
-        # C. EMA y Tendencia
+        # B. Momentum y Reversión RSI
+        if rsi >= 62.0:
+            put_score += 30 # Fuerte sobrecompra (retroceso inmediato)
+        elif rsi >= 52.0:
+            put_score += 20 # Zona propensa a agotamiento
+        elif rsi < 48.0 and change_pct < 0:
+            put_score += 15 # Momentum vendedor
+
+        # C. Tendencia y Dirección
+        if "BAJISTA" in trend_status or "DOWN" in regime or change_pct < -0.05:
+            put_score += 20
         if price <= ema20 or ema20 <= ema50:
             put_score += 15
+
+        # D. Confirmación de Velas
+        if last_candle_red:
+            put_score += 10
         if has_bearish_rejection:
             put_score += 20
 
-        # 6. Decisión Estricta A+ (>= 85% de confluencia)
+        # E. Confluencia Cerebro IA
+        if ai_dec in ["SELL", "PUT"]:
+            put_score += 15
+        if ai_conf >= 60 and put_score > 30:
+            put_score += 10
+
+        # 6. Decisión Cuantitativa Institucional (>= min_confidence)
         if call_score >= self.min_confidence and call_score > put_score:
             return {
                 "decision": "CALL",
                 "confidence": min(98, call_score),
                 "payout": payout,
-                "reason": f"Confluencia Alcista A+ ({call_score} pts): Rebote cerca de soporte ({dist_support_pct:.2f}%) con RSI {rsi:.1f} y payout {int(payout*100)}%."
+                "reason": f"Confluencia Alcista ({call_score} pts): Momentum alcista en {symbol} con RSI {rsi:.1f}, cambio {change_pct:+.2f}% y payout {int(payout*100)}%."
             }
         elif put_score >= self.min_confidence and put_score > call_score:
             return {
                 "decision": "PUT",
                 "confidence": min(98, put_score),
                 "payout": payout,
-                "reason": f"Confluencia Bajista A+ ({put_score} pts): Rechazo en resistencia ({dist_resistance_pct:.2f}%) con RSI {rsi:.1f} y payout {int(payout*100)}%."
+                "reason": f"Confluencia Bajista ({put_score} pts): Momentum bajista en {symbol} con RSI {rsi:.1f}, cambio {change_pct:+.2f}% y payout {int(payout*100)}%."
             }
 
         return {
