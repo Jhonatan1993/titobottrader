@@ -559,12 +559,28 @@ class RealTimeTradingEngine:
                 icon="⚡"
             )
         else:
-            self.iqoption_risk_policy.zero_loss_blocks_entries = (self.execution_environment == "LIVE_REAL")
+            self.iqoption_risk_policy.zero_loss_blocks_entries = False
             self.agent._add_thought(
                 "🌐 MODO IQ OPTION CONMUTADO: FOREX CFD TRADICIONAL. Aislamiento total de Binarias activo (SL/TP dinámico sin expiración).",
                 "SUCCESS",
                 icon="📈"
             )
+
+        # Recalibrar base de capital para el modo seleccionado y reiniciar bloqueos de racha anterior
+        wallet = self.broker_wallets.get("IQOPTION", {})
+        cur_cash = wallet.get("cash", 0.0)
+        if cur_cash > 0:
+            wallet["initial_balance"] = cur_cash
+            self.initial_balance = cur_cash
+        wallet["loss_limit_reached"] = False
+        wallet["target_reached"] = False
+        wallet["target_alerted"] = False
+        wallet["is_running"] = True
+        self.loss_limit_reached = False
+        self.target_reached = False
+        self.is_running = True
+        if hasattr(self, "iqoption_risk_policy"):
+            self.iqoption_risk_policy.reset_halt()
         return {
             "success": True,
             "iq_mode": self.iq_mode,
@@ -1049,8 +1065,8 @@ class RealTimeTradingEngine:
                     continue
 
                 decision_data = self.agent.evaluate_asset(asset, self.open_positions)
-                is_buy = (decision_data["decision"] == "BUY" and decision_data["confidence"] >= 80)
-                is_put = (b_id == "IQOPTION" and decision_data["decision"] in ["SELL", "PUT"] and decision_data["confidence"] >= 80)
+                is_buy = (decision_data["decision"] == "BUY" and decision_data["confidence"] >= 75)
+                is_put = (b_id == "IQOPTION" and decision_data["decision"] in ["SELL", "PUT"] and decision_data["confidence"] >= 75)
 
                 if (is_buy or is_put):
                     volatility_weight = asset.get("volatility", 0.005) * 1000
@@ -1063,6 +1079,17 @@ class RealTimeTradingEngine:
                 candidates.sort(key=lambda x: x[0], reverse=True)
                 best_score, best_sym, best_asset, best_decision = candidates[0]
                 self._execute_buy(best_sym, best_asset, best_decision, broker_id=b_id)
+            elif b_id == "IQOPTION":
+                now_cfd = time.time()
+                if not hasattr(self, "_last_cfd_scan_ts"):
+                    self._last_cfd_scan_ts = 0.0
+                if (now_cfd - self._last_cfd_scan_ts) >= 15.0:
+                    self._last_cfd_scan_ts = now_cfd
+                    self.agent._add_thought(
+                        f"🌐 [Forex CFD] Escaneando {len(market_state)} pares de divisas en vivo. Buscando confluencia A+ (>=75%). Cartera 0/1 disponible.",
+                        "INFO",
+                        icon="📈"
+                    )
 
     def _evaluate_and_trade_binary(self, market_state: Dict[str, Any]):
         """
@@ -1571,9 +1598,15 @@ class RealTimeTradingEngine:
         b_wal = self.broker_wallets.get(target_b, self.broker_wallets.get("IQOPTION", {}))
         b_name = b_wal.get("name", target_b)
 
+        cur_cash = b_wal.get("cash", 0.0)
+        if cur_cash > 0:
+            b_wal["initial_balance"] = cur_cash
+            self.initial_balance = cur_cash
+
         b_wal["is_running"] = True
         b_wal["target_reached"] = False
         b_wal["loss_limit_reached"] = False
+        b_wal["target_alerted"] = False
         self.target_reached = False
         self.loss_limit_reached = False
         self.is_running = True

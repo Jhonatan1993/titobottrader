@@ -29,7 +29,7 @@ class BinaryOptionsStrategyEngine:
         self.last_trade_time: Dict[str, float] = {}
         self.cooldown_duration: float = 180.0 # 3 minutos de descanso post-operación
         self.min_payout: float = 0.80 # 80% payout mínimo garantizado
-        self.min_confidence: int = 55 # Confluencia robusta comprobada (Tendencia + Momentum RSI + Confirmación IA)
+        self.min_confidence: int = 65 # Confluencia Institucional A+ (Tendencia Estructural + Pullback + Mecha + RSI)
         self.default_duration_min: int = 1 # 1 minuto (Turbo 60s)
         self.total_wins: int = 0
         self.total_losses: int = 0
@@ -116,9 +116,9 @@ class BinaryOptionsStrategyEngine:
             elif c_close < c_open:
                 last_candle_red = True
 
-            if (lower_wick / total_range) >= 0.35 and lower_wick > body:
+            if (lower_wick / total_range) >= 0.35 and lower_wick >= body:
                 has_bullish_rejection = True
-            if (upper_wick / total_range) >= 0.35 and upper_wick > body:
+            if (upper_wick / total_range) >= 0.35 and upper_wick >= body:
                 has_bearish_rejection = True
 
         # Soportes y Resistencias dinámicos (Ventana de 15 velas de 1m)
@@ -138,78 +138,87 @@ class BinaryOptionsStrategyEngine:
         ai_dec = str(asset.get("ai_decision", "")).upper()
         ai_conf = int(asset.get("ai_confidence", 50))
 
-        # 4. Cálculo de Confluencia para CALL (Compra / Sube)
+        # 3.5 Filtro Anti-Lateralidad (Anti-Chop)
+        ma_spread = abs(ema20 - ema50) / price if price > 0 else 0
+        if "RANGING" in regime and ma_spread < 0.00015 and not (has_bullish_rejection or has_bearish_rejection):
+            return {
+                "decision": "HOLD",
+                "confidence": 25,
+                "reason": f"Mercado lateral sin dirección en {symbol} (Medias comprimidas {ma_spread*100:.3f}%). Riesgo de falso rompimiento."
+            }
+
+        # 4. Cálculo de Confluencia para CALL
         call_score = 0
-        # A. Soporte Técnico Dinámico
         dist_support_pct = ((price - support) / price) * 100 if support > 0 else 99
         if 0.0 <= dist_support_pct <= 0.08:
-            call_score += 35 # Rebote directo en zona de soporte inmediato
+            call_score += 35 # Rebote exacto en soporte clave
         elif dist_support_pct <= 0.20:
             call_score += 20
         elif dist_support_pct <= 0.40:
             call_score += 10
 
-        # B. Momentum y Reversión RSI
         if rsi <= 40.0:
-            call_score += 30 # Fuerte sobreventa (rebote inmediato)
+            call_score += 25 # Zona óptima de reversión/sobreventa
         elif rsi <= 48.0:
-            call_score += 20 # Zona propensa a rebote
-        elif rsi >= 50.0 and (last_candle_green or change_pct > 0):
-            call_score += 15 # Continuación compradora
+            call_score += 15 # Zona propensa a rebote
+        elif rsi <= 55.0 and (last_candle_green or change_pct > 0):
+            call_score += 10
+        elif rsi >= 70.0:
+            call_score -= 30 # Penalización: sobrecompra extrema (riesgo de corrección)
 
-        # C. Tendencia y Medias
-        if "ALCISTA" in trend_status or "UP" in regime or change_pct > 0.02:
-            call_score += 15
-        if price >= ema20 or ema20 >= ema50:
-            call_score += 15
-
-        # D. Confirmación de Velas (Acción de Precio)
-        if last_candle_green:
-            call_score += 15
         if has_bullish_rejection:
-            call_score += 20
-
-        # E. Confluencia Cerebro IA
-        if ai_dec in ["BUY", "CALL"]:
-            call_score += 15
-        if ai_conf >= 60 and call_score > 30:
+            call_score += 25 # Mecha de absorción alcista institucional
+        if last_candle_green:
             call_score += 10
 
-        # 5. Cálculo de Confluencia para PUT (Venta / Baja)
+        if "BAJISTA" in trend_status:
+            call_score -= 35 # Penalización estricta contratendencia
+        elif "ALCISTA" in trend_status or "UP" in regime or change_pct > 0.05:
+            call_score += 15
+
+        if price >= ema20 or ema20 >= ema50:
+            call_score += 10
+
+        if ai_dec in ["BUY", "CALL"]:
+            call_score += 15
+        if ai_conf >= 75:
+            call_score += 10
+
+        # 5. Cálculo de Confluencia para PUT
         put_score = 0
-        # A. Resistencia Técnica Dinámica
         dist_resistance_pct = ((resistance - price) / price) * 100 if resistance > 0 else 99
         if 0.0 <= dist_resistance_pct <= 0.08:
-            put_score += 35 # Rechazo directo en techo técnico inmediato
+            put_score += 35 # Rechazo exacto en resistencia clave
         elif dist_resistance_pct <= 0.20:
             put_score += 20
         elif dist_resistance_pct <= 0.40:
             put_score += 10
 
-        # B. Momentum y Reversión RSI
         if rsi >= 60.0:
-            put_score += 30 # Fuerte sobrecompra (retroceso inmediato)
+            put_score += 25 # Zona óptima de reversión/sobrecompra
         elif rsi >= 52.0:
-            put_score += 20 # Zona propensa a agotamiento
-        elif rsi <= 50.0 and (last_candle_red or change_pct < 0):
-            put_score += 15 # Continuación vendedora
+            put_score += 15 # Zona propensa a agotamiento
+        elif rsi >= 45.0 and (last_candle_red or change_pct < 0):
+            put_score += 10
+        elif rsi <= 30.0:
+            put_score -= 30 # Penalización: sobreventa extrema (riesgo de rebote)
 
-        # C. Tendencia y Medias
-        if "BAJISTA" in trend_status or "DOWN" in regime or change_pct < -0.02:
-            put_score += 15
-        if price <= ema20 or ema20 <= ema50:
-            put_score += 15
-
-        # D. Confirmación de Velas (Acción de Precio)
-        if last_candle_red:
-            put_score += 15
         if has_bearish_rejection:
-            put_score += 20
+            put_score += 25 # Mecha de rechazo bajista institucional
+        if last_candle_red:
+            put_score += 10
 
-        # E. Confluencia Cerebro IA
+        if "ALCISTA" in trend_status:
+            put_score -= 35 # Penalización estricta contratendencia
+        elif "BAJISTA" in trend_status or "DOWN" in regime or change_pct < -0.05:
+            put_score += 15
+
+        if price <= ema20 or ema20 <= ema50:
+            put_score += 10
+
         if ai_dec in ["SELL", "PUT"]:
             put_score += 15
-        if ai_conf >= 60 and put_score > 30:
+        if ai_conf >= 75:
             put_score += 10
 
         # 6. Decisión Cuantitativa Institucional (>= min_confidence)
@@ -218,20 +227,20 @@ class BinaryOptionsStrategyEngine:
                 "decision": "CALL",
                 "confidence": min(98, call_score),
                 "payout": payout,
-                "reason": f"Confluencia Alcista ({call_score} pts): Momentum alcista en {symbol} con RSI {rsi:.1f}, cambio {change_pct:+.2f}% y payout {int(payout*100)}%."
+                "reason": f"🎯 Confluencia Alcista Sniper ({call_score} pts): Tendencia favorable en {symbol}, rebote en soporte y RSI {rsi:.1f} con payout {int(payout*100)}%."
             }
         elif put_score >= self.min_confidence and put_score > call_score:
             return {
                 "decision": "PUT",
                 "confidence": min(98, put_score),
                 "payout": payout,
-                "reason": f"Confluencia Bajista ({put_score} pts): Momentum bajista en {symbol} con RSI {rsi:.1f}, cambio {change_pct:+.2f}% y payout {int(payout*100)}%."
+                "reason": f"🎯 Confluencia Bajista Sniper ({put_score} pts): Estructura favorable en {symbol}, rechazo en resistencia y RSI {rsi:.1f} con payout {int(payout*100)}%."
             }
 
         return {
             "decision": "HOLD",
             "confidence": max(call_score, put_score),
-            "reason": f"Mercado en equilibrio (Call: {call_score}p, Put: {put_score}p). Esperando confluencia >= {self.min_confidence} pts."
+            "reason": f"Filtro de Calidad Activo: Confluencia insuficiente (Call: {call_score}p, Put: {put_score}p < {self.min_confidence}p requeridos para alta probabilidad)."
         }
 
     def trigger_test_binary_trade(
@@ -425,6 +434,7 @@ class BinaryOptionsStrategyEngine:
 
         # LIBERAR EL GATEKEEPER DE CUPO
         self.open_position = None
-        self.last_trade_time[sym] = now + self.cooldown_duration
+        cooldown_add = 300.0 if result_type == "LOSS" else self.cooldown_duration
+        self.last_trade_time[sym] = now + cooldown_add
         logger.info(f"🏁 RESOLUCIÓN BINARIA: {resolution_data['reason']}")
         return resolution_data
