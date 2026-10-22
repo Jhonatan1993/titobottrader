@@ -864,6 +864,14 @@ class RealTimeTradingEngine:
             pending_order=self._iqoption_order_pending,
         )
         self._apply_iqoption_daily_halt()
+
+        # En Opciones Binarias Turbo, el riesgo está acotado estrictamente a la inversión por orden (COP 2,000)
+        # y blindado por el Gatekeeper de 1 posición a la vez (0/1). TOLERANCIA_CERO no debe bloquear entradas.
+        is_binary = (getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS")
+        if not decision.allowed and is_binary:
+            if decision.reason == "TOLERANCIA_CERO_BLOQUEA_NUEVAS_ENTRADAS" and active_count == 0 and not self._iqoption_order_pending:
+                return True
+
         if not decision.allowed:
             self.agent._add_thought(
                 f"🛡️ IQ Option: nueva entrada bloqueada ({decision.reason}).",
