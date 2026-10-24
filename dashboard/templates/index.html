@@ -3032,7 +3032,8 @@
                             </div>
                             <div style="font-size:11px; color:#94A3B8; margin-top:2px;">Documento ejecutivo con
                                 <b>gráficos de barras de rendimiento diario (PnL)</b>, tasa de acierto, tarjetas de KPIs
-                                y tablas de auditoría.</div>
+                                y tablas de auditoría.
+                            </div>
                         </div>
                     </label>
 
@@ -3126,16 +3127,40 @@
         let currentPosLevels = { entry: null, sl: null, tp: null };
 
         function createSeriesSafe(chart, seriesType, options) {
-            if (!chart) return null;
-            if (typeof chart.addSeries === 'function' && seriesType) {
-                return chart.addSeries(seriesType, options);
+            if (!chart || !window.LightweightCharts) {
+                console.error('No se pudo crear la serie: gráfico o Lightweight Charts no disponible.');
+                return null;
             }
-            if (seriesType === (window.LightweightCharts && LightweightCharts.CandlestickSeries) && typeof chart.addCandlestickSeries === 'function') {
-                return chart.addCandlestickSeries(options);
+
+            const chartApi = window.LightweightCharts;
+            const isCandlestick = seriesType === chartApi.CandlestickSeries;
+            const isHistogram = seriesType === chartApi.HistogramSeries;
+            const hasValidV5Definition = seriesType &&
+                typeof seriesType === 'object' &&
+                typeof seriesType.type === 'string' &&
+                typeof seriesType.mb === 'function';
+
+            // Lightweight Charts v5 espera una definición de serie con `type` y `mb`.
+            // No llamar addSeries con una exportación ausente/incompatible: el bundle
+            // arroja "Cannot read properties of undefined (reading 'type')".
+            if (typeof chart.addSeries === 'function' && hasValidV5Definition) {
+                return chart.addSeries(seriesType, options || {});
             }
-            if (seriesType === (window.LightweightCharts && LightweightCharts.HistogramSeries) && typeof chart.addHistogramSeries === 'function') {
-                return chart.addHistogramSeries(options);
+
+            // Compatibilidad con v4 y builds que todavía exponen los métodos antiguos.
+            if (isCandlestick && typeof chart.addCandlestickSeries === 'function') {
+                return chart.addCandlestickSeries(options || {});
             }
+            if (isHistogram && typeof chart.addHistogramSeries === 'function') {
+                return chart.addHistogramSeries(options || {});
+            }
+
+            console.error('Tipo de serie Lightweight Charts inválido o no soportado.', {
+                version: chartApi.version ? chartApi.version() : 'desconocida',
+                requestedType: seriesType && seriesType.type,
+                candlestickAvailable: !!chartApi.CandlestickSeries,
+                histogramAvailable: !!chartApi.HistogramSeries
+            });
             return null;
         }
 
