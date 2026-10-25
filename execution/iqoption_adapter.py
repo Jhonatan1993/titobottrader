@@ -100,6 +100,19 @@ class IQOptionAdapter:
         self.profile_data: Dict[str, Any] = {}
         self._last_auth_attempt: float = 0.0
 
+    def _get_ws_url(self) -> str:
+        """Retorna el endpoint WebSocket oficial de IQ Option accesible globalmente."""
+        return "wss://ws.iqoption.com/echo/websocket"
+
+    def _get_ws_headers(self) -> list:
+        h = [
+            "Origin: https://iqoption.com",
+            "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ]
+        if self.ssid:
+            h.append(f"Cookie: ssid={self.ssid}")
+        return h
+
     def _fetch_live_balances_ws(self) -> bool:
         """
         Consulta balances y perfil en tiempo real a través del WebSocket oficial de IQ Option.
@@ -112,11 +125,8 @@ class IQOptionAdapter:
         import json
         import ssl
         try:
-            ws_url = "wss://iqoption.com/echo/websocket"
-            headers = [
-                f"Cookie: ssid={self.ssid}",
-                "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            ]
+            ws_url = self._get_ws_url()
+            headers = self._get_ws_headers()
             ws = websocket.create_connection(ws_url, header=headers, timeout=6, sslopt={"cert_reqs": ssl.CERT_NONE})
             # 1. Enviar autenticación
             ws.send(json.dumps({
@@ -285,62 +295,87 @@ class IQOptionAdapter:
             return False
 
     def _fetch_profile(self) -> Dict[str, Any]:
-        """Consulta perfil y balances vía API oficial usando la sesión de cookies/SSID activa."""
+        """Consulta perfil y balances vía WebSocket oficial (Cloudflare) o API HTTP."""
         if not self.ssid:
             return {"success": False, "error": "No hay SSID de sesión"}
+
+        # Detección amigable si el usuario copió por error la cookie de sesión de TitoBot
+        if self.ssid.startswith(".eJy"):
+            return {
+                "success": False,
+                "error": "⚠️ El token que ingresaste corresponde a la sesión de TitoBot (titobottrader.tech), NO a IQ Option. Por favor abre la pestaña donde tienes tu cuenta de iqoption.com, abre DevTools (F12) > Aplicación > Cookies > iqoption.com y copia la cookie llamada 'ssid'."
+            }
+
+        # 1. Prioridad: Consulta directa mediante WebSocket en vivo (Inmune a bloqueos de Cloudflare)
+        ws_ok = self._fetch_live_balances_ws()
+        if ws_ok and (self.real_balance_id is not None or self.practice_balance_id is not None):
+            if self.environment == "LIVE_REAL":
+                self.balance = self.real_amount
+                self.active_balance_id = self.real_balance_id
+                if self.real_balance_id:
+                    self.change_balance(self.real_balance_id)
+            else:
+                self.balance = self.practice_amount
+                self.active_balance_id = self.practice_balance_id
+                if self.practice_balance_id:
+                    self.change_balance(self.practice_balance_id)
+            return {"success": True, "profile": self.profile_data}
+
+        # 2. Respaldo vía HTTP (iqbroker.com / iqoption.com)
         try:
             self.session.cookies.set("ssid", self.ssid, domain=".iqoption.com")
             self.session.cookies.set("ssid", self.ssid, domain="iqoption.com")
-            prof_url = f"{self.base_url}/getprofile"
-            prof_resp = self.session.get(prof_url, timeout=12)
-            if prof_resp.status_code == 200:
-                p_data = prof_resp.json()
-                profile = p_data.get("result", {}) if isinstance(p_data, dict) else {}
-                if not profile and isinstance(p_data, dict) and "profile" in p_data:
-                    profile = p_data.get("profile", {})
-                
-                self.profile_data = profile
-                self.currency = profile.get("currency", "USD")
-                
-                balances = profile.get("balances", [])
-                for b in balances:
-                    b_type = b.get("type")
-                    b_id = b.get("id")
-                    amt = float(b.get("amount", 0.0)) + float(b.get("bonus_amount", 0.0))
-                    # type 1 = Real, type 4 = Practice (Demo)
-                    if b_type == 1:
-                        self.real_balance_id = b_id
-                        self.real_amount = amt
-                    elif b_type == 4:
-                        self.practice_balance_id = b_id
-                        self.practice_amount = amt
+            self.session.cookies.set("ssid", self.ssid, domain=".iqbroker.com")
+            self.session.cookies.set("ssid", self.ssid, domain="iqbroker.com")
+            
+            for base in ["https://iqbroker.com/api", "https://iqoption.com/api"]:
+                try:
+                    prof_resp = self.session.get(f"{base}/getprofile", timeout=5)
+                    if prof_resp.status_code == 200:
+                        p_data = prof_resp.json()
+                        profile = p_data.get("result", {}) if isinstance(p_data, dict) else {}
+                        if not profile and isinstance(p_data, dict) and "profile" in p_data:
+                            profile = p_data.get("profile", {})
+                        if profile:
+                            self.profile_data = profile
+                            self.currency = profile.get("currency", "USD")
+                            balances = profile.get("balances", [])
+                            for b in balances:
+                                b_type = b.get("type")
+                                b_id = b.get("id")
+                                amt = float(b.get("amount", 0.0)) + float(b.get("bonus_amount", 0.0))
+                                if b_type == 1:
+                                    self.real_balance_id = b_id
+                                    self.real_amount = amt
+                                elif b_type == 4:
+                                    self.practice_balance_id = b_id
+                                    self.practice_amount = amt
 
-                # Si HTTP devolvió balances vacíos, sincronizar directamente vía WebSocket oficial en vivo
-                if not balances or (self.real_balance_id is None and self.practice_balance_id is None):
-                    self._fetch_live_balances_ws()
+                            if self.environment == "LIVE_REAL":
+                                self.balance = self.real_amount
+                                self.active_balance_id = self.real_balance_id
+                            else:
+                                self.balance = self.practice_amount
+                                self.active_balance_id = self.practice_balance_id
+                            return {"success": True, "profile": self.profile_data}
+                    elif prof_resp.status_code == 401:
+                        return {"success": False, "error": "Token SSID inválido o expirado. Copia tu cookie 'ssid' actualizada en iqoption.com."}
+                except Exception:
+                    continue
+        except Exception:
+            pass
 
-                if self.environment == "LIVE_REAL":
-                    self.balance = self.real_amount
-                    self.active_balance_id = self.real_balance_id
-                    if self.real_balance_id:
-                        self.change_balance(self.real_balance_id)
-                else:
-                    self.balance = self.practice_amount
-                    self.active_balance_id = self.practice_balance_id
-                    if self.practice_balance_id:
-                        self.change_balance(self.practice_balance_id)
+        if ws_ok:
+            return {"success": True, "profile": self.profile_data}
 
-                return {"success": True, "profile": self.profile_data}
-            elif prof_resp.status_code == 401:
-                return {"success": False, "error": "Token SSID inválido o expirado. Inicia sesión en iqoption.com y actualiza tu SSID en Ajustes."}
-            else:
-                return {"success": False, "error": f"Error servidor IQ Option ({prof_resp.status_code})"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+        return {
+            "success": False, 
+            "error": "No se pudo autenticar el Token SSID. Verifica que sea el valor exacto de la cookie 'ssid' en la pestaña de iqoption.com."
+        }
 
     def connect(self) -> Dict[str, Any]:
         """
-        Inicia sesión en IQ Option vía Token SSID directo o API oficial (auth.iqoption.com/api/v2/login).
+        Inicia sesión en IQ Option vía Token SSID directo o API oficial de login.
         """
         if not self.is_configured:
             self.connected = False
@@ -367,28 +402,40 @@ class IQOptionAdapter:
                     "name": user_label,
                     "method": "SSID_DIRECT"
                 }
-            elif not (self.email and self.password):
+            else:
                 return {
                     "connected": False,
                     "authenticated": False,
                     "error": prof_res.get("error", "Error autenticando con SSID")
                 }
 
-        # 2. Autenticación estándar por Email y Contraseña
+        # 2. Autenticación estándar por Email y Contraseña (con fallback a mirror oficial iqbroker)
         if self.email and self.password:
-            try:
-                auth_url = "https://auth.iqoption.com/api/v2/login"
-                payload = {
-                    "identifier": self.email,
-                    "password": self.password
-                }
-                headers = {
-                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "Accept": "application/json",
-                    "Content-Type": "application/json"
-                }
-                resp = self.session.post(auth_url, json=payload, headers=headers, timeout=(15, 25))
-                
+            auth_urls = [
+                "https://auth.iqbroker.com/api/v2/login",
+                "https://auth.iqoption.com/api/v2/login"
+            ]
+            resp = None
+            last_err = ""
+            for auth_url in auth_urls:
+                try:
+                    payload = {
+                        "identifier": self.email,
+                        "password": self.password
+                    }
+                    headers = {
+                        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                        "Accept": "application/json",
+                        "Content-Type": "application/json"
+                    }
+                    resp = self.session.post(auth_url, json=payload, headers=headers, timeout=(6, 12))
+                    if resp.status_code in [200, 401, 429]:
+                        break
+                except Exception as e:
+                    last_err = str(e)
+                    continue
+
+            if resp is not None:
                 if resp.status_code == 200:
                     data = resp.json()
                     self.ssid = resp.cookies.get("ssid") or self.session.cookies.get("ssid")
@@ -426,6 +473,17 @@ class IQOptionAdapter:
                         "currency": self.currency,
                         "name": self.email
                     }
+                elif resp.status_code == 429:
+                    try:
+                        err_json = resp.json()
+                        msg = err_json.get("message", "Límite de solicitudes excedido.")
+                    except Exception:
+                        msg = "Límite de solicitudes excedido."
+                    return {
+                        "connected": False,
+                        "authenticated": False,
+                        "error": f"IQ Option bloqueó temporalmente el inicio con contraseña ({msg}). Ingresa tu Token SSID de tu pestaña abierta de iqoption.com para conectar de inmediato sin restricciones."
+                    }
                 elif resp.status_code == 401:
                     try:
                         err_json = resp.json()
@@ -446,19 +504,12 @@ class IQOptionAdapter:
                         "authenticated": False, 
                         "error": f"Error servidor IQ Option ({resp.status_code}): {resp.text[:100]}"
                     }
-            except requests.exceptions.Timeout:
+            else:
                 return {
                     "connected": False,
                     "authenticated": False,
-                    "error": "El servidor de IQ Option bloquea conexiones de centros de datos VPS (Timeout en auth.iqoption.com). Para conectar de inmediato sin bloqueos de firewall, ingresa tu Token SSID en Ajustes."
+                    "error": f"Tiempo de espera agotado al conectar a IQ Option ({last_err or 'Timeout'}). Ingresa tu Token SSID en Ajustes para conectar de inmediato."
                 }
-            except Exception as e:
-                err_str = str(e)
-                if "timed out" in err_str.lower() or "timeout" in err_str.lower():
-                    err_msg = "Tiempo de espera agotado con auth.iqoption.com (Firewall de centro de datos). Ingresa tu Token SSID en Ajustes para conectar al instante."
-                else:
-                    err_msg = f"Error de conexión con IQ Option: {err_str}"
-                return {"connected": False, "authenticated": False, "error": err_msg}
 
         return {
             "connected": False,
@@ -620,11 +671,8 @@ class IQOptionAdapter:
                 "error": f"Saldo insuficiente en IQ Option: Se requieren al menos {order_amount:,.2f} {self.currency} y dispones de {self.real_amount:,.2f} {self.currency}."
             }
 
-        ws_url = "wss://iqoption.com/echo/websocket"
-        headers = [
-            f"Cookie: ssid={self.ssid}",
-            "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        ]
+        ws_url = self._get_ws_url()
+        headers = self._get_ws_headers()
 
         result = {"success": False, "error": "Tiempo de espera agotado al conectar al WebSocket de IQ Option"}
 
@@ -849,11 +897,8 @@ class IQOptionAdapter:
         import json
         import ssl
         try:
-            ws_url = "wss://iqoption.com/echo/websocket"
-            headers = [
-                f"Cookie: ssid={self.ssid}",
-                "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-            ]
+            ws_url = self._get_ws_url()
+            headers = self._get_ws_headers()
             ws = websocket.create_connection(ws_url, header=headers, timeout=6, sslopt={"cert_reqs": ssl.CERT_NONE})
             
             # Autenticación protocol 3 y legacy
@@ -1070,11 +1115,8 @@ class IQOptionAdapter:
         payout = self.get_payout(symbol)
         profit_percent = int(round(payout * 100))
 
-        ws_url = "wss://iqoption.com/echo/websocket"
-        headers = [
-            f"Cookie: ssid={self.ssid}",
-            "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-        ]
+        ws_url = self._get_ws_url()
+        headers = self._get_ws_headers()
 
         result = {"success": False, "error": "Tiempo de espera agotado al conectar para opción binaria"}
 
@@ -1249,11 +1291,8 @@ class IQOptionAdapter:
         import json
         import ssl
         try:
-            ws_url = "wss://iqoption.com/echo/websocket"
-            headers = [
-                f"Cookie: ssid={self.ssid}",
-                "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-            ]
+            ws_url = self._get_ws_url()
+            headers = self._get_ws_headers()
             ws = websocket.create_connection(ws_url, header=headers, timeout=5, sslopt={"cert_reqs": ssl.CERT_NONE})
             ws.send(json.dumps({
                 "name": "authenticate",
