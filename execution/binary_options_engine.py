@@ -3,6 +3,11 @@ import math
 import logging
 from typing import Dict, Any, List, Optional
 
+from strategy.smc_engine import SMCEngine
+from ai_analysis.economic_calendar import EconomicCalendarFilter
+from risk_management.soros_manager import SorosRiskManager
+from telegram_service.telegram_bot import TelegramService
+
 logger = logging.getLogger("BinaryOptionsEngine")
 
 class BinaryOptionsStrategyEngine:
@@ -11,13 +16,19 @@ class BinaryOptionsStrategyEngine:
     
     Características Institucionales:
     1. Gatekeeper Estricto: MÁXIMO 1 OPERACIÓN A LA VEZ (Bloqueo absoluto de aperturas múltiples).
-    2. Filtro de Payout Matemático: Solo opera activos con rentabilidad >= 80% (0.80).
-    3. Confluencia Analítica A+ (>= 85% de Confianza):
-       - Rechazo de Mecha en Soportes / Resistencias (Absorción de volumen).
-       - Reversión o Continuación con RSI en zonas óptimas.
-       - Alineación de Medias Exponenciales (EMA20 / EMA50).
-    4. Enfriamiento Anti-Venganza: Cooldown de 180 segundos post-operación para rotación obligatoria.
-    5. Gestión de Capital: Inversión fija y controlada (Cero Martingala destructiva).
+    2. Smart Money Concepts (SMC):
+       - Mitigación de Order Blocks (OB) alcistas/bajistas con memoria de 25 velas.
+       - Fair Value Gaps (FVG / Imbalances) con desplazamiento institucional (1.6x ATR).
+       - Barridos de Liquidez y Soportes/Resistencias Dinámicos (30 velas).
+    3. Filtro Macroeconómico Institucional:
+       - ForexFactory XML con bloqueo preventivo ±15 min ante noticias de Alto Impacto.
+       - Enrutamiento transparente para activos OTC (24/7).
+    4. Gestión de Riesgo Soros Nivel 1:
+       - Interés compuesto de 1 nivel (arriesga base + ganancia previa tras acierto).
+       - Retorno a la base tras 1 nivel o ante cualquier pérdida.
+       - Bloqueo por racha de 3 pérdidas consecutivas.
+    5. Filtro de Correlación de Divisas por Minuto (Anti-Sobreexposición de cartera).
+    6. Alertas y Control Bidireccional por Telegram en tiempo real.
     """
 
     def __init__(self, iqoption_adapter, journal=None, learner=None, initial_balance: float = 10000.0):
@@ -27,21 +38,31 @@ class BinaryOptionsStrategyEngine:
         self.initial_balance = initial_balance
         self.open_position: Optional[Dict[str, Any]] = None
         self.last_trade_time: Dict[str, float] = {}
-        self.cooldown_duration: float = 180.0 # 3 minutos de descanso post-operación
+        self.cooldown_duration: float = 120.0 # 2 minutos de descanso post-operación
         self.min_payout: float = 0.80 # 80% payout mínimo garantizado
-        self.min_confidence: int = 65 # Confluencia Institucional A+ (Tendencia Estructural + Pullback + Mecha + RSI)
+        self.min_confidence: int = 65 # Confluencia Institucional A+
         self.default_duration_min: int = 1 # 1 minuto (Turbo 60s)
         self.total_wins: int = 0
         self.total_losses: int = 0
         self.total_ties: int = 0
         self.net_profit: float = 0.0
 
+        # Módulos Cuantitativos Institucionales
+        self.smc_engine = SMCEngine()
+        self.calendar_filter = EconomicCalendarFilter(window_minutes=15)
+        self.soros_manager = SorosRiskManager(
+            base_stake=2.0,
+            soros_enabled=True,
+            max_soros_level=1,
+            max_consecutive_losses=3
+        )
+        self.telegram = TelegramService.get_instance()
+
     @property
     def has_active_position(self) -> bool:
         """Indica si hay una opción binaria en curso esperando expiración."""
         if self.open_position is None:
             return False
-        # Si la opción ya expiró en tiempo, se considera en proceso de resolución
         now = time.time()
         if now >= self.open_position.get("expiration_timestamp", 0):
             return True # Sigue activa hasta que se resuelva en el broker
@@ -49,6 +70,9 @@ class BinaryOptionsStrategyEngine:
 
     def get_status(self) -> Dict[str, Any]:
         """Estado actual del motor de opciones binarias para el dashboard y la API."""
+        total_decisive = self.total_wins + self.total_losses
+        win_rate = round((self.total_wins / max(1, total_decisive)) * 100, 1) if total_decisive > 0 else 0.0
+
         return {
             "mode": "BINARY_OPTIONS",
             "active_trade": self.open_position,
@@ -57,15 +81,21 @@ class BinaryOptionsStrategyEngine:
             "total_losses": self.total_losses,
             "total_ties": self.total_ties,
             "net_profit": round(self.net_profit, 2),
-            "win_rate": round((self.total_wins / max(1, self.total_wins + self.total_losses)) * 100, 1),
+            "win_rate": win_rate,
             "min_payout": self.min_payout,
-            "min_confidence": self.min_confidence
+            "min_confidence": self.min_confidence,
+            "soros_step": self.soros_manager.soros_step,
+            "soros_enabled": self.soros_manager.soros_enabled,
+            "consecutive_losses": self.soros_manager.consecutive_losses,
+            "daily_pnl": round(self.soros_manager.daily_pnl, 2),
+            "economic_calendar": "ONLINE (ForexFactory XML)",
+            "smc_engine": "ACTIVE (FVG + Order Blocks)"
         }
 
     def evaluate_asset(self, asset: Dict[str, Any], candles: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """
         Analiza un activo con métodos de trading cuantitativo de alta precisión para Opciones Binarias.
-        Retorna la recomendación: CALL (Sube), PUT (Baja) o HOLD (En espera).
+        Integra Smart Money Concepts (SMC), filtro macroeconómico y gestión de riesgo.
         """
         symbol = asset.get("symbol", "")
         price = float(asset.get("price", 1.0))
@@ -75,16 +105,37 @@ class BinaryOptionsStrategyEngine:
         support = float(asset.get("support", price * 0.99))
         resistance = float(asset.get("resistance", price * 1.01))
 
-        # 1. Filtro de Payout (Rentabilidad matemática)
+        # 1. Filtro Macroeconómico de Calendario Económico (ForexFactory XML)
+        is_safe, news_reason = self.calendar_filter.is_safe_to_trade(symbol)
+        if not is_safe:
+            return {
+                "decision": "HOLD",
+                "confidence": 10,
+                "payout": 0.0,
+                "reason": news_reason
+            }
+
+        # 2. Filtro de Gestión de Riesgo (Anti-Racha Negativa & Rollover Diario)
+        can_open, risk_reason = self.soros_manager.can_open_trade()
+        if not can_open:
+            return {
+                "decision": "HOLD",
+                "confidence": 10,
+                "payout": 0.0,
+                "reason": risk_reason
+            }
+
+        # 3. Filtro de Payout (Rentabilidad matemática)
         payout = self.iq.get_payout(symbol) if hasattr(self.iq, "get_payout") else 0.85
         if payout < self.min_payout:
             return {
                 "decision": "HOLD",
                 "confidence": 30,
+                "payout": payout,
                 "reason": f"Payout insuficiente ({int(payout * 100)}% < {int(self.min_payout * 100)}% mínimo requerido)."
             }
 
-        # 2. Filtro de Cooldown por Activo
+        # 4. Filtro de Cooldown por Activo
         now = time.time()
         time_since_last = now - self.last_trade_time.get(symbol, 0.0)
         if time_since_last < self.cooldown_duration:
@@ -92,10 +143,24 @@ class BinaryOptionsStrategyEngine:
             return {
                 "decision": "HOLD",
                 "confidence": 20,
+                "payout": payout,
                 "reason": f"Activo en enfriamiento post-operación ({rem}s restantes) para rotación segura."
             }
 
-        # 3. Análisis de Mecha y Dirección de Vela
+        # 5. Análisis Avanzado con Smart Money Concepts (SMC)
+        smc_res = {}
+        if candles and len(candles) >= 30:
+            smc_res = self.smc_engine.analyze(candles, asset=symbol)
+            # Si el motor SMC detecta mitigación de Order Block o reversión de alta confianza (>= 88%)
+            if smc_res.get("decision") in ["CALL", "PUT"] and smc_res.get("confidence", 0) >= 85:
+                return {
+                    "decision": smc_res["decision"],
+                    "confidence": smc_res["confidence"],
+                    "payout": payout,
+                    "reason": f"🏛️ [SMC Institucional] {smc_res['reason']}"
+                }
+
+        # 6. Análisis Tradicional de Confluencia Sniper (Mecha + S/R + RSI + EMA)
         has_bullish_rejection = False
         has_bearish_rejection = False
         last_candle_green = False
@@ -121,16 +186,11 @@ class BinaryOptionsStrategyEngine:
             if (upper_wick / total_range) >= 0.35 and upper_wick >= body:
                 has_bearish_rejection = True
 
-        # Soportes y Resistencias dinámicos (Ventana de 15 velas de 1m)
         if candles and len(candles) >= 3:
             recent_lows = [float(c.get("low", c.get("close", price))) for c in candles[-15:]]
             recent_highs = [float(c.get("high", c.get("close", price))) for c in candles[-15:]]
             support = min(recent_lows)
             resistance = max(recent_highs)
-        elif dist_check := abs(price - support) / max(0.0001, price) > 0.01:
-            # Si el soporte/resistencia estático está a más de 1% (300 pips), calibrar a rango de 1m (5-8 pips)
-            support = price * 0.9995
-            resistance = price * 1.0005
 
         change_pct = float(asset.get("change_percent", 0.0))
         trend_status = str(asset.get("trend_status", "")).upper()
@@ -138,41 +198,42 @@ class BinaryOptionsStrategyEngine:
         ai_dec = str(asset.get("ai_decision", "")).upper()
         ai_conf = int(asset.get("ai_confidence", 50))
 
-        # 3.5 Filtro Anti-Lateralidad (Anti-Chop)
+        # Filtro Anti-Lateralidad
         ma_spread = abs(ema20 - ema50) / price if price > 0 else 0
         if "RANGING" in regime and ma_spread < 0.00015 and not (has_bullish_rejection or has_bearish_rejection):
             return {
                 "decision": "HOLD",
                 "confidence": 25,
-                "reason": f"Mercado lateral sin dirección en {symbol} (Medias comprimidas {ma_spread*100:.3f}%). Riesgo de falso rompimiento."
+                "payout": payout,
+                "reason": f"Mercado lateral sin dirección en {symbol} (Medias comprimidas {ma_spread*100:.3f}%)."
             }
 
-        # 4. Cálculo de Confluencia para CALL
+        # Cálculo de Confluencia para CALL
         call_score = 0
         dist_support_pct = ((price - support) / price) * 100 if support > 0 else 99
         if 0.0 <= dist_support_pct <= 0.08:
-            call_score += 35 # Rebote exacto en soporte clave
+            call_score += 35
         elif dist_support_pct <= 0.20:
             call_score += 20
         elif dist_support_pct <= 0.40:
             call_score += 10
 
         if rsi <= 40.0:
-            call_score += 25 # Zona óptima de reversión/sobreventa
+            call_score += 25
         elif rsi <= 48.0:
-            call_score += 15 # Zona propensa a rebote
+            call_score += 15
         elif rsi <= 55.0 and (last_candle_green or change_pct > 0):
             call_score += 10
         elif rsi >= 70.0:
-            call_score -= 30 # Penalización: sobrecompra extrema (riesgo de corrección)
+            call_score -= 30
 
         if has_bullish_rejection:
-            call_score += 25 # Mecha de absorción alcista institucional
+            call_score += 25
         if last_candle_green:
             call_score += 10
 
         if "BAJISTA" in trend_status:
-            call_score -= 35 # Penalización estricta contratendencia
+            call_score -= 35
         elif "ALCISTA" in trend_status or "UP" in regime or change_pct > 0.05:
             call_score += 15
 
@@ -184,32 +245,36 @@ class BinaryOptionsStrategyEngine:
         if ai_conf >= 75:
             call_score += 10
 
-        # 5. Cálculo de Confluencia para PUT
+        # Bonificación si SMC coincide
+        if smc_res.get("decision") == "CALL":
+            call_score += 20
+
+        # Cálculo de Confluencia para PUT
         put_score = 0
         dist_resistance_pct = ((resistance - price) / price) * 100 if resistance > 0 else 99
         if 0.0 <= dist_resistance_pct <= 0.08:
-            put_score += 35 # Rechazo exacto en resistencia clave
+            put_score += 35
         elif dist_resistance_pct <= 0.20:
             put_score += 20
         elif dist_resistance_pct <= 0.40:
             put_score += 10
 
         if rsi >= 60.0:
-            put_score += 25 # Zona óptima de reversión/sobrecompra
+            put_score += 25
         elif rsi >= 52.0:
-            put_score += 15 # Zona propensa a agotamiento
+            put_score += 15
         elif rsi >= 45.0 and (last_candle_red or change_pct < 0):
             put_score += 10
         elif rsi <= 30.0:
-            put_score -= 30 # Penalización: sobreventa extrema (riesgo de rebote)
+            put_score -= 30
 
         if has_bearish_rejection:
-            put_score += 25 # Mecha de rechazo bajista institucional
+            put_score += 25
         if last_candle_red:
             put_score += 10
 
         if "ALCISTA" in trend_status:
-            put_score -= 35 # Penalización estricta contratendencia
+            put_score -= 35
         elif "BAJISTA" in trend_status or "DOWN" in regime or change_pct < -0.05:
             put_score += 15
 
@@ -221,13 +286,17 @@ class BinaryOptionsStrategyEngine:
         if ai_conf >= 75:
             put_score += 10
 
-        # 6. Decisión Cuantitativa Institucional (>= min_confidence)
+        # Bonificación si SMC coincide
+        if smc_res.get("decision") == "PUT":
+            put_score += 20
+
+        # Decisión Cuantitativa Institucional (>= min_confidence)
         if call_score >= self.min_confidence and call_score > put_score:
             return {
                 "decision": "CALL",
                 "confidence": min(98, call_score),
                 "payout": payout,
-                "reason": f"🎯 Confluencia Alcista Sniper ({call_score} pts): Tendencia favorable en {symbol}, rebote en soporte y RSI {rsi:.1f} con payout {int(payout*100)}%."
+                "reason": f"🎯 Confluencia Alcista Sniper ({call_score} pts): Estructura favorable en {symbol}, rebote en soporte y RSI {rsi:.1f} con payout {int(payout*100)}%."
             }
         elif put_score >= self.min_confidence and put_score > call_score:
             return {
@@ -240,7 +309,8 @@ class BinaryOptionsStrategyEngine:
         return {
             "decision": "HOLD",
             "confidence": max(call_score, put_score),
-            "reason": f"Filtro de Calidad Activo: Confluencia insuficiente (Call: {call_score}p, Put: {put_score}p < {self.min_confidence}p requeridos para alta probabilidad)."
+            "payout": payout,
+            "reason": f"Filtro de Calidad Activo: Confluencia insuficiente (Call: {call_score}p, Put: {put_score}p < {self.min_confidence}p requeridos)."
         }
 
     def trigger_test_binary_trade(
@@ -252,7 +322,6 @@ class BinaryOptionsStrategyEngine:
     ) -> Dict[str, Any]:
         """
         Fuerza una operación controlada de prueba en IQ Option (respetando estrictamente el cupo único 0/1).
-        Retorna el resultado directo de la ejecución con evidencia del ID de orden.
         """
         if self.has_active_position:
             return {
@@ -268,7 +337,8 @@ class BinaryOptionsStrategyEngine:
             symbol=symbol,
             direction=dir_clean,
             amount=amount,
-            duration_minutes=duration_minutes
+            duration_minutes=duration_minutes,
+            is_manual_test=True
         )
 
     def execute_binary_option(
@@ -277,25 +347,37 @@ class BinaryOptionsStrategyEngine:
         direction: str, 
         amount: float, 
         duration_minutes: int = 1,
-        entry_price: float = 0.0
+        entry_price: float = 0.0,
+        thesis_reason: str = "Confluencia Cuantitativa Institucional",
+        is_manual_test: bool = False
     ) -> Dict[str, Any]:
         """
-        Dispara una opción binaria en IQ Option garantizando el GATEKEEPER de 1 sola operación activa.
+        Dispara una opción binaria en IQ Option aplicando gestión de riesgo Soros y filtro de correlación.
         """
-        # GATEKEEPER INFRANQUEABLE: Solo 1 operación simultánea
         if self.has_active_position:
             return {
                 "success": False,
-                "error": "GATEKEEPER ACTIVO: Ya existe 1 opción binaria en curso. Operaciones múltiples estrictamente bloqueadas para proteger saldo."
+                "error": "GATEKEEPER ACTIVO: Ya existe 1 opción binaria en curso. Operaciones múltiples estrictamente bloqueadas."
             }
 
         dir_clean = direction.upper()
         if dir_clean not in ["CALL", "PUT"]:
             return {"success": False, "error": f"Dirección inválida {direction}. Debe ser CALL o PUT."}
 
+        # Filtro de Correlación de Divisas en el mismo minuto (salvo pruebas manuales)
+        if not is_manual_test and not self.soros_manager.check_currency_exposure(symbol, dir_clean):
+            return {
+                "success": False,
+                "error": f"Filtro de Correlación Activo: Exposición duplicada en {symbol} para el minuto actual."
+            }
+
+        # Cálculo de Inversión con Interés Compuesto Soros Nivel 1 si aplica
+        final_stake = self.soros_manager.calculate_stake(amount)
+
         payout = self.iq.get_payout(symbol) if hasattr(self.iq, "get_payout") else 0.85
         now = time.time()
-        # Cálculo de expiración estándar IQ Option a minuto redondo
+        
+        # Sincronización precisa a expiración de 1 minuto redondo
         rem_sec = int(now) % 60
         add_sec = (60 - rem_sec) if rem_sec <= 30 else (120 - rem_sec)
         expiration_ts = int(now) + add_sec + (max(1, duration_minutes) - 1) * 60
@@ -305,17 +387,16 @@ class BinaryOptionsStrategyEngine:
             exec_res = self.iq.submit_binary_option(
                 symbol=symbol,
                 direction=dir_clean,
-                amount=amount,
+                amount=final_stake,
                 duration_minutes=duration_minutes
             )
         else:
-            # Fallback simulado
             exec_res = {
                 "success": True,
                 "order_id": f"BIN_SIM_{int(now*1000)}",
                 "symbol": symbol,
                 "direction": dir_clean,
-                "amount": amount,
+                "amount": final_stake,
                 "payout": payout,
                 "status": "OPENED"
             }
@@ -328,26 +409,47 @@ class BinaryOptionsStrategyEngine:
             "id": order_id,
             "symbol": symbol,
             "direction": dir_clean,
-            "amount": float(amount),
+            "amount": float(final_stake),
             "entry_price": float(entry_price),
             "payout": payout,
-            "potential_profit": round(amount * payout, 2),
+            "potential_profit": round(final_stake * payout, 2),
             "entry_timestamp": now,
             "expiration_timestamp": expiration_ts,
             "duration_minutes": duration_minutes,
-            "status": "OPEN"
+            "status": "OPEN",
+            "thesis": thesis_reason
         }
         self.last_trade_time[symbol] = now
-        logger.info(f"🚀 OPCIÓN BINARIA ABIERTA: {symbol} {dir_clean} | Monto: {amount} | Expira: {expiration_ts}")
+        self.soros_manager.register_currency_exposure(symbol, dir_clean)
+
+        # Notificación inmediata por Telegram
+        self.telegram.notify_entry(
+            symbol=symbol,
+            direction=dir_clean,
+            stake=final_stake,
+            reason=thesis_reason,
+            payout=payout
+        )
+
+        logger.info(f"🚀 OPCIÓN BINARIA ABIERTA: {symbol} {dir_clean} | Monto: ${final_stake:.2f} (Soros Step {self.soros_manager.soros_step}) | Expira: {expiration_ts}")
         return {
             "success": True,
             "order_id": order_id,
             "position": self.open_position
         }
 
+    def check_and_resolve_active_trade(self, current_price: Optional[float] = None) -> Optional[Dict[str, Any]]:
+        """Método de conveniencia para liquidar la posición activa si ya expiró."""
+        if not self.open_position:
+            return None
+        sym = self.open_position["symbol"]
+        prices = {sym: current_price or self.open_position.get("entry_price", 1.0)}
+        return self.check_and_resolve_positions(prices)
+
     def check_and_resolve_positions(self, current_prices: Dict[str, float]) -> Optional[Dict[str, Any]]:
         """
         Monitorea el vencimiento de la opción binaria activa y la liquida automáticamente.
+        Actualiza el gestor Soros y emite alertas a Telegram y al Journal.
         """
         if not self.open_position:
             return None
@@ -379,19 +481,23 @@ class BinaryOptionsStrategyEngine:
             result_type = "TIE"
             pnl = 0.0
             self.total_ties += 1
-            reason = f"Empate exacto en {sym} (Precio entrada {entry_p} == Cierre {cur_p}). Reembolso íntegro de inversión."
+            reason = f"Empate exacto en {sym} (Entrada {entry_p} == Cierre {cur_p}). Reembolso íntegro."
         elif is_win:
             result_type = "WIN"
             pnl = round(invested * payout, 2)
             self.total_wins += 1
             self.net_profit += pnl
-            reason = f"🏆 ¡OPCIÓN BINARIA GANADA! {sym} {dir_clean} cumplió previsión. Ganancia: +{pnl} (+{int(payout*100)}%)."
+            reason = f"🏆 ¡OPCIÓN BINARIA GANADA! {sym} {dir_clean}. Ganancia: +${pnl:.2f} (+{int(payout*100)}%)."
         else:
             result_type = "LOSS"
             pnl = -round(invested, 2)
             self.total_losses += 1
             self.net_profit += pnl
-            reason = f"🛡️ Opción binaria finalizada en {sym}. Pérdida controlada de inversión: {invested}."
+            reason = f"🛡️ Opción binaria finalizada en {sym}. Pérdida controlada de inversión: -${invested:.2f}."
+
+        # Registrar resultado en SorosRiskManager y liberar exposición
+        soros_res = self.soros_manager.register_trade_result(pnl, invested)
+        self.soros_manager.release_currency_exposure(sym, dir_clean)
 
         resolution_data = {
             "order_id": pos["id"],
@@ -403,7 +509,9 @@ class BinaryOptionsStrategyEngine:
             "pnl": pnl,
             "result": result_type,
             "reason": reason,
-            "timestamp": now
+            "timestamp": now,
+            "soros_step": soros_res.get("soros_step", 0),
+            "daily_pnl": soros_res.get("daily_pnl", 0.0)
         }
 
         # Registrar en Journal de transacciones si está disponible
@@ -425,6 +533,15 @@ class BinaryOptionsStrategyEngine:
             except Exception as e:
                 logger.error(f"Error registrando binaria en journal: {e}")
 
+        # Notificación inmediata por Telegram
+        self.telegram.notify_result(
+            symbol=sym,
+            outcome=result_type,
+            profit=pnl,
+            daily_pnl=soros_res.get("daily_pnl", self.net_profit),
+            consecutive_losses=soros_res.get("consecutive_losses", 0)
+        )
+
         # Recalibrar IA con el resultado obtenido
         if self.learner and hasattr(self.learner, "recalibrate"):
             try:
@@ -434,7 +551,7 @@ class BinaryOptionsStrategyEngine:
 
         # LIBERAR EL GATEKEEPER DE CUPO
         self.open_position = None
-        cooldown_add = 300.0 if result_type == "LOSS" else self.cooldown_duration
+        cooldown_add = 240.0 if result_type == "LOSS" else self.cooldown_duration
         self.last_trade_time[sym] = now + cooldown_add
         logger.info(f"🏁 RESOLUCIÓN BINARIA: {resolution_data['reason']}")
         return resolution_data

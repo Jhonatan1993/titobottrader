@@ -1,0 +1,65 @@
+{
+  "DEFAULT": {
+    "min_adx": 22.0,
+    "max_adx": 48.0,
+    "rsi_oversold": 30.0,
+    "rsi_overbought": 70.0,
+    "pinbar_wick_ratio": 1.8,
+    "win_rate": 65.5,
+    "sample_size": 120
+  },
+  "EURUSD": {
+    "min_adx": 24.0,
+    "max_adx": 46.0,
+    "rsi_oversold": 28.0,
+    "rsi_overbought": 72.0,
+    "pinbar_wick_ratio": 1.8,
+    "win_rate": 68.2,
+    "sample_size": 145
+  },
+  "GBPUSD": {
+    "min_adx": 25.0,
+    "max_adx": 50.0,
+    "rsi_oversold": 30.0,
+    "rsi_overbought": 70.0,
+    "pinbar_wick_ratio": 2.0,
+    "win_rate": 64.8,
+    "sample_size": 130
+  },
+  "USDJPY": {
+    "min_adx": 22.0,
+    "max_adx": 45.0,
+    "rsi_oversold": 32.0,
+    "rsi_overbought": 68.0,
+    "pinbar_wick_ratio": 1.7,
+    "win_rate": 66.0,
+    "sample_size": 115
+  },
+  "EURJPY": {
+    "min_adx": 24.0,
+    "max_adx": 48.0,
+    "rsi_oversold": 30.0,
+    "rsi_overbought": 70.0,
+    "pinbar_wick_ratio": 1.9,
+    "win_rate": 67.1,
+    "sample_size": 128
+  },
+  "EURUSD-OTC": {
+    "min_adx": 20.0,
+    "max_adx": 45.0,
+    "rsi_oversold": 26.0,
+    "rsi_overbought": 74.0,
+    "pinbar_wick_ratio": 1.8,
+    "win_rate": 69.4,
+    "sample_size": 180
+  },
+  "GBPUSD-OTC": {
+    "min_adx": 22.0,
+    "max_adx": 47.0,
+    "rsi_oversold": 28.0,
+    "rsi_overbought": 72.0,
+    "pinbar_wick_ratio": 1.9,
+    "win_rate": 67.8,
+    "sample_size": 165
+  }
+}

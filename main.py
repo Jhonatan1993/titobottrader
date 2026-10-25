@@ -1,6 +1,10 @@
 import sys
 import os
 import socket
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from dashboard.web_dashboard import app, ENGINE
 
 def is_port_in_use(port: int) -> bool:
