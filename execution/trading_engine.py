@@ -1094,7 +1094,9 @@ class RealTimeTradingEngine:
                     continue
 
         now_ts = time.time()
-        is_weekend = datetime.datetime.now(datetime.timezone.utc).weekday() >= 5
+        now_dt = datetime.datetime.now(datetime.timezone.utc)
+        # Horario Forex Institucional: Cierra viernes 21:00 UTC y abre domingo 21:00 UTC
+        is_weekend = (now_dt.weekday() == 4 and now_dt.hour >= 21) or (now_dt.weekday() == 5) or (now_dt.weekday() == 6 and now_dt.hour < 21)
 
         # Si hay una opción binaria en curso (independientemente del modo), resolverla si ya expiró
         if hasattr(self, "binary_engine") and self.binary_engine.has_active_position:

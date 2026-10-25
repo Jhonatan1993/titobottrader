@@ -61,6 +61,39 @@ def test_iqoption_real_mode_executes_ws_order_when_balance_available():
         assert res["order_id"] == "184920491"
         assert res["amount"] == 10000.0
 
+def test_iqoption_connected_paper_mode_executes_on_practice_balance():
+    """En entorno PAPER cuando hay conexión activa y practice_balance_id, debe enviar la orden a IQ Option práctica"""
+    adapter = IQOptionAdapter(ssid="test_ssid_valid", environment="PAPER")
+    adapter.connected = True
+    adapter.practice_balance_id = 1251620487
+    adapter.practice_amount = 10000.0
+
+    mock_ws = MagicMock()
+    mock_responses = [
+        '{"name": "timeSync", "msg": 1729000000}',
+        '{"name": "order-placed", "msg": {"id": "14389232901", "order_id": "14389232901"}}'
+    ]
+    mock_ws.recv.side_effect = mock_responses
+
+    with patch("websocket.create_connection", return_value=mock_ws):
+        res = adapter.submit_order("EURUSD", "BUY", 2.0)
+        assert res["success"] is True
+        assert res["order_id"] == "14389232901"
+        assert res["status"] == "FILLED"
+
+    # También para submit_binary_option
+    mock_ws_bin = MagicMock()
+    mock_ws_bin.recv.side_effect = [
+        '{"name": "timeSync", "msg": 1729000000}',
+        '{"name": "authenticated", "msg": true}',
+        '{"name": "order-placed-temp", "status": 2000, "request_id": "bin_opt_123", "msg": {"id": 14389232902}}'
+    ]
+    with patch("websocket.create_connection", return_value=mock_ws_bin):
+        res_bin = adapter.submit_binary_option("EURUSD-OTC", "CALL", 1.0)
+        assert res_bin["success"] is True
+        assert res_bin["order_id"] == "14389232902"
+        assert res_bin["status"] == "OPENED"
+
 def test_iqoption_trading_engine_environment_switch_cleans_paper_positions():
     """Al conmutar IQ Option de PAPER a LIVE_REAL en el motor, las posiciones demo previas deben limpiarse de inmediato"""
     engine = RealTimeTradingEngine(initial_balance=10000.0, execution_environment="PAPER")

@@ -110,6 +110,66 @@ AVAILABLE_ASSETS = [
         "base_price": 197.80,
         "volatility": 0.0065,
         "trend_bias": 0.0001
+    },
+    {
+        "symbol": "EURUSD-OTC",
+        "name": "EUR / USD (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Euro / Dólar OTC",
+        "icon": "🇪🇺",
+        "base_price": 1.0850,
+        "volatility": 0.0035,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "GBPUSD-OTC",
+        "name": "GBP / USD (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Libra / Dólar OTC",
+        "icon": "💷",
+        "base_price": 1.2950,
+        "volatility": 0.0040,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "USDJPY-OTC",
+        "name": "USD / JPY (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Dólar / Yen OTC",
+        "icon": "💴",
+        "base_price": 152.30,
+        "volatility": 0.0045,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "USDCHF-OTC",
+        "name": "USD / CHF (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Dólar / Franco Suizo OTC",
+        "icon": "🇨🇭",
+        "base_price": 0.8650,
+        "volatility": 0.0034,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "EURJPY-OTC",
+        "name": "EUR / JPY (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Euro / Yen OTC",
+        "icon": "🇯🇵",
+        "base_price": 165.20,
+        "volatility": 0.0050,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "NZDUSD-OTC",
+        "name": "NZD / USD (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Dólar Neozelandés OTC",
+        "icon": "🇳🇿",
+        "base_price": 0.6050,
+        "volatility": 0.0040,
+        "trend_bias": 0.0001
     }
 ]
 
@@ -255,6 +315,10 @@ class MultiAssetMarketFeed:
                     self.live_cache["EURJPY"] = round(float(rates["JPY"]) / float(rates["EUR"]), 3)
                 if "GBP" in rates and "JPY" in rates and float(rates["GBP"]) > 0:
                     self.live_cache["GBPJPY"] = round(float(rates["JPY"]) / float(rates["GBP"]), 3)
+                # Replicar cotizaciones en vivo a los pares OTC para fines de semana
+                for fx_pair in ["EURUSD", "GBPUSD", "USDJPY", "USDCHF", "EURJPY", "NZDUSD"]:
+                    if fx_pair in self.live_cache:
+                        self.live_cache[f"{fx_pair}-OTC"] = self.live_cache[fx_pair]
         except Exception:
             pass
 

@@ -1002,7 +1002,8 @@ class IQOptionAdapter:
         if side.lower() == "sell" and pos_id:
             return self.close_position(pos_id)
 
-        if not self.connected or self.environment != "LIVE_REAL":
+        # Si no hay sesión WebSocket activa con IQ Option, o no hay SSID, o no se ha sincronizado practice_balance_id, retornar orden simulada offline
+        if not self.connected or not self.ssid or (self.environment != "LIVE_REAL" and not self.practice_balance_id):
             order_id = f"IQ_PAPER_{int(time.time() * 1000)}"
             return {
                 "success": True,
@@ -1011,20 +1012,24 @@ class IQOptionAdapter:
                 "side": side.lower(),
                 "amount": round(amount, 2),
                 "leverage": leverage,
-                "environment": "PAPER",
+                "environment": self.environment,
                 "status": "FILLED_SIMULATED"
             }
 
-        # Validaciones de seguridad para MODO REAL:
-        if self.real_amount <= 0.0 and self.balance <= 0.0:
-            return {
-                "success": False,
-                "error": "Saldo insuficiente en cuenta real de IQ Option (Saldo: 0.0 COP). Por favor fondea tu cuenta antes de operar."
-            }
-
-        # Conmutar cuenta a saldo REAL en IQ Option antes de disparar la orden
-        if self.real_balance_id:
-            self.change_balance(self.real_balance_id)
+        # Conmutar cuenta según el entorno activo
+        if self.environment == "LIVE_REAL":
+            # Validaciones de seguridad para MODO REAL:
+            if self.real_amount <= 0.0 and self.balance <= 0.0:
+                return {
+                    "success": False,
+                    "error": f"Saldo insuficiente en cuenta real de IQ Option (Saldo: {self.real_amount:,.2f} {self.currency}). Por favor fondea tu cuenta antes de operar."
+                }
+            if self.real_balance_id:
+                self.change_balance(self.real_balance_id)
+        else:
+            # En modo PAPER conectado a IQ Option: Operar en la cuenta Demo/Practice de IQ Option
+            if self.practice_balance_id:
+                self.change_balance(self.practice_balance_id)
 
         # Enviar orden Forex CFD real vía WebSocket autenticado de IQ Option
         return self._execute_real_ws_order(
@@ -1054,7 +1059,8 @@ class IQOptionAdapter:
         min_amount = 2000.0 if self.currency == "COP" else 1.0
         order_amount = max(min_amount, round(float(amount), 2))
 
-        if not self.connected or self.environment != "LIVE_REAL":
+        # Si no hay sesión WebSocket activa con IQ Option, o no hay SSID, o no se ha sincronizado practice_balance_id, retornar orden simulada offline
+        if not self.connected or not self.ssid or (self.environment != "LIVE_REAL" and not self.practice_balance_id):
             order_id = f"BIN_PAPER_{int(time.time() * 1000)}"
             return {
                 "success": True,
@@ -1063,24 +1069,29 @@ class IQOptionAdapter:
                 "direction": dir_clean,
                 "amount": order_amount,
                 "duration_minutes": duration_minutes,
-                "environment": "PAPER",
+                "environment": self.environment,
                 "status": "OPENED_SIMULATED"
             }
 
-        if self.real_amount <= 0.0 and self.balance <= 0.0:
-            return {
-                "success": False,
-                "error": f"Saldo insuficiente en cuenta real de IQ Option (Dispones de {self.real_amount:,.2f} {self.currency})."
-            }
+        if self.environment == "LIVE_REAL":
+            if self.real_amount <= 0.0 and self.balance <= 0.0:
+                return {
+                    "success": False,
+                    "error": f"Saldo insuficiente en cuenta real de IQ Option (Dispones de {self.real_amount:,.2f} {self.currency})."
+                }
 
-        if order_amount > self.real_amount:
-            return {
-                "success": False,
-                "error": f"Saldo insuficiente: La inversión es de {order_amount:,.2f} {self.currency} y dispones de {self.real_amount:,.2f} {self.currency}."
-            }
+            if order_amount > self.real_amount:
+                return {
+                    "success": False,
+                    "error": f"Saldo insuficiente: La inversión es de {order_amount:,.2f} {self.currency} y dispones de {self.real_amount:,.2f} {self.currency}."
+                }
 
-        if self.real_balance_id:
-            self.change_balance(self.real_balance_id)
+            if self.real_balance_id:
+                self.change_balance(self.real_balance_id)
+        else:
+            # En modo PAPER conectado a IQ Option: Operar en la cuenta Demo/Practice de IQ Option
+            if self.practice_balance_id:
+                self.change_balance(self.practice_balance_id)
 
         return self._execute_real_binary_ws_order(
             symbol=symbol,
@@ -1154,6 +1165,8 @@ class IQOptionAdapter:
                                         target_bal_id = self.real_balance_id
                                 elif b_item.get("type") == 4:
                                     self.practice_balance_id = int(b_item.get("id"))
+                                    if self.environment != "LIVE_REAL":
+                                        target_bal_id = self.practice_balance_id
                         break
                     if d.get("name") == "authenticated":
                         break
@@ -1210,7 +1223,7 @@ class IQOptionAdapter:
                     st = data.get("status")
                     captured_frames.append(msg_name)
 
-                    if req == req_id:
+                    if req == req_id or (msg_name in ["order-placed-temp", "order-placed", "option-opened"] and isinstance(msg_body, dict) and "id" in msg_body):
                         if isinstance(msg_body, dict) and "id" in msg_body:
                             real_id = str(msg_body["id"])
                             result = {
