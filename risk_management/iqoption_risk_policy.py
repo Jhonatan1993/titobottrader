@@ -40,6 +40,10 @@ class IQOptionRiskPolicy:
         self.realized_pnl = 0.0
         self.halted_reason: Optional[str] = None
 
+    @property
+    def halted(self) -> bool:
+        return bool(self.halted_reason)
+
     @staticmethod
     def _today() -> str:
         return dt.datetime.now(dt.timezone.utc).date().isoformat()

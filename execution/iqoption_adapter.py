@@ -159,9 +159,18 @@ class IQOptionAdapter:
                                 if b_type == 1:
                                     self.real_balance_id = b_id
                                     self.real_amount = round(amt, 2)
+                                    self.real_currency = b.get("currency", "COP")
                                 elif b_type == 4:
                                     self.practice_balance_id = b_id
                                     self.practice_amount = round(amt, 2)
+                                    self.practice_currency = b.get("currency", "USD")
+
+                            if self.environment == "LIVE_REAL":
+                                self.balance = self.real_amount
+                                self.currency = getattr(self, "real_currency", "COP")
+                            else:
+                                self.balance = self.practice_amount
+                                self.currency = getattr(self, "practice_currency", "USD")
                         found_profile = True
                         break
                     elif msg_name in ["authenticated", "front"]:
@@ -235,9 +244,18 @@ class IQOptionAdapter:
                                 if b_type == 1:
                                     self.real_balance_id = b_id
                                     self.real_amount = round(amt, 2)
+                                    self.real_currency = b.get("currency", "COP")
                                 elif b_type == 4:
                                     self.practice_balance_id = b_id
                                     self.practice_amount = round(amt, 2)
+                                    self.practice_currency = b.get("currency", "USD")
+
+                            if self.environment == "LIVE_REAL":
+                                self.balance = self.real_amount
+                                self.currency = getattr(self, "real_currency", "COP")
+                            else:
+                                self.balance = self.practice_amount
+                                self.currency = getattr(self, "practice_currency", "USD")
                             found_profile = True
 
                     elif msg_name == "balance-changed" and isinstance(msg_body, dict):
@@ -245,6 +263,8 @@ class IQOptionAdapter:
                         b_id = msg_body.get("id")
                         if b_type == 1 or b_id == self.real_balance_id:
                             self.real_amount = round(float(msg_body.get("amount", self.real_amount)), 2)
+                        elif b_type == 4 or b_id == self.practice_balance_id:
+                            self.practice_amount = round(float(msg_body.get("amount", self.practice_amount)), 2)
 
                     elif (msg_name in ["positions", "portfolio.positions"] or (isinstance(msg_body, dict) and "positions" in msg_body)) and msg_name != "result":
                         found_positions = True
@@ -312,11 +332,13 @@ class IQOptionAdapter:
             if self.environment == "LIVE_REAL":
                 self.balance = self.real_amount
                 self.active_balance_id = self.real_balance_id
+                self.currency = getattr(self, "real_currency", "COP")
                 if self.real_balance_id:
                     self.change_balance(self.real_balance_id)
             else:
                 self.balance = self.practice_amount
                 self.active_balance_id = self.practice_balance_id
+                self.currency = getattr(self, "practice_currency", "USD")
                 if self.practice_balance_id:
                     self.change_balance(self.practice_balance_id)
             return {"success": True, "profile": self.profile_data}
@@ -338,7 +360,6 @@ class IQOptionAdapter:
                             profile = p_data.get("profile", {})
                         if profile:
                             self.profile_data = profile
-                            self.currency = profile.get("currency", "USD")
                             balances = profile.get("balances", [])
                             for b in balances:
                                 b_type = b.get("type")
@@ -346,17 +367,21 @@ class IQOptionAdapter:
                                 amt = float(b.get("amount", 0.0)) + float(b.get("bonus_amount", 0.0))
                                 if b_type == 1:
                                     self.real_balance_id = b_id
-                                    self.real_amount = amt
+                                    self.real_amount = round(amt, 2)
+                                    self.real_currency = b.get("currency", "COP")
                                 elif b_type == 4:
                                     self.practice_balance_id = b_id
-                                    self.practice_amount = amt
+                                    self.practice_amount = round(amt, 2)
+                                    self.practice_currency = b.get("currency", "USD")
 
                             if self.environment == "LIVE_REAL":
                                 self.balance = self.real_amount
                                 self.active_balance_id = self.real_balance_id
+                                self.currency = getattr(self, "real_currency", "COP")
                             else:
                                 self.balance = self.practice_amount
                                 self.active_balance_id = self.practice_balance_id
+                                self.currency = getattr(self, "practice_currency", "USD")
                             return {"success": True, "profile": self.profile_data}
                     elif prof_resp.status_code == 401:
                         return {"success": False, "error": "Token SSID inválido o expirado. Copia tu cookie 'ssid' actualizada en iqoption.com."}
@@ -581,22 +606,30 @@ class IQOptionAdapter:
         }
 
     def get_account_balances(self) -> Dict[str, Any]:
-        """Consulta el saldo y estado actual."""
+        """Consulta el saldo y estado actual en tiempo real vía WebSocket."""
         if self.is_configured and not self.connected:
             self.connect()
-        elif self.connected and self.ssid and self.environment == "LIVE_REAL":
+        elif self.connected and self.ssid:
             now_t = time.time()
-            if not hasattr(self, "_last_ws_balance_sync") or (now_t - getattr(self, "_last_ws_balance_sync", 0.0) > 4.0) or self.real_amount <= 0.0:
+            if not hasattr(self, "_last_ws_balance_sync") or (now_t - getattr(self, "_last_ws_balance_sync", 0.0) > 3.0):
                 self._last_ws_balance_sync = now_t
                 self._fetch_live_balances_ws()
+            if self.environment == "LIVE_REAL":
                 self.balance = self.real_amount
+                self.currency = getattr(self, "real_currency", "COP")
+            else:
+                self.balance = self.practice_amount
+                self.currency = getattr(self, "practice_currency", "USD")
 
+        active_curr = getattr(self, "real_currency", "COP") if self.environment == "LIVE_REAL" else getattr(self, "practice_currency", "USD")
         return {
             "authenticated": self.connected,
             "balance": round(self.balance, 2),
             "practice_balance": round(self.practice_amount, 2),
             "real_balance": round(self.real_amount, 2),
-            "currency": self.currency,
+            "currency": active_curr,
+            "practice_currency": getattr(self, "practice_currency", "USD"),
+            "real_currency": getattr(self, "real_currency", "COP"),
             "environment": self.environment,
             "open_positions": getattr(self, "open_broker_positions", []),
             "positions_synced": getattr(self, "_positions_synced", False)
@@ -615,12 +648,15 @@ class IQOptionAdapter:
                 self.change_balance(target_id)
         if self.environment == "LIVE_REAL":
             self.balance = self.real_amount
+            self.currency = getattr(self, "real_currency", "COP")
         else:
             self.balance = self.practice_amount
+            self.currency = getattr(self, "practice_currency", "USD")
         return {
             "success": True,
             "environment": self.environment,
-            "balance": self.balance
+            "balance": self.balance,
+            "currency": self.currency
         }
 
     def get_payout(self, symbol: str) -> float:

@@ -474,16 +474,11 @@ class RealTimeTradingEngine:
         wallet = self.broker_wallets.get(b)
         if not wallet:
             return round(self.get_total_equity(), 2)
-        if wallet.get("environment") == "LIVE_REAL":
-            open_pos = self.get_broker_positions(b)
-            unrealized = sum(p.get("current_pnl", 0.0) for p in open_pos)
-            invested = sum(p.get("invested_amount", 0.0) for p in open_pos)
-            cash = wallet.get("cash", 0.0)
-            return round(cash + invested + unrealized, 2)
-        base = wallet.get("initial_balance", 0.0)
-        vault = wallet.get("profit_vault", 0.0)
-        unrealized = sum(p.get("current_pnl", 0.0) for p in self.get_broker_positions(b))
-        return round(base + vault + unrealized, 2)
+        open_pos = self.get_broker_positions(b)
+        unrealized = sum(p.get("current_pnl", 0.0) for p in open_pos)
+        invested = sum(p.get("invested_amount", 0.0) for p in open_pos)
+        cash = wallet.get("cash", 0.0)
+        return round(cash + invested + unrealized, 2)
 
     def set_active_broker(self, broker: str) -> Dict[str, Any]:
         b = broker.upper()
@@ -948,13 +943,16 @@ class RealTimeTradingEngine:
                 if acc.get("authenticated") or acc.get("connected"):
                     is_real = (b_wal.get("environment") == "LIVE_REAL")
                     sync_bal = float(acc.get("real_balance", 0.0)) if is_real else float(acc.get("practice_balance", 10000.0))
+                    sync_curr = acc.get("real_currency", "COP") if is_real else acc.get("practice_currency", "USD")
                     if sync_bal > 0:
                         b_wal["cash"] = sync_bal
-                        if b_wal.get("initial_balance", 0.0) <= 0.0:
+                        b_wal["currency"] = sync_curr
+                        if not is_real:
+                            b_wal["initial_balance"] = 10000.0
+                        elif b_wal.get("initial_balance", 0.0) <= 0.0:
                             b_wal["initial_balance"] = sync_bal
                         self.cash_balance = b_wal["cash"]
-                        if self.initial_balance <= 0.0:
-                            self.initial_balance = b_wal["initial_balance"]
+                        self.initial_balance = b_wal["initial_balance"]
                     if acc.get("positions_synced"):
                         broker_positions = acc.get("open_positions", [])
                         self._sync_iqoption_open_positions(broker_positions)
