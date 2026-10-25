@@ -4688,7 +4688,13 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    alert("✅ Credenciales de IQ Option actualizadas y guardadas con éxito. Conectando al broker...");
+                    if (data.connected) {
+                        alert("✅ ¡Conexión Exitosa con IQ Option!\n\nUsuario: " + (data.user || email) + "\nSaldo sincronizado en vivo: $" + Number(data.balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2}) + " USD\n\nEl bot ahora está sincronizado directamente con tu cuenta.");
+                    } else if (data.error) {
+                        alert("⚠️ Credenciales guardadas, pero IQ Option respondió:\n" + data.error + "\n\nTip: Si IQ Option bloquea la IP del VPS o requiere 2FA, ingresa tu Token SSID de sesión para conectar directamente sin restricciones.");
+                    } else {
+                        alert("✅ Credenciales de IQ Option guardadas con éxito. Conectando al broker...");
+                    }
                     closeModals();
                     await fetchState();
                 } else {

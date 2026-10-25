@@ -628,12 +628,21 @@ def get_broker_keys():
 @app.route("/api/control/set-broker-keys", methods=["POST"])
 def set_broker_keys():
     """Actualiza exclusivamente las credenciales de IQ Option. Ignora Alpaca y Binance."""
-    data = request.get_json(silent=True) or {}
-    iqoption_email = data.get("iqoption_email", "").strip()
-    iqoption_password = data.get("iqoption_password", "").strip()
-    iqoption_ssid = data.get("iqoption_ssid", "").strip()
-    ENGINE.update_broker_keys("", "", "", "", iqoption_email, iqoption_password, iqoption_ssid)
-    return jsonify({"success": True})
+    try:
+        data = request.get_json(silent=True) or {}
+        iqoption_email = data.get("iqoption_email", "").strip()
+        iqoption_password = data.get("iqoption_password", "").strip()
+        iqoption_ssid = data.get("iqoption_ssid", "").strip()
+        res = ENGINE.update_broker_keys(
+            iqoption_email=iqoption_email, 
+            iqoption_password=iqoption_password, 
+            iqoption_ssid=iqoption_ssid
+        )
+        return jsonify(res if isinstance(res, dict) else {"success": True})
+    except Exception as e:
+        logger.error(f"Error en set_broker_keys: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 400
+
 
 @app.route("/api/control/add-broker", methods=["POST"])
 def add_broker():

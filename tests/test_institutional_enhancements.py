@@ -93,3 +93,48 @@ def test_binary_engine_evaluation():
     assert "smc_engine" in status
     assert "soros_enabled" in status
     assert "economic_calendar" in status
+
+def test_update_broker_keys_and_api_endpoint():
+    """Verifica que update_broker_keys admita cualquier firma posicional o nominal y nunca lance 500."""
+    from execution.trading_engine import RealTimeTradingEngine
+    from dashboard.web_dashboard import app
+    from unittest.mock import patch, MagicMock
+
+    engine = RealTimeTradingEngine(max_open_positions=1)
+
+    # 1. Llamada con 7 argumentos posicionales (legacy)
+    res_pos7 = engine.update_broker_keys("", "", "", "", "test@iqoption.com", "secretpass123", "ssid_token_abc")
+    assert res_pos7["success"] is True
+    assert engine.broker_config["iqoption"]["email"] == "test@iqoption.com"
+    assert engine.broker_config["iqoption"]["password"] == "secretpass123"
+    assert engine.broker_config["iqoption"]["ssid"] == "ssid_token_abc"
+
+    # 2. Llamada con kwargs
+    res_kw = engine.update_broker_keys(
+        iqoption_email="kw@iqoption.com",
+        iqoption_password="kwpass",
+        iqoption_ssid="kw_ssid"
+    )
+    assert res_kw["success"] is True
+    assert engine.broker_config["iqoption"]["email"] == "kw@iqoption.com"
+
+    # 3. Test de endpoint Flask /api/control/set-broker-keys retornando JSON 200 (sin HTML 500)
+    with app.test_client() as client:
+        # Autenticar como admin
+        login_res = client.post("/login", data={"username": "admin", "password": "admin123"}, follow_redirects=True)
+        assert login_res.status_code == 200
+
+        with patch.object(engine.feed.iqoption, "connect", return_value={"connected": True, "balance": 10000.0, "practice_balance": 10000.0, "real_balance": 0.0}):
+            response = client.post(
+                "/api/control/set-broker-keys",
+                json={
+                    "iqoption_email": "api_user@iqoption.com",
+                    "iqoption_password": "api_password",
+                    "iqoption_ssid": "api_ssid"
+                }
+            )
+            assert response.status_code == 200
+            data = response.get_json()
+            assert data is not None
+            assert data["success"] is True
+

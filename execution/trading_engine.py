@@ -599,23 +599,101 @@ class RealTimeTradingEngine:
             "operating_mode": self.operating_mode
         }
 
-    def update_broker_keys(self, iqoption_email: str = "", iqoption_password: str = "", iqoption_ssid: str = "", **kwargs):
-        """Actualiza exclusivamente las credenciales de IQ Option."""
-        if iqoption_email or iqoption_password or iqoption_ssid:
-            if "iqoption" not in self.broker_config:
-                self.broker_config["iqoption"] = {}
-            if iqoption_email:
-                self.broker_config["iqoption"]["email"] = iqoption_email
-            if iqoption_password:
-                self.broker_config["iqoption"]["password"] = iqoption_password
-            if iqoption_ssid is not None:
-                self.broker_config["iqoption"]["ssid"] = iqoption_ssid
-            self.broker_config["iqoption"]["enabled"] = bool(
-                self.broker_config["iqoption"].get("ssid") or 
-                (self.broker_config["iqoption"].get("email") and self.broker_config["iqoption"].get("password"))
-            )
+    def update_broker_keys(self, *args, **kwargs) -> Dict[str, Any]:
+        """
+        Actualiza exclusivamente las credenciales de IQ Option (Email, Contraseña, Token SSID).
+        Soporta argumentos posicionales arbitrarios (legados o nuevos) y por palabra clave.
+        Inicia de inmediato la conexión al broker y sincroniza el saldo real/demo.
+        """
+        iqoption_email = kwargs.get("iqoption_email", "")
+        iqoption_password = kwargs.get("iqoption_password", "")
+        iqoption_ssid = kwargs.get("iqoption_ssid", "")
+
+        # Compatibilidad hacia atrás con llamadas de cualquier número de argumentos posicionales
+        if len(args) >= 7:
+            # Formato legacy con 7 argumentos (alpaca_k, alpaca_s, bin_k, bin_s, email, pwd, ssid)
+            iqoption_email = iqoption_email or args[4]
+            iqoption_password = iqoption_password or args[5]
+            iqoption_ssid = iqoption_ssid or args[6]
+        elif len(args) == 3:
+            iqoption_email = iqoption_email or args[0]
+            iqoption_password = iqoption_password or args[1]
+            iqoption_ssid = iqoption_ssid or args[2]
+        elif len(args) == 2:
+            iqoption_email = iqoption_email or args[0]
+            iqoption_password = iqoption_password or args[1]
+        elif len(args) == 1:
+            iqoption_email = iqoption_email or args[0]
+
+        iqoption_email = str(iqoption_email or "").strip()
+        iqoption_password = str(iqoption_password or "").strip()
+        iqoption_ssid = str(iqoption_ssid or "").strip()
+
+        if "iqoption" not in self.broker_config:
+            self.broker_config["iqoption"] = {}
+
+        if iqoption_email:
+            self.broker_config["iqoption"]["email"] = iqoption_email
+        if iqoption_password:
+            self.broker_config["iqoption"]["password"] = iqoption_password
+        if iqoption_ssid:
+            self.broker_config["iqoption"]["ssid"] = iqoption_ssid
+
+        is_enabled = bool(
+            self.broker_config["iqoption"].get("ssid") or 
+            (self.broker_config["iqoption"].get("email") and self.broker_config["iqoption"].get("password"))
+        )
+        self.broker_config["iqoption"]["enabled"] = is_enabled
         save_broker_config(self.broker_config)
+
+        # Recargar credenciales en el feed
         self.feed.reload_credentials()
+
+        # Actualizar adaptador del motor binario
+        if hasattr(self, "binary_engine") and hasattr(self.feed, "iqoption"):
+            self.binary_engine.iq = self.feed.iqoption
+
+        conn_result = {"connected": False, "authenticated": False}
+        if hasattr(self.feed, "iqoption") and getattr(self.feed.iqoption, "is_configured", False):
+            try:
+                conn_result = self.feed.iqoption.connect()
+                if conn_result.get("connected"):
+                    is_real = (self.execution_environment == "LIVE_REAL")
+                    sync_balance = float(conn_result.get("real_balance", 0.0)) if is_real else float(conn_result.get("practice_balance", 10000.0))
+                    
+                    wallet = self.broker_wallets.get("IQOPTION", {})
+                    wallet["cash"] = sync_balance
+                    wallet["initial_balance"] = sync_balance
+                    wallet["connected"] = True
+                    self.cash_balance = sync_balance
+                    self.initial_balance = sync_balance
+
+                    # Limpiar historial ficticio acumulado en simulación previa si se conecta
+                    if hasattr(self, "binary_engine"):
+                        self.binary_engine.open_position = None
+                    self.open_positions.clear()
+
+                    user_name = conn_result.get("name") or iqoption_email or "Usuario IQ Option"
+                    mode_txt = "REAL" if is_real else "DEMO/PRÁCTICA"
+                    self.agent._add_thought(
+                        f"✅ Conectado exitosamente a IQ Option en Modo {mode_txt} ({user_name}). Saldo sincronizado: ${sync_balance:,.2f} USD.",
+                        "SUCCESS",
+                        icon="📈"
+                    )
+            except Exception as e:
+                conn_result["error"] = str(e)
+
+        return {
+            "success": True,
+            "connected": conn_result.get("connected", False),
+            "authenticated": conn_result.get("authenticated", False),
+            "balance": conn_result.get("balance", self.cash_balance),
+            "practice_balance": conn_result.get("practice_balance", 10000.0),
+            "real_balance": conn_result.get("real_balance", 0.0),
+            "user": conn_result.get("name", iqoption_email),
+            "error": conn_result.get("error")
+        }
+
 
     def _record_equity_snapshot(self):
         total_equity = self.get_total_equity()
@@ -863,23 +941,23 @@ class RealTimeTradingEngine:
 
         now_sync = time.time()
         b_wal = self.broker_wallets.get("IQOPTION", {})
-        if b_wal.get("environment") == "LIVE_REAL":
-            if hasattr(self.feed, 'iqoption') and self.feed.iqoption.is_configured:
-                if (now_sync - self._last_broker_sync.get("IQOPTION", 0.0)) > 4.0:
-                    self._last_broker_sync["IQOPTION"] = now_sync
-                    acc = self.feed.iqoption.get_account_balances()
-                    if acc.get("authenticated"):
-                        r_bal = float(acc.get("real_balance", 0.0))
-                        if r_bal > 0:
-                            b_wal["cash"] = r_bal
-                            if b_wal.get("initial_balance", 0.0) <= 0.0:
-                                b_wal["initial_balance"] = r_bal
-                            self.cash_balance = b_wal["cash"]
-                            if self.initial_balance <= 0.0:
-                                self.initial_balance = b_wal["initial_balance"]
-                        if acc.get("positions_synced"):
-                            broker_positions = acc.get("open_positions", [])
-                            self._sync_iqoption_open_positions(broker_positions)
+        if hasattr(self.feed, 'iqoption') and getattr(self.feed.iqoption, 'is_configured', False):
+            if (now_sync - self._last_broker_sync.get("IQOPTION", 0.0)) > 4.0:
+                self._last_broker_sync["IQOPTION"] = now_sync
+                acc = self.feed.iqoption.get_account_balances()
+                if acc.get("authenticated") or acc.get("connected"):
+                    is_real = (b_wal.get("environment") == "LIVE_REAL")
+                    sync_bal = float(acc.get("real_balance", 0.0)) if is_real else float(acc.get("practice_balance", 10000.0))
+                    if sync_bal > 0:
+                        b_wal["cash"] = sync_bal
+                        if b_wal.get("initial_balance", 0.0) <= 0.0:
+                            b_wal["initial_balance"] = sync_bal
+                        self.cash_balance = b_wal["cash"]
+                        if self.initial_balance <= 0.0:
+                            self.initial_balance = b_wal["initial_balance"]
+                    if acc.get("positions_synced"):
+                        broker_positions = acc.get("open_positions", [])
+                        self._sync_iqoption_open_positions(broker_positions)
 
         # 5. Escaneo y Operación Autónoma Continua 24/7
         if self.is_running:
