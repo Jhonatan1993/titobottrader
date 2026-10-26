@@ -205,7 +205,7 @@ class RealTimeTradingEngine:
                 pos_id = str(pos.get("broker_order_id", ""))
                 ext_id = str(pos.get("position_id", ""))
                 sym = pos.get("symbol", pos_key)
-                if pos_id and pos_id not in broker_active_ids and ext_id not in broker_active_ids:
+                if (not pos_id and not ext_id) or (pos_id not in broker_active_ids and ext_id not in broker_active_ids):
                     if pos_key in self.open_positions:
                         del self.open_positions[pos_key]
                     self.last_exit_times[sym] = time.time() + 180.0
@@ -302,7 +302,7 @@ class RealTimeTradingEngine:
             if not hasattr(self, "_zero_pos_counter"):
                 self._zero_pos_counter = 0
             self._zero_pos_counter += 1
-            if self._zero_pos_counter >= 3:
+            if self._zero_pos_counter >= 1:
                 for pos_key, pos in iq_memory_positions:
                     sym = pos.get("symbol", pos_key)
                     if pos_key in self.open_positions:
@@ -556,6 +556,15 @@ class RealTimeTradingEngine:
 
         if clean_m == "BINARY_OPTIONS":
             self.iqoption_risk_policy.zero_loss_blocks_entries = False
+            # Purgar posiciones CFD no confirmadas por el broker para garantizar aislamiento 0/1
+            broker_pos_ids = set()
+            if hasattr(self.feed, 'iqoption') and hasattr(self.feed.iqoption, 'open_broker_positions'):
+                broker_pos_ids = {str(p.get("id")) for p in self.feed.iqoption.open_broker_positions if p.get("id")}
+            for s in list(self.open_positions.keys()):
+                p = self.open_positions[s]
+                p_id = str(p.get("broker_order_id") or p.get("position_id") or "")
+                if not p_id or p_id not in broker_pos_ids:
+                    del self.open_positions[s]
             self.agent._add_thought(
                 "⏱️ MODO IQ OPTION CONMUTADO: OPCIONES BINARIAS TURBO (1m-5m). Aislamiento total de Forex CFD activo (Gatekeeper 1 operación, Payout >= 80%).",
                 "SUCCESS",
@@ -981,12 +990,9 @@ class RealTimeTradingEngine:
             self.loss_limit_reached = wallet["loss_limit_reached"]
 
     def _iqoption_can_open(self) -> bool:
-        active_count = len(self.get_broker_positions("IQOPTION"))
-        if hasattr(self, "binary_engine") and self.binary_engine.has_active_position:
-            active_count += 1
-            
         is_binary = (getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS")
         if is_binary:
+            active_count = 1 if (hasattr(self, "binary_engine") and self.binary_engine.has_active_position) else 0
             # Gatekeeper estricto 0/1: solo 1 operación a la vez
             if active_count >= 1 or self._iqoption_order_pending:
                 return False
@@ -994,6 +1000,10 @@ class RealTimeTradingEngine:
             if snapshot.get("halted_reason") in ["META_DIARIA_ALCANZADA", "LIMITE_PERDIDA_DIARIA_ALCANZADO"]:
                 return False
             return True
+
+        active_count = len(self.get_broker_positions("IQOPTION"))
+        if hasattr(self, "binary_engine") and self.binary_engine.has_active_position:
+            active_count += 1
 
         decision = self.iqoption_risk_policy.can_open(
             active_positions=active_count,
@@ -1786,29 +1796,34 @@ class RealTimeTradingEngine:
         active_b = "IQOPTION"
         wallet = self.broker_wallets.get("IQOPTION", {})
         
-        # Posiciones activas de IQ Option: Reúne todas las posiciones reales de margen (Forex CFD) y Opciones Binarias activas (Cero borrado)
-        active_positions = list(self.get_broker_positions(active_b))
-        if hasattr(self, "binary_engine") and self.binary_engine.open_position:
-            b_pos = self.binary_engine.open_position
-            rem_s = max(0, int(b_pos["expiration_timestamp"] - time.time()))
-            cur_price = self.feed.assets.get(b_pos["symbol"], {}).get("price", b_pos["entry_price"])
-            active_positions.append({
-                "symbol": b_pos["symbol"],
-                "name": f"{b_pos['symbol']} [Turbo {b_pos['direction']}]",
-                "broker": "IQOPTION",
-                "category": "OPTIONS",
-                "side": b_pos["direction"],
-                "invested_amount": b_pos["amount"],
-                "entry_price": b_pos["entry_price"],
-                "current_price": cur_price,
-                "current_pnl": 0.0,
-                "current_pnl_percent": 0.0,
-                "icon": "⏱️",
-                "direction": b_pos["direction"],
-                "payout": b_pos["payout"],
-                "potential_profit": b_pos["potential_profit"],
-                "status_label": f"Expira en {rem_s}s"
-            })
+        # Posiciones activas de IQ Option con aislamiento total según el modo seleccionado
+        is_binary = (getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS")
+        if is_binary:
+            active_positions = []
+            if hasattr(self, "binary_engine") and self.binary_engine.open_position:
+                b_pos = self.binary_engine.open_position
+                rem_s = max(0, int(b_pos["expiration_timestamp"] - time.time()))
+                cur_price = self.feed.assets.get(b_pos["symbol"], {}).get("price", b_pos["entry_price"])
+                active_positions.append({
+                    "symbol": b_pos["symbol"],
+                    "name": f"{b_pos['symbol']} [Turbo {b_pos['direction']}]",
+                    "broker": "IQOPTION",
+                    "category": "OPTIONS",
+                    "side": b_pos["direction"],
+                    "quantity": 1,
+                    "invested_amount": b_pos["amount"],
+                    "entry_price": b_pos["entry_price"],
+                    "current_price": cur_price,
+                    "current_pnl": 0.0,
+                    "current_pnl_percent": 0.0,
+                    "icon": "⏱️",
+                    "direction": b_pos["direction"],
+                    "payout": b_pos["payout"],
+                    "potential_profit": b_pos["potential_profit"],
+                    "status_label": f"Expira en {rem_s}s"
+                })
+        else:
+            active_positions = list(self.get_broker_positions(active_b))
         invested = sum(pos["invested_amount"] for pos in active_positions)
         unrealized_pnl = sum(pos.get("current_pnl", 0.0) for pos in active_positions)
         if active_b == "IQOPTION":
