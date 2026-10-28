@@ -4441,7 +4441,16 @@
 
         function renderThoughts(thoughts) {
             const container = document.getElementById('terminal-feed');
-            if (thoughts.length === 0) return;
+            if (!container) return;
+            if (!thoughts || thoughts.length === 0) {
+                container.innerHTML = `
+                    <div class="thought-item INFO">
+                        <span class="thought-time mono">[${new Date().toTimeString().split(' ')[0]}]</span>
+                        <span>🧠 Cerebro Cuantitativo Autónomo activo | Escaneando catálogo en vivo de IQ Option...</span>
+                    </div>
+                `;
+                return;
+            }
 
             let html = '';
             thoughts.forEach(t => {

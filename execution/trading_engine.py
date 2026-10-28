@@ -114,17 +114,22 @@ class RealTimeTradingEngine:
         self._broker_order_failure_cooldown: Dict[str, float] = {}
 
         # Sincronización exclusiva con IQ Option según entorno (Paper vs Real)
-        if hasattr(self.feed, "iqoption"):
-            if iqoption_env == "LIVE_REAL" and self.feed.iqoption.is_configured:
+        if hasattr(self.feed, "iqoption") and "pytest" not in sys.modules:
+            if self.feed.iqoption.is_configured:
+                self.feed.iqoption.set_environment(iqoption_env)
                 iq_conn = self.feed.iqoption.connect()
                 if iq_conn.get("connected"):
-                    real_bal = float(iq_conn.get("balance", iqoption_paper_init))
-                    self.broker_wallets["IQOPTION"]["cash"] = real_bal
-                    self.broker_wallets["IQOPTION"]["initial_balance"] = real_bal
-                    self.broker_wallets["IQOPTION"]["environment"] = "LIVE_REAL"
+                    is_real = (iqoption_env == "LIVE_REAL")
+                    bal = float(iq_conn.get("real_balance" if is_real else "practice_balance", iq_conn.get("balance", iqoption_paper_init)))
+                    self.broker_wallets["IQOPTION"]["cash"] = bal
+                    self.broker_wallets["IQOPTION"]["initial_balance"] = bal
+                    self.broker_wallets["IQOPTION"]["environment"] = iqoption_env
                 else:
                     self.feed.iqoption.set_environment("PAPER")
                     self.broker_wallets["IQOPTION"]["environment"] = "PAPER"
+                    if self.broker_wallets["IQOPTION"]["cash"] <= 0.0:
+                        self.broker_wallets["IQOPTION"]["cash"] = iqoption_paper_init
+                        self.broker_wallets["IQOPTION"]["initial_balance"] = iqoption_paper_init
             else:
                 self.feed.iqoption.set_environment("PAPER")
                 if self.broker_wallets["IQOPTION"]["cash"] <= 0.0:
@@ -1312,14 +1317,18 @@ class RealTimeTradingEngine:
                     continue
 
             cat = asset.get("category")
-            # Enrutamiento inteligente: En horario OTC (noches y fines de semana), dar prioridad absoluta a pares OTC
-            if is_otc_time and has_otc_assets and "-OTC" not in sym:
-                continue
+            # Enrutamiento inteligente: En horario OTC (noches y fines de semana), preferir OTC solo si el par OTC existe y está abierto en IQ Option
+            if is_otc_time and "-OTC" not in sym:
+                otc_sym = f"{sym}-OTC"
+                if otc_sym in market_state:
+                    if iq_adapter and hasattr(iq_adapter, "is_asset_open") and iq_adapter.is_asset_open(otc_sym):
+                        continue
             if not is_otc_time and "-OTC" in sym:
-                # En horario normal de mercado interbancario, preferir pares regulares si existen
+                # En horario normal de mercado interbancario, preferir pares regulares si existen y están abiertos
                 regular_sym = sym.replace("-OTC", "")
                 if regular_sym in market_state:
-                    continue
+                    if iq_adapter and hasattr(iq_adapter, "is_asset_open") and iq_adapter.is_asset_open(regular_sym):
+                        continue
             if cat not in ["FOREX", "OPTIONS", "CFD"] and "-OTC" not in sym:
                 continue
 

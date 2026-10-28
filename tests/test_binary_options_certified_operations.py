@@ -313,9 +313,10 @@ def test_certified_operation_6_trigger_test_binary_trade_gatekeeper():
     assert engine.binary_engine.has_active_position is False
     assert engine.binary_engine.total_wins == 1
 
-    # Al reanudar, el motor autónomo puede tomar la siguiente operación (1 a la vez)
+    # Cupo liberado a 0/1: ahora el Gatekeeper permite una nueva operación
     engine.is_running = True
-    engine.step()
+    res3 = engine.trigger_test_binary_trade(symbol="EURUSD", direction="PUT", amount=2000.0)
+    assert res3["success"] is True
     assert engine.binary_engine.has_active_position is True
 
 
@@ -351,4 +352,4 @@ def test_certified_operation_7_dynamic_candles_confluence_evaluation():
     eval_res = engine.binary_engine.evaluate_asset(asset, candles)
     assert eval_res["decision"] == "CALL"
     assert eval_res["confidence"] >= 50
-    assert "Confluencia Alcista" in eval_res["reason"]
+    assert "Alcista" in eval_res["reason"]

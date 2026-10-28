@@ -5,27 +5,31 @@ import threading
 from typing import Dict, Any, Optional
 
 ACTIVE_ASSET_IDS = {
-    # Forex Estándar (Lunes a Viernes)
-    "EURUSD": 1,
-    "EURGBP": 2,
-    "GBPJPY": 3,
-    "EURJPY": 4,
-    "GBPUSD": 5,
-    "USDJPY": 6,
-    "AUDCAD": 7,
-    "NZDUSD": 8,
+    # Forex Turbo / Binarias (Lunes a Viernes)
+    "EURUSD": 1861,
+    "EURGBP": 1862,
+    "EURJPY": 1864,
+    "USDJPY": 1865,
+    "GBPJPY": 1866,
+    "GBPUSD": 1867,
+    "AUDCAD": 1868,
+    "AUDJPY": 1869,
+    "AUDUSD": 1870,
+    "GBPAUD": 1877,
+    "GBPNZD": 1880,
+    "NZDCAD": 1881,
+    "AUDCHF": 1884,
+    "NZDUSD": 1896,
+    "GBPCAD": 1897,
+    "AUDNZD": 1900,
+    "EURNZD": 1901,
+    "BTCUSD": 1916,
     "USDCHF": 72,
-    "AUDUSD": 99,
     "USDCAD": 100,
-    "AUDJPY": 101,
-    "GBPCAD": 102,
-    "GBPCHF": 103,
-    "GBPAUD": 104,
-    "EURCAD": 105,
     "CHFJPY": 106,
     "CADCHF": 107,
     "EURAUD": 108,
-    # Forex OTC (Operación 24/7 Permanente: Días de semana y Fines de semana)
+    # Forex OTC (Operación 24/7)
     "EURUSD-OTC": 76,
     "EURUSDOTC": 76,
     "EURGBP-OTC": 77,
@@ -58,17 +62,29 @@ ACTIVE_ASSET_IDS = {
     "CADCHFOTC": 94,
     "EURAUD-OTC": 95,
     "EURAUDOTC": 95,
+    # OTC adicionales de alta liquidez
+    "USDTRY-OTC": 2124,
+    "USDTRYOTC": 2124,
+    "USDCOP-OTC": 2299,
+    "USDCOPOTC": 2299,
+    "USDBRL-OTC": 2298,
+    "USDBRLOTC": 2298,
+    "USDMXN-OTC": 2300,
+    "USDMXNOTC": 2300,
 }
 
 ACTIVE_ID_TO_SYMBOL: Dict[int, str] = {
-    1: "EURUSD", 2: "EURGBP", 3: "GBPJPY", 4: "EURJPY", 5: "USDJPY",
-    6: "GBPUSD", 7: "USDCHF", 8: "USDCAD", 72: "AUDUSD", 100: "NZDUSD",
-    76: "EURUSD", 77: "EURGBP", 78: "USDCHF", 79: "EURJPY",
-    80: "NZDUSD", 81: "GBPUSD", 86: "GBPJPY", 87: "USDJPY",
-    88: "AUDCAD", 89: "USDCAD", 90: "AUDUSD", 91: "GBPAUD",
-    92: "EURCAD", 93: "CHFJPY", 94: "CADCHF", 95: "EURAUD",
-    101: "AUDUSD", 102: "GBPCAD", 103: "GBPCHF", 104: "GBPAUD",
-    105: "EURCAD", 106: "CHFJPY", 107: "CADCHF", 108: "EURAUD",
+    1861: "EURUSD", 1862: "EURGBP", 1864: "EURJPY", 1865: "USDJPY",
+    1866: "GBPJPY", 1867: "GBPUSD", 1868: "AUDCAD", 1869: "AUDJPY",
+    1870: "AUDUSD", 1877: "GBPAUD", 1880: "GBPNZD", 1881: "NZDCAD",
+    1884: "AUDCHF", 1896: "NZDUSD", 1897: "GBPCAD", 1900: "AUDNZD",
+    1901: "EURNZD", 1916: "BTCUSD",
+    76: "EURUSD-OTC", 77: "EURGBP-OTC", 78: "USDCHF-OTC", 79: "EURJPY-OTC",
+    80: "NZDUSD-OTC", 81: "GBPUSD-OTC", 86: "GBPJPY-OTC", 87: "USDJPY-OTC",
+    88: "AUDCAD-OTC", 89: "USDCAD-OTC", 90: "AUDUSD-OTC", 91: "GBPAUD-OTC",
+    92: "EURCAD-OTC", 93: "CHFJPY-OTC", 94: "CADCHF-OTC", 95: "EURAUD-OTC",
+    2124: "USDTRY-OTC", 2299: "USDCOP-OTC", 2298: "USDBRL-OTC", 2300: "USDMXN-OTC",
+    1: "EURUSD", 2: "EURGBP", 3: "GBPJPY", 4: "EURJPY", 5: "GBPUSD", 6: "USDJPY", 7: "AUDCAD"
 }
 
 class IQOptionAdapter:
@@ -104,6 +120,7 @@ class IQOptionAdapter:
         self._ws_lock = threading.Lock()
         self._keepalive_running = False
         self._active_status_cache: Dict[str, bool] = {}
+        self._symbol_to_active_id: Dict[str, int] = {}
         self._payout_cache: Dict[str, float] = {}
         self._last_active_status_sync: float = 0.0
         self._sync_status_lock = threading.Lock()
@@ -822,12 +839,12 @@ class IQOptionAdapter:
                 }))
 
                 start_t = time.time()
-                while time.time() - start_t < 3.5:
+                while time.time() - start_t < 4.5:
                     try:
                         raw = ws.recv()
-                    except StopIteration:
-                        break
-                    if not raw:
+                    except Exception:
+                        continue
+                    if not raw or not isinstance(raw, (str, bytes)):
                         continue
                     try:
                         data = json.loads(raw)
@@ -836,7 +853,8 @@ class IQOptionAdapter:
                             turbo_actives = msg.get("turbo", {}).get("actives", {})
                             binary_actives = msg.get("binary", {}).get("actives", {})
 
-                            for cat_actives in [turbo_actives, binary_actives]:
+                            # 1. Procesar primero binary, y LUEGO turbo para que las opciones Turbo tengan prioridad absoluta
+                            for cat_actives in [binary_actives, turbo_actives]:
                                 if not isinstance(cat_actives, dict):
                                     continue
                                 for aid_str, act in cat_actives.items():
@@ -847,11 +865,22 @@ class IQOptionAdapter:
                                     is_suspended = bool(act.get("is_suspended", False))
                                     is_enabled = bool(act.get("enabled", True))
                                     is_open = is_enabled and (not is_suspended)
+                                    try:
+                                        aid_int = int(aid_str)
+                                    except (ValueError, TypeError):
+                                        aid_int = None
 
                                     if clean_sym:
                                         self._active_status_cache[clean_sym] = is_open
+                                        if aid_int:
+                                            self._symbol_to_active_id[clean_sym] = aid_int
+                                            ACTIVE_ASSET_IDS[clean_sym] = aid_int
+                                            ACTIVE_ID_TO_SYMBOL[aid_int] = clean_sym
                                         if "-OTC" in clean_sym:
                                             self._active_status_cache[clean_sym.replace("-OTC", "OTC")] = is_open
+                                            if aid_int:
+                                                self._symbol_to_active_id[clean_sym.replace("-OTC", "OTC")] = aid_int
+                                                ACTIVE_ASSET_IDS[clean_sym.replace("-OTC", "OTC")] = aid_int
 
                                     # Extraer payout si está presente en option.profit
                                     opt = act.get("option", {})
@@ -926,6 +955,26 @@ class IQOptionAdapter:
             if clean_sym in self._payout_cache:
                 return float(self._payout_cache[clean_sym])
         return 0.88
+
+    def get_active_id(self, symbol: str) -> int:
+        """
+        Retorna el active_id exacto y vigente para Opciones Binarias Turbo de IQ Option.
+        Prioriza la resolución dinámica obtenida de initialization-data v3.0.
+        """
+        clean_sym = symbol.replace("/", "").replace(" ", "").replace("_", "").upper()
+        if hasattr(self, "_symbol_to_active_id") and clean_sym in self._symbol_to_active_id:
+            return self._symbol_to_active_id[clean_sym]
+        if clean_sym in ACTIVE_ASSET_IDS:
+            return ACTIVE_ASSET_IDS[clean_sym]
+        otc_sym = f"{clean_sym}-OTC"
+        if hasattr(self, "_symbol_to_active_id") and otc_sym in self._symbol_to_active_id:
+            return self._symbol_to_active_id[otc_sym]
+        if otc_sym in ACTIVE_ASSET_IDS:
+            return ACTIVE_ASSET_IDS[otc_sym]
+        no_dash = clean_sym.replace("-OTC", "OTC")
+        if hasattr(self, "_symbol_to_active_id") and no_dash in self._symbol_to_active_id:
+            return self._symbol_to_active_id[no_dash]
+        return ACTIVE_ASSET_IDS.get(no_dash, 1861)
 
     def _execute_real_ws_order(
         self, 
@@ -1443,7 +1492,7 @@ class IQOptionAdapter:
             return {"success": False, "error": "No hay SSID de sesión activo para IQ Option"}
 
         clean_sym = symbol.replace("/", "").replace(" ", "").replace("_", "").upper()
-        active_id = ACTIVE_ASSET_IDS.get(clean_sym, ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC", 1))
+        active_id = self.get_active_id(clean_sym)
 
         target_balance = self.real_balance_id if self.environment == "LIVE_REAL" else (self.practice_balance_id or self.active_balance_id)
         target_bal_id = int(target_balance) if target_balance and str(target_balance).isdigit() else target_balance
@@ -1691,10 +1740,7 @@ class IQOptionAdapter:
     def get_candles(self, symbol: str, interval: int = 60, count: int = 40) -> list:
         """Obtiene velas reales en vivo directamente desde IQ Option vía WebSocket."""
         clean_sym = symbol.upper().replace("/", "").replace("_", "")
-        # Buscar ID exacto o con prefijo OTC
-        active_id = ACTIVE_ASSET_IDS.get(clean_sym)
-        if not active_id:
-            active_id = ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC") or ACTIVE_ASSET_IDS.get(f"{clean_sym}OTC", 76)
+        active_id = self.get_active_id(clean_sym)
         
         if not self.ssid:
             return []
