@@ -60,8 +60,14 @@ class BinaryOptionsStrategyEngine:
         self.disabled_assets: Dict[str, float] = {}
 
     def disable_asset(self, symbol: str, duration_seconds: float = 1800.0):
-        """Deshabilita un activo temporalmente (ej. 30 min) si el broker reporta que no está disponible."""
+        """Deshabilita un activo temporalmente (ej. 30 min) si el broker reporta que no está disponible o suspendido."""
         self.disabled_assets[symbol] = time.time() + duration_seconds
+        if hasattr(self, "iq") and self.iq and hasattr(self.iq, "_active_status_cache"):
+            self.iq._active_status_cache[symbol] = False
+            clean = symbol.replace("/", "").replace("_", "").upper()
+            self.iq._active_status_cache[clean] = False
+            if "-OTC" in clean:
+                self.iq._active_status_cache[clean.replace("-OTC", "OTC")] = False
 
     def is_asset_disabled(self, symbol: str) -> bool:
         """Verifica si un activo está en lista de exclusión temporal."""
@@ -129,6 +135,16 @@ class BinaryOptionsStrategyEngine:
                 "payout": payout,
                 "reason": f"Activo {symbol} en lista de exclusión temporal (no disponible en IQ Option)."
             }
+
+        # 0.05 Validación previa de disponibilidad en vivo (Evitar active is suspended)
+        if hasattr(self, "iq") and self.iq and hasattr(self.iq, "is_asset_open"):
+            if not self.iq.is_asset_open(symbol):
+                return {
+                    "decision": "HOLD",
+                    "confidence": 0,
+                    "payout": 0.0,
+                    "reason": f"Activo {symbol} suspendido o cerrado en catálogo oficial de IQ Option."
+                }
 
         # 0.1 Validación de Integridad de Datos (Prevenir evaluación a ciegas o congelada)
         if "JPY" in symbol and price < 50.0:
@@ -524,7 +540,7 @@ class BinaryOptionsStrategyEngine:
         if not exec_res.get("success"):
             err_msg = str(exec_res.get("error", ""))
             err_lower = err_msg.lower()
-            if any(k in err_lower for k in ["not available", "cannot purchase", "closed", "not found"]):
+            if any(k in err_lower for k in ["not available", "cannot purchase", "closed", "not found", "suspended", "disabled"]):
                 self.disable_asset(symbol, duration_seconds=1800.0)
             return exec_res
 

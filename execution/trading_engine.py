@@ -1305,6 +1305,12 @@ class RealTimeTradingEngine:
                 else:
                     del self.unavailable_assets_blacklist[sym]
 
+            # 1. Validación previa de disponibilidad en catálogo oficial de IQ Option (Evitar active is suspended)
+            iq_adapter = getattr(self.feed, "iqoption", None) or getattr(self.binary_engine, "iq", None)
+            if iq_adapter and hasattr(iq_adapter, "is_asset_open"):
+                if not iq_adapter.is_asset_open(sym):
+                    continue
+
             cat = asset.get("category")
             # Enrutamiento inteligente: En horario OTC (noches y fines de semana), dar prioridad absoluta a pares OTC
             if is_otc_time and has_otc_assets and "-OTC" not in sym:
@@ -1331,50 +1337,84 @@ class RealTimeTradingEngine:
         if candidates:
             candidates.sort(key=lambda x: x[0], reverse=True)
             best_score, best_sym, best_dir, best_asset, best_eval = candidates[0]
-            price = best_asset.get("price", 1.0)
-            thesis = best_eval.get("reason", "Confluencia Institucional SMC")
 
             # Sincronización en Segundo 58: Abrir contrato al cierre de la vela actual (o inmediato en test)
             if is_timing_window or is_test_env:
-                order_res = self.binary_engine.execute_binary_option(
-                    symbol=best_sym,
-                    direction=best_dir,
-                    amount=trade_amount,
-                    duration_minutes=1,
-                    entry_price=price,
-                    thesis_reason=thesis
-                )
-                if order_res.get("success"):
-                    wallet["cash"] = round(wallet.get("cash", 0.0) - trade_amount, 2)
-                    self.cash_balance = wallet["cash"]
-                    real_oid = order_res.get("order_id", "EN_CURSO")
-                    self.agent._add_thought(
-                        f"🎯 OPCIÓN BINARIA LANZADA [IQ OPTION]: {best_sym} {best_dir} (${trade_amount:,.2f}) | Expiración 60s | ID #{real_oid} | {thesis}",
-                        "SUCCESS",
-                        best_sym,
-                        "🎯"
+                trade_executed = False
+                for idx, (c_score, c_sym, c_dir, c_asset, c_eval) in enumerate(candidates):
+                    # 2. FILTRO DE CONFLUENCIA MÍNIMA ESTRICTA PARA DISPARO (>= 65%)
+                    c_conf = c_eval.get("confidence", 0)
+                    if c_conf < self.binary_engine.min_confidence:
+                        continue
+
+                    c_price = c_asset.get("price", 1.0)
+                    c_thesis = c_eval.get("reason", "Confluencia Institucional SMC")
+
+                    order_res = self.binary_engine.execute_binary_option(
+                        symbol=c_sym,
+                        direction=c_dir,
+                        amount=trade_amount,
+                        duration_minutes=1,
+                        entry_price=c_price,
+                        thesis_reason=c_thesis
                     )
-                else:
-                    err_msg = str(order_res.get('error', 'Rechazada por el broker'))
-                    err_lower = err_msg.lower()
-                    if any(k in err_lower for k in ["not available", "cannot purchase", "closed", "not found"]):
-                        cooldown_secs = 1800.0  # 30 minutos de exclusión automática
-                        self.unavailable_assets_blacklist[best_sym] = time.time() + cooldown_secs
-                        if hasattr(self, "binary_engine"):
-                            self.binary_engine.disable_asset(best_sym, duration_seconds=cooldown_secs)
+                    if order_res.get("success"):
+                        wallet["cash"] = round(wallet.get("cash", 0.0) - trade_amount, 2)
+                        self.cash_balance = wallet["cash"]
+                        real_oid = order_res.get("order_id", "EN_CURSO")
                         self.agent._add_thought(
-                            f"🚫 Activo {best_sym} deshabilitado temporalmente por IQ Option ({err_msg}). En lista de exclusión durante 30 minutos para priorizar pares abiertos.",
-                            "WARNING",
-                            best_sym,
-                            "🚫"
+                            f"🎯 OPCIÓN BINARIA LANZADA [IQ OPTION]: {c_sym} {c_dir} (${trade_amount:,.2f}) | Expiración 60s | ID #{real_oid} | {c_thesis}",
+                            "SUCCESS",
+                            c_sym,
+                            "🎯"
                         )
+                        trade_executed = True
+                        break
                     else:
-                        self.agent._add_thought(
-                            f"⚠️ Orden Binaria {best_sym} {best_dir} no concretada: {err_msg}",
-                            "WARNING",
-                            best_sym,
-                            "⚠️"
-                        )
+                        err_msg = str(order_res.get('error', 'Rechazada por el broker'))
+                        err_lower = err_msg.lower()
+                        is_unavailable = any(k in err_lower for k in [
+                            "not available", "cannot purchase", "closed", "not found", "suspended", "disabled"
+                        ])
+                        if is_unavailable:
+                            cooldown_secs = 1800.0  # 30 minutos de exclusión automática
+                            self.unavailable_assets_blacklist[c_sym] = time.time() + cooldown_secs
+                            if hasattr(self, "binary_engine"):
+                                self.binary_engine.disable_asset(c_sym, duration_seconds=cooldown_secs)
+                            iq_ad = getattr(self.feed, "iqoption", None) or getattr(self.binary_engine, "iq", None)
+                            if iq_ad and hasattr(iq_ad, "_active_status_cache"):
+                                iq_ad._active_status_cache[c_sym] = False
+
+                            # Comprobar si hay un siguiente candidato calificado (>= 65%)
+                            remaining = [
+                                other for other in candidates[idx+1:]
+                                if other[4].get("confidence", 0) >= self.binary_engine.min_confidence
+                            ]
+                            if remaining:
+                                next_c = remaining[0]
+                                self.agent._add_thought(
+                                    f"⚠️ Activo {c_sym} suspendido en IQ Option ({err_msg}). Bloqueado 30m. Saltando de inmediato a respaldo #{idx+2}: {next_c[1]} ({next_c[2]} {next_c[4].get('confidence', 0)}%)...",
+                                    "WARNING",
+                                    c_sym,
+                                    "⚠️"
+                                )
+                                continue  # Salta de inmediato al siguiente par disponible en este mismo segundo 58!
+                            else:
+                                self.agent._add_thought(
+                                    f"🚫 Activo {c_sym} deshabilitado temporalmente por IQ Option ({err_msg}). En lista de exclusión durante 30 minutos para priorizar pares abiertos.",
+                                    "WARNING",
+                                    c_sym,
+                                    "🚫"
+                                )
+                                break
+                        else:
+                            self.agent._add_thought(
+                                f"⚠️ Orden Binaria {c_sym} {c_dir} no concretada: {err_msg}",
+                                "WARNING",
+                                c_sym,
+                                "⚠️"
+                            )
+                            break
             else:
                 # Esperando segundo exacto 58 para no entrar a mitad de vela
                 now_scan = time.time()

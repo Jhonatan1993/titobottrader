@@ -103,6 +103,11 @@ class IQOptionAdapter:
         self._persistent_ws = None
         self._ws_lock = threading.Lock()
         self._keepalive_running = False
+        self._active_status_cache: Dict[str, bool] = {}
+        self._payout_cache: Dict[str, float] = {}
+        self._last_active_status_sync: float = 0.0
+        self._sync_status_lock = threading.Lock()
+        self._active_sync_thread_started = False
 
     def _get_persistent_ws(self, timeout: float = 12.0) -> Any:
         """
@@ -737,14 +742,174 @@ class IQOptionAdapter:
             "currency": self.currency
         }
 
+    def _start_active_sync_thread_if_needed(self):
+        """Inicia hilo de sincronización en segundo plano para el catálogo de activos y payouts."""
+        if getattr(self, "_active_sync_thread_started", False) or not self.ssid:
+            return
+        self._active_sync_thread_started = True
+        t = threading.Thread(target=self._active_sync_loop, daemon=True)
+        t.start()
+
+    def _active_sync_loop(self):
+        """Loop en segundo plano que actualiza activos abiertos y payouts cada 50 segundos."""
+        while getattr(self, "_active_sync_thread_started", False):
+            try:
+                self.sync_active_statuses(force=True)
+            except Exception:
+                pass
+            time.sleep(50.0)
+
+    def sync_active_statuses(self, force: bool = False) -> Dict[str, bool]:
+        """
+        Consulta en tiempo real el catálogo de activos de IQ Option (get-initialization-data v3.0).
+        Actualiza el estado de disponibilidad:
+        - self._active_status_cache: Dict[str, bool] (True si está habilitado y no suspendido)
+        - self._payout_cache: Dict[str, float] (payouts en vivo por par)
+        """
+        now = time.time()
+        if not force and (now - getattr(self, "_last_active_status_sync", 0.0) < 45.0) and getattr(self, "_active_status_cache", None):
+            return self._active_status_cache
+
+        if not self.ssid:
+            return self._active_status_cache
+
+        with self._sync_status_lock:
+            if not force and (now - getattr(self, "_last_active_status_sync", 0.0) < 45.0) and getattr(self, "_active_status_cache", None):
+                return self._active_status_cache
+
+            import websocket
+            import json
+            import ssl
+
+            try:
+                ws_url = self._get_ws_url()
+                headers = self._get_ws_headers()
+                ws = websocket.create_connection(ws_url, header=headers, timeout=4.0, sslopt={"cert_reqs": ssl.CERT_NONE})
+                
+                # Autenticar
+                ws.send(json.dumps({
+                    "name": "authenticate",
+                    "msg": {"ssid": self.ssid, "protocol": 3, "session_id": "", "client_session_id": ""},
+                    "request_id": f"auth_init_{int(now * 1000)}"
+                }))
+                ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
+
+                # Solicitar initialization-data v3.0
+                req_id = f"init_{int(time.time() * 1000)}"
+                ws.send(json.dumps({
+                    "name": "sendMessage",
+                    "request_id": req_id,
+                    "msg": {
+                        "name": "get-initialization-data",
+                        "version": "3.0",
+                        "body": {}
+                    }
+                }))
+
+                start_t = time.time()
+                while time.time() - start_t < 3.5:
+                    try:
+                        raw = ws.recv()
+                    except StopIteration:
+                        break
+                    if not raw:
+                        continue
+                    try:
+                        data = json.loads(raw)
+                        if data.get("name") == "initialization-data":
+                            msg = data.get("msg", {})
+                            turbo_actives = msg.get("turbo", {}).get("actives", {})
+                            binary_actives = msg.get("binary", {}).get("actives", {})
+
+                            for cat_actives in [turbo_actives, binary_actives]:
+                                if not isinstance(cat_actives, dict):
+                                    continue
+                                for aid_str, act in cat_actives.items():
+                                    if not isinstance(act, dict):
+                                        continue
+                                    name = str(act.get("name", ""))
+                                    clean_sym = name.replace("front.", "").replace("-op", "").upper()
+                                    is_suspended = bool(act.get("is_suspended", False))
+                                    is_enabled = bool(act.get("enabled", True))
+                                    is_open = is_enabled and (not is_suspended)
+
+                                    if clean_sym:
+                                        self._active_status_cache[clean_sym] = is_open
+                                        if "-OTC" in clean_sym:
+                                            self._active_status_cache[clean_sym.replace("-OTC", "OTC")] = is_open
+
+                                    # Extraer payout si está presente en option.profit
+                                    opt = act.get("option", {})
+                                    if isinstance(opt, dict):
+                                        p_data = opt.get("profit", {})
+                                        if isinstance(p_data, dict) and "commission" in p_data:
+                                            try:
+                                                comm = float(p_data["commission"])
+                                                payout = round(max(0.50, min(0.99, (100.0 - comm) / 100.0)), 2)
+                                                if clean_sym:
+                                                    self._payout_cache[clean_sym] = payout
+                                                    if "-OTC" in clean_sym:
+                                                        self._payout_cache[clean_sym.replace("-OTC", "OTC")] = payout
+                                            except (ValueError, TypeError):
+                                                pass
+
+                            self._last_active_status_sync = time.time()
+                            break
+                    except Exception:
+                        pass
+                try:
+                    ws.close()
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+            return self._active_status_cache
+
+    def is_asset_open(self, symbol: str) -> bool:
+        """
+        Verifica con latencia cero en RAM si un activo está habilitado y no suspendido en IQ Option.
+        - Si el activo está marcado como suspendido o cerrado en el catálogo oficial de IQ Option, retorna False.
+        - Si no hay credenciales o está en modo PAPER sin SSID, retorna True por defecto.
+        """
+        if not self.ssid:
+            return True
+
+        # Iniciar thread en segundo plano si aún no ha iniciado
+        self._start_active_sync_thread_if_needed()
+
+        clean_sym = symbol.replace("/", "").replace(" ", "").replace("_", "").upper()
+
+        # Chequeo directo en caché
+        if clean_sym in self._active_status_cache:
+            return bool(self._active_status_cache[clean_sym])
+
+        otc_sym = f"{clean_sym}-OTC" if not clean_sym.endswith("OTC") and not clean_sym.endswith("-OTC") else clean_sym
+        if otc_sym in self._active_status_cache:
+            return bool(self._active_status_cache[otc_sym])
+
+        clean_no_dash = clean_sym.replace("-OTC", "OTC")
+        if clean_no_dash in self._active_status_cache:
+            return bool(self._active_status_cache[clean_no_dash])
+
+        # Si el catálogo ya fue cargado con al menos 20 activos y un par OTC específico no figura en él,
+        # o está suspendido, retornar False para evitar rechazos Cannot purchase
+        if len(self._active_status_cache) >= 20 and ("OTC" in clean_sym or "-OTC" in clean_sym):
+            return False
+
+        return True
+
     def get_payout(self, symbol: str) -> float:
         """
         Retorna el ratio de retorno/payout vigente para la opción binaria (ej. 0.88 para 88%).
         Permite filtrar pares que no cumplan el mínimo de rentabilidad matemática (>= 0.80).
         """
         clean_sym = symbol.upper().replace("-OTC", "").replace("OTC", "")
-        if hasattr(self, "_payout_cache") and symbol in self._payout_cache:
-            return float(self._payout_cache[symbol])
+        if hasattr(self, "_payout_cache"):
+            if symbol in self._payout_cache:
+                return float(self._payout_cache[symbol])
+            if clean_sym in self._payout_cache:
+                return float(self._payout_cache[clean_sym])
         return 0.88
 
     def _execute_real_ws_order(
@@ -1427,6 +1592,12 @@ class IQOptionAdapter:
                                     req_id = req_id_std
                                     ws.send(json.dumps(body_payload))
                                     continue
+                            if any(k in err_lower for k in ["closed", "not available", "not found", "suspended", "cannot purchase", "disabled"]):
+                                self._active_status_cache[clean_sym] = False
+                                if f"{clean_sym}-OTC" in self._active_status_cache:
+                                    self._active_status_cache[f"{clean_sym}-OTC"] = False
+                                if symbol in self._active_status_cache:
+                                    self._active_status_cache[symbol] = False
                             result = {"success": False, "error": f"Rechazado por IQ Option Binarias: {err_msg}"}
                             break
                         elif st and st != 2000:
@@ -1478,6 +1649,12 @@ class IQOptionAdapter:
                                 req_id = req_id_std
                                 ws.send(json.dumps(body_payload))
                                 continue
+                        if any(k in err_lower for k in ["closed", "not available", "not found", "suspended", "cannot purchase", "disabled"]):
+                            self._active_status_cache[clean_sym] = False
+                            if f"{clean_sym}-OTC" in self._active_status_cache:
+                                self._active_status_cache[f"{clean_sym}-OTC"] = False
+                            if symbol in self._active_status_cache:
+                                self._active_status_cache[symbol] = False
                         result = {"success": False, "error": f"Rechazado por IQ Option: {err_msg}"}
                         break
                 except Exception:
