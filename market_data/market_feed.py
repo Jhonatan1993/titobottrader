@@ -339,6 +339,7 @@ class MultiAssetMarketFeed:
         self.assets: Dict[str, Dict[str, Any]] = {}
         self.history: Dict[str, List[Dict[str, Any]]] = {}
         self.candles: Dict[str, List[Dict[str, Any]]] = {}
+        self._last_iq_candle_refresh: Dict[str, float] = {}
         self.broker_config = load_broker_config()
         self.mode = "IQ_CFD"  # Modo único
         self.iqoption = IQOptionAdapter(
@@ -493,7 +494,10 @@ class MultiAssetMarketFeed:
                         try:
                             iq_c = self.iqoption.get_candles(sym, interval=60, count=30)
                             if iq_c and len(iq_c) >= 5:
+                                for candle in iq_c:
+                                    candle["source"] = "IQOPTION_REAL_FEED"
                                 self.candles[sym] = iq_c
+                                self._last_iq_candle_refresh[sym] = time.time()
                                 self.live_cache[sym] = iq_c[-1]["close"]
                                 asset["price"] = iq_c[-1]["close"]
                                 asset["source"] = "IQOPTION_REAL_FEED"
@@ -627,7 +631,15 @@ class MultiAssetMarketFeed:
 
     def _ensure_candles(self, symbol: str):
         sym = symbol.upper()
-        if sym in self.candles and len(self.candles[sym]) >= 30:
+        has_enough_candles = sym in self.candles and len(self.candles[sym]) >= 30
+        iq_ready = (
+            hasattr(self, "iqoption")
+            and getattr(self.iqoption, "is_configured", False)
+            and getattr(self.iqoption, "ssid", None)
+        )
+        if has_enough_candles and (
+            not iq_ready or time.time() - self._last_iq_candle_refresh.get(sym, 0.0) < 30.0
+        ):
             return
 
         item = next((i for i in AVAILABLE_ASSETS if i["symbol"] == sym), None)
@@ -642,11 +654,14 @@ class MultiAssetMarketFeed:
         volat = item.get("volatility", 0.008)
 
         # 1. Intentar velas reales de IQ Option para activos FOREX y OTC
-        if item.get("category") == "FOREX" and hasattr(self, "iqoption") and getattr(self.iqoption, "is_configured", False) and getattr(self.iqoption, "ssid", None):
+        if item.get("category") == "FOREX" and iq_ready:
             try:
                 iq_candles = self.iqoption.get_candles(sym, interval=60, count=60)
                 if iq_candles and len(iq_candles) >= 5:
+                    for candle in iq_candles:
+                        candle["source"] = "IQOPTION_REAL_FEED"
                     self.candles[sym] = iq_candles
+                    self._last_iq_candle_refresh[sym] = time.time()
                     latest = iq_candles[-1]
                     if sym in self.assets:
                         self.assets[sym]["price"] = latest["close"]
@@ -708,10 +723,29 @@ class MultiAssetMarketFeed:
                 "high": bar_high,
                 "low": bar_low,
                 "close": bar_close,
-                "volume": bar_vol
+                "volume": bar_vol,
+                "source": "SIMULATION"
             })
 
         self.candles[sym] = candles
+
+    def is_live_data_quality_ok(self, symbol: str, interval_seconds: int = 60, max_age_seconds: int = 120) -> bool:
+        """Require a recent, fully closed IQ Option candle before any live entry."""
+        candles = self.candles.get(str(symbol).upper(), [])
+        now = time.time()
+        closed = []
+        for candle in candles:
+            if candle.get("source") != "IQOPTION_REAL_FEED":
+                continue
+            try:
+                stamp = float(candle.get("time", 0))
+                if stamp > 10_000_000_000:
+                    stamp /= 1000.0
+                if stamp > 0 and stamp + int(interval_seconds) <= now:
+                    closed.append(stamp)
+            except (TypeError, ValueError):
+                continue
+        return bool(closed and 0 <= now - (max(closed) + interval_seconds) <= max_age_seconds)
 
     def get_candles(self, symbol: str, timeframe: str = "1m", limit: int = 100) -> List[Dict[str, Any]]:
         sym = symbol.upper()

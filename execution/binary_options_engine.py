@@ -554,11 +554,32 @@ class BinaryOptionsStrategyEngine:
             }
 
         if not exec_res.get("success"):
+            if exec_res.get("unknown"):
+                self.open_position = {
+                    "id": str(exec_res.get("request_id", f"BIN_UNKNOWN_{int(now * 1000)}")),
+                    "symbol": symbol,
+                    "direction": dir_clean,
+                    "amount": float(final_stake),
+                    "entry_price": float(entry_price),
+                    "payout": payout,
+                    "entry_timestamp": now,
+                    "expiration_timestamp": expiration_ts,
+                    "duration_minutes": duration_minutes,
+                    "status": "UNKNOWN_RECONCILIATION",
+                    "reconciliation_required": True,
+                    "thesis": thesis_reason,
+                }
+                self.last_trade_time[symbol] = now
+                self.soros_manager.register_currency_exposure(symbol, dir_clean)
+                return exec_res
             err_msg = str(exec_res.get("error", ""))
             err_lower = err_msg.lower()
             if any(k in err_lower for k in ["not available", "cannot purchase", "closed", "not found", "suspended", "disabled"]):
                 self.disable_asset(symbol, duration_seconds=1800.0)
             return exec_res
+
+        if getattr(self.iq, "environment", "PAPER") == "LIVE_REAL" and str(exec_res.get("status", "")).upper().endswith("SIMULATED"):
+            return {"success": False, "error": "Binaria LIVE_REAL rechazada: el adaptador reportó una ejecución simulada."}
 
         order_id = str(exec_res.get("order_id", f"BIN_{int(now*1000)}"))
         self.open_position = {
@@ -613,6 +634,18 @@ class BinaryOptionsStrategyEngine:
         pos = self.open_position
         now = time.time()
         exp_ts = pos.get("expiration_timestamp", 0)
+
+        if pos.get("reconciliation_required") or pos.get("status") == "UNKNOWN_RECONCILIATION":
+            return None
+
+        if getattr(self.iq, "environment", "PAPER") == "LIVE_REAL":
+            # Never infer broker settlement from a local or synthetic quote.
+            pos["status"] = "UNKNOWN_RECONCILIATION"
+            pos["reconciliation_required"] = True
+            if not pos.get("reconciliation_alerted"):
+                pos["reconciliation_alerted"] = True
+                logger.error("Binaria LIVE_REAL vencida sin resultado oficial conciliado: %s", pos.get("id"))
+            return None
 
         # Si aún no ha expirado el tiempo de la opción, sigue esperando
         if now < exp_ts:

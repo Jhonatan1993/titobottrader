@@ -2,11 +2,13 @@ import os
 import sys
 import time
 import datetime
+import math
+from pathlib import Path
 from typing import Dict, List, Any, Optional
 from market_data.market_feed import MultiAssetMarketFeed
 from ai_analysis.intelligent_agent import IntelligentTradingAgent
 from trade_journal.journal import TradeJournal
-from config.broker_config import load_broker_config, save_broker_config
+from config.broker_config import load_broker_config, save_broker_config, live_trading_armed, live_cfd_execution_verified
 from risk_management.risk_manager import RiskManager
 from risk_management.iqoption_risk_policy import IQOptionRiskPolicy
 from execution.iqoption_adapter import ACTIVE_ID_TO_SYMBOL
@@ -27,7 +29,10 @@ class RealTimeTradingEngine:
         # Modo exclusivo: IQ Option Forex CFD / Binarias
         self.operating_mode = self.broker_config.get("operating_mode", "IQ_CFD")
         self.iq_mode = self.broker_config.get("iq_mode", "FOREX_CFD")
-        self.execution_environment = execution_environment or self.broker_config.get("iqoption_environment", "PAPER")
+        requested_environment = str(execution_environment or self.broker_config.get("iqoption_environment", "PAPER")).upper()
+        self.execution_environment = requested_environment if requested_environment in {"PAPER", "LIVE_REAL"} else "PAPER"
+        if self.execution_environment == "LIVE_REAL" and not (live_trading_armed() and live_cfd_execution_verified()):
+            self.execution_environment = "PAPER"
         
         saved_paper = float(self.broker_config.get("paper_initial_balance", 10000.0))
         self.paper_initial_balance = initial_balance if initial_balance is not None else saved_paper
@@ -77,13 +82,17 @@ class RealTimeTradingEngine:
             max_loss_enabled=self.max_loss_enabled,
             max_open_positions=1,
             zero_loss_blocks_entries=(self.execution_environment == "LIVE_REAL" and not is_binary),
+            state_path=(
+                None if "PYTEST_CURRENT_TEST" in os.environ
+                else str(Path(__file__).resolve().parents[1] / "data" / "iqoption_risk_state.json")
+            ),
         )
 
         self.feed = MultiAssetMarketFeed()
         self.agent = IntelligentTradingAgent()
         self.journal = TradeJournal()
         self.active_broker = "IQOPTION"
-        iqoption_env = execution_environment or self.broker_config.get("iqoption_environment", "PAPER")
+        iqoption_env = self.execution_environment
         iqoption_paper_init = float(self.broker_config.get("iqoption_paper_initial_balance", self.broker_config.get("iqoption_initial_balance", 10000.0)))
         if iqoption_paper_init <= 0.0:
             iqoption_paper_init = 10000.0
@@ -152,7 +161,7 @@ class RealTimeTradingEngine:
         )
 
         self._apply_iqoption_daily_halt()
-        self.agent.update_learning_from_disk()
+        self.agent.update_learning_from_disk(product_mode=self.iq_mode)
         self._record_equity_snapshot()
 
         # Motor especializado para Opciones Binarias Turbo de IQ Option
@@ -171,9 +180,28 @@ class RealTimeTradingEngine:
         except Exception:
             pass
 
-        if getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS":
-            self.open_positions.clear()
-            self.clear_cooldown()
+        # Retain any restored positions and cooldowns across startup/mode changes.
+
+    def _require_iqoption_reconciliation(self, pos_key: str, pos: Dict[str, Any], reason: str) -> None:
+        """Retain an uncertain live position and freeze new exposure until confirmed by IQ Option."""
+        pos["execution_state"] = "UNKNOWN_RECONCILIATION"
+        pos["reconciliation_required"] = True
+        pos["is_closing"] = False
+        pos["vault_transferred"] = False
+        self.open_positions[pos_key] = pos
+        self._iqoption_order_pending = False
+        self._iqoption_reconciliation_required = True
+        self.iqoption_risk_policy.require_reconciliation()
+        self.is_running = False
+        self.broker_wallets["IQOPTION"]["is_running"] = False
+        if not pos.get("reconciliation_alerted"):
+            pos["reconciliation_alerted"] = True
+            self.agent._add_thought(
+                f"🛑 Estado de {pos.get('symbol', pos_key)} no conciliado con IQ Option: {reason}. "
+                "Se conserva la posición y se bloquean nuevas entradas.",
+                "WARNING",
+                icon="🛑",
+            )
 
 
 
@@ -207,6 +235,90 @@ class RealTimeTradingEngine:
             (pos_key, pos) for pos_key, pos in list(self.open_positions.items())
             if (pos.get("broker") == "IQOPTION" or pos.get("category") in ["FOREX", "OPTIONS", "CFD"])
         ]
+
+        # In REAL mode, an empty/mismatched open-position snapshot does not prove a close or its PnL.
+        # Keep local positions and block until a broker-authoritative settlement is available.
+        broker_managed_local_position = any(
+            pos.get("execution_status") != "FILLED_SIMULATED"
+            for _, pos in iq_memory_positions
+        )
+        if (
+            self.broker_wallets.get("IQOPTION", {}).get("environment") == "LIVE_REAL"
+            or broker_managed_local_position
+        ):
+            broker_by_id = {}
+            for bp in broker_positions:
+                for key in ("id", "external_id", "internal_id"):
+                    if bp.get(key):
+                        broker_by_id[str(bp[key])] = bp
+                for order_id in bp.get("order_ids", []):
+                    broker_by_id[str(order_id)] = bp
+
+            matched = set()
+            for pos_key, pos in iq_memory_positions:
+                candidate_ids = {
+                    str(pos.get(k)) for k in ("broker_order_id", "position_id", "id") if pos.get(k)
+                }
+                match = next((broker_by_id[value] for value in candidate_ids if value in broker_by_id), None)
+                if match is None:
+                    self._require_iqoption_reconciliation(
+                        pos_key, pos, "la posición ya no aparece en la consulta de posiciones abiertas"
+                    )
+                    continue
+                matched.update(candidate_ids)
+                pos["execution_state"] = "OPEN_CONFIRMED"
+                pos["reconciliation_required"] = False
+                pos["is_closing"] = False
+                pos["vault_transferred"] = False
+                pos.pop("close_requested_at", None)
+                pos["current_pnl"] = float(match.get("pnl_net", pos.get("current_pnl", 0.0)) or 0.0)
+
+            for bp in broker_positions:
+                broker_ids = {
+                    str(bp.get(k)) for k in ("id", "external_id", "internal_id") if bp.get(k)
+                }
+                broker_ids.update(str(value) for value in bp.get("order_ids", []) if value)
+                if broker_ids.intersection(matched):
+                    continue
+                act_id = bp.get("active_id")
+                sym = bp.get("symbol") or ACTIVE_ID_TO_SYMBOL.get(int(act_id) if act_id is not None else -1)
+                if not sym:
+                    self._require_iqoption_reconciliation(
+                        f"unknown_{next(iter(broker_ids), 'position')}",
+                        {"symbol": "UNKNOWN", "broker": "IQOPTION", "category": "FOREX",
+                         "broker_order_id": next(iter(broker_ids), ""), "invested_amount": bp.get("invest", 0)},
+                        "el broker reportó una posición sin símbolo reconocido",
+                    )
+                    continue
+                pos_id = next(iter(broker_ids), "")
+                pos_key = sym if sym not in self.open_positions else f"{sym}_{pos_id or 'broker'}"
+                asset_obj = self.feed.assets.get(sym, {})
+                entry = float(bp.get("open_quote", 0.0) or asset_obj.get("price", 0.0) or 0.0)
+                amount = float(bp.get("invest", 0.0) or 0.0)
+                self.open_positions[pos_key] = {
+                    "symbol": sym, "name": asset_obj.get("name", sym), "broker": "IQOPTION",
+                    "category": "FOREX", "side": bp.get("side", "BUY"),
+                    "leverage": min(25, int(bp.get("leverage", 25) or 25)),
+                    "invested_amount": amount, "entry_price": entry,
+                    "current_price": asset_obj.get("price", entry), "quantity": 1.0,
+                    "broker_order_id": pos_id, "position_id": pos_id,
+                    "current_pnl": float(bp.get("pnl_net", 0.0) or 0.0),
+                    "entry_timestamp": time.time(), "execution_state": "OPEN_CONFIRMED",
+                }
+                matched.update(broker_ids)
+
+            if len(broker_positions) > 1:
+                self.iqoption_risk_policy.require_reconciliation()
+                self._iqoption_reconciliation_required = True
+                self.is_running = False
+                self.broker_wallets["IQOPTION"]["is_running"] = False
+                self.agent._add_thought(
+                    f"🛑 IQ Option reportó {len(broker_positions)} exposiciones simultáneas; nuevas entradas bloqueadas.",
+                    "WARNING", icon="🛑"
+                )
+            if hasattr(self, "risk_manager"):
+                self.risk_manager.current_open_trades = len(self.open_positions)
+            return
 
         # 1. Si en el broker hay posiciones abiertas
         if len(broker_positions) > 0:
@@ -376,6 +488,7 @@ class RealTimeTradingEngine:
 
     def set_execution_environment(self, env: str, custom_balance: Optional[float] = None, broker: Optional[str] = None) -> Dict[str, Any]:
         """Cambia el entorno de ejecución exclusivo de IQ Option (LIVE_REAL o PAPER)."""
+        env = str(env or "PAPER").upper()
         target_b = (broker or "IQOPTION").upper()
         if target_b != "IQOPTION":
             return {
@@ -383,13 +496,41 @@ class RealTimeTradingEngine:
                 "error": "PLATAFORMA_EXCLUSIVA_IQOPTION: solo IQ Option está permitido."
             }
 
+        if env not in {"PAPER", "LIVE_REAL"}:
+            return {"success": False, "error": "Entorno inválido; use PAPER o LIVE_REAL."}
+        current_env = self.broker_wallets.get("IQOPTION", {}).get("environment", "PAPER")
+        broker_open_positions = []
+        active_adapter = getattr(getattr(self, "feed", None), "iqoption", None)
+        if active_adapter and hasattr(active_adapter, "get_open_positions"):
+            broker_open_positions = active_adapter.get_open_positions() or []
+        if env != current_env and (
+            self.open_positions or broker_open_positions or self._iqoption_order_pending
+            or (getattr(self, "binary_engine", None) and self.binary_engine.has_active_position)
+        ):
+            return {"success": False, "error": "No se puede cambiar el entorno mientras exista una posición u orden pendiente."}
+        if env != current_env and self.iqoption_risk_policy.snapshot().get("reconciliation_required"):
+            return {"success": False, "error": "No se puede cambiar el entorno mientras la conciliación de IQ Option esté pendiente."}
+
         if env == "LIVE_REAL":
+            if not live_trading_armed():
+                return {"success": False, "error": "LIVE_REAL bloqueado: el proceso no está armado con LIVE_TRADING_ARMED=true."}
+            if not live_cfd_execution_verified():
+                return {"success": False, "error": "LIVE_REAL bloqueado: el tamaño del contrato CFD no está verificado contra el importe y riesgo solicitado."}
+            if getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS":
+                return {"success": False, "error": "Binarias LIVE_REAL bloqueadas hasta conciliar resultados oficiales de IQ Option."}
+            if not self.max_loss_enabled or self.max_loss_amount <= 0:
+                return {"success": False, "error": "LIVE_REAL requiere un límite diario de pérdida habilitado y mayor que cero."}
+            risk_state = self.iqoption_risk_policy.snapshot()
+            if risk_state.get("halted"):
+                return {"success": False, "error": f"LIVE_REAL bloqueado por el control de riesgo: {risk_state.get('halted_reason')}"}
             if not hasattr(self.feed, "iqoption") or not self.feed.iqoption.is_configured:
                 return {
                     "success": False,
                     "error": "Credenciales de IQ Option no configuradas. Por favor ingresa tu Correo Electrónico y Contraseña de IQ Option en la configuración."
                 }
-            self.feed.iqoption.set_environment("LIVE_REAL")
+            set_env_result = self.feed.iqoption.set_environment("LIVE_REAL")
+            if not set_env_result.get("success"):
+                return {"success": False, "error": set_env_result.get("error", "No se pudo habilitar LIVE_REAL.")}
             conn = self.feed.iqoption.connect()
             if not conn.get("connected"):
                 return {
@@ -404,12 +545,6 @@ class RealTimeTradingEngine:
             self.broker_wallets["IQOPTION"]["initial_balance"] = real_bal
             self.broker_config["iqoption_real_initial_balance"] = real_bal
             self.broker_wallets["IQOPTION"]["profit_vault"] = self.get_broker_vault("IQOPTION", "LIVE_REAL")
-
-            # LIMPIEZA DE POSICIONES SIMULADAS PREVIAS DE MODO PAPER:
-            for s in list(self.open_positions.keys()):
-                pos = self.open_positions[s]
-                if pos.get("broker") == "IQOPTION":
-                    del self.open_positions[s]
 
             self.execution_environment = "LIVE_REAL"
             self.cash_balance = self.broker_wallets["IQOPTION"]["cash"]
@@ -559,9 +694,8 @@ class RealTimeTradingEngine:
 
     def set_operating_mode(self, mode: str):
         if mode == "IQ_BINARY":
-            self.set_iq_mode("BINARY_OPTIONS")
-        else:
-            self.set_iq_mode("FOREX_CFD")
+            return self.set_iq_mode("BINARY_OPTIONS")
+        return self.set_iq_mode("FOREX_CFD")
 
     def set_iq_mode(self, new_mode: str) -> Dict[str, Any]:
         """
@@ -572,6 +706,19 @@ class RealTimeTradingEngine:
         clean_m = new_mode.upper()
         if clean_m not in ["FOREX_CFD", "BINARY_OPTIONS"]:
             return {"success": False, "error": f"Modo inválido '{new_mode}'. Debe ser 'FOREX_CFD' o 'BINARY_OPTIONS'."}
+
+        if clean_m == self.iq_mode:
+            return {"success": True, "iq_mode": self.iq_mode, "operating_mode": self.operating_mode}
+        if self.iqoption_risk_policy.snapshot().get("reconciliation_required"):
+            return {"success": False, "error": "Resuelva la conciliación pendiente con IQ Option antes de cambiar de modalidad."}
+        broker_positions = []
+        iq = getattr(getattr(self, "feed", None), "iqoption", None)
+        if iq and hasattr(iq, "get_open_positions"):
+            broker_positions = iq.get_open_positions() or []
+        if self.open_positions or self._iqoption_order_pending or broker_positions or (
+            hasattr(self, "binary_engine") and self.binary_engine.has_active_position
+        ):
+            return {"success": False, "error": "Cierre y concilie todas las posiciones y órdenes antes de cambiar de modalidad."}
         
         self.iq_mode = clean_m
         self.operating_mode = "IQ_CFD" if clean_m == "FOREX_CFD" else "IQ_BINARY"
@@ -579,16 +726,12 @@ class RealTimeTradingEngine:
         self.broker_config["operating_mode"] = self.operating_mode
         if hasattr(self, "binary_engine"):
             self.binary_engine.iq = getattr(self.feed, "iqoption", None)
+        self.agent.update_learning_from_disk(product_mode=clean_m)
 
         if clean_m == "BINARY_OPTIONS":
             self.iqoption_risk_policy.zero_loss_blocks_entries = False
-            # Purgar al 100% posiciones residuales de CFD y resetear cooldowns para habilitar los 16 pares
-            self.open_positions.clear()
-            self.clear_cooldown()
-            if hasattr(self, "binary_engine"):
-                self.binary_engine.last_trade_time.clear()
             self.agent._add_thought(
-                "⏱️ MODO IQ OPTION CONMUTADO: OPCIONES BINARIAS TURBO (1m). Aislamiento total activo, cooldowns reiniciados y 16 pares habilitados.",
+                "⏱️ MODO IQ OPTION CONMUTADO: OPCIONES BINARIAS. Se conserva el estado de riesgo y se exige una cartera plana.",
                 "SUCCESS",
                 icon="⚡"
             )
@@ -600,26 +743,6 @@ class RealTimeTradingEngine:
                 icon="📈"
             )
 
-        # Recalibrar base de capital para el modo seleccionado y reiniciar bloqueos de racha anterior
-        wallet = self.broker_wallets.get("IQOPTION", {})
-        cur_cash = wallet.get("cash", 0.0)
-        if cur_cash > 0:
-            wallet["initial_balance"] = cur_cash
-            self.initial_balance = cur_cash
-        wallet["loss_limit_reached"] = False
-        wallet["target_reached"] = False
-        wallet["target_alerted"] = False
-        wallet["is_running"] = True
-        self.loss_limit_reached = False
-        self.target_reached = False
-        self.is_running = True
-        if hasattr(self, "iqoption_risk_policy"):
-            self.iqoption_risk_policy.reset_halt()
-        if hasattr(self, "binary_engine") and self.binary_engine.has_active_position:
-            pos = self.binary_engine.open_position
-            if pos and time.time() >= pos.get("expiration_timestamp", 0):
-                self.binary_engine.check_and_resolve_active_trade()
-        
         # Persistencia inmediata en disco para preservar el modo seleccionado ante reinicios
         if not os.environ.get("PYTEST_CURRENT_TEST"):
             try:
@@ -627,12 +750,7 @@ class RealTimeTradingEngine:
                 save_broker_config(self.broker_config)
             except Exception:
                 pass
-
-        return {
-            "success": True,
-            "iq_mode": self.iq_mode,
-            "operating_mode": self.operating_mode
-        }
+        return {"success": True, "iq_mode": self.iq_mode, "operating_mode": self.operating_mode}
 
     def update_broker_keys(self, *args, **kwargs) -> Dict[str, Any]:
         """
@@ -760,7 +878,16 @@ class RealTimeTradingEngine:
         target_b = (broker or self.active_broker).upper()
         target_val = max(0.0, float(target_amount))
         loss_val = max(0.0, float(max_loss))
+        if not math.isfinite(target_val) or not math.isfinite(loss_val):
+            return {"success": False, "error": "Los límites deben ser números finitos y mayores o iguales a cero."}
         loss_enabled = bool(loss_enabled)
+        if target_b == "IQOPTION" and self.execution_environment == "LIVE_REAL" and (not loss_enabled or loss_val <= 0):
+            return {"success": False, "error": "No se puede desactivar el límite de pérdida mientras LIVE_REAL está activo."}
+        if target_b == "IQOPTION" and self.execution_environment == "LIVE_REAL":
+            if loss_val > self.max_loss_amount:
+                return {"success": False, "error": "El límite diario de pérdida no se puede ampliar durante una sesión LIVE_REAL."}
+            if self.profit_target_enabled and (not target_enabled or target_val > self.profit_target_amount):
+                return {"success": False, "error": "No se puede desactivar ni ampliar la meta diaria durante una sesión LIVE_REAL."}
 
         if target_b in self.broker_wallets:
             self.broker_wallets[target_b]["target_amount"] = target_val
@@ -808,6 +935,8 @@ class RealTimeTradingEngine:
             "INFO",
             icon="🛡️"
         )
+        return {"success": True, "profit_target_amount": target_val, "max_loss_amount": loss_val,
+                "max_loss_enabled": loss_enabled}
 
     def clear_cooldown(self, symbol: Optional[str] = None):
         if hasattr(self, "agent") and hasattr(self.agent, "learner"):
@@ -845,7 +974,7 @@ class RealTimeTradingEngine:
                 wallet = self.broker_wallets.get("IQOPTION", {})
                 wallet["cash"] = round(wallet.get("cash", 0.0) + exit_value, 2)
                 self.cash_balance = wallet["cash"]
-                self.iqoption_risk_policy.record_closed_trade(pnl)
+                self.iqoption_risk_policy.record_closed_trade(pnl, trade_id=bin_resolution.get("order_id"))
                 self._apply_iqoption_daily_halt()
                 res_type = bin_resolution.get("result", "WIN")
                 res_icon = "🏆" if res_type == "WIN" else ("🤝" if res_type == "TIE" else "🛡️")
@@ -1031,13 +1160,20 @@ class RealTimeTradingEngine:
 
     def _iqoption_can_open(self) -> bool:
         is_binary = (getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS")
+        snapshot = self.iqoption_risk_policy.snapshot()
+        if snapshot.get("halted"):
+            self.agent._add_thought(
+                f"🛡️ IQ Option: nuevas entradas bloqueadas ({snapshot.get('halted_reason')}).",
+                "WARNING",
+                icon="🛡️",
+            )
+            return False
         if is_binary:
-            active_count = 1 if (hasattr(self, "binary_engine") and self.binary_engine.has_active_position) else 0
+            active_count = len(self.get_broker_positions("IQOPTION"))
+            if hasattr(self, "binary_engine") and self.binary_engine.has_active_position:
+                active_count += 1
             # Gatekeeper estricto 0/1: solo 1 operación a la vez
             if active_count >= 1 or self._iqoption_order_pending:
-                return False
-            snapshot = self.iqoption_risk_policy.snapshot()
-            if snapshot.get("halted_reason") in ["META_DIARIA_ALCANZADA", "LIMITE_PERDIDA_DIARIA_ALCANZADO"]:
                 return False
             return True
 
@@ -1332,6 +1468,9 @@ class RealTimeTradingEngine:
             if cat not in ["FOREX", "OPTIONS", "CFD"] and "-OTC" not in sym:
                 continue
 
+            if self.execution_environment == "LIVE_REAL" and not self.feed.is_live_data_quality_ok(sym, interval_seconds=60):
+                continue
+
             candles = getattr(self.feed, "candles", {}).get(sym, [])
             eval_res = self.binary_engine.evaluate_asset(asset, candles)
             dec = eval_res.get("decision")
@@ -1380,6 +1519,15 @@ class RealTimeTradingEngine:
                         trade_executed = True
                         break
                     else:
+                        if order_res.get("unknown"):
+                            self.iqoption_risk_policy.require_reconciliation()
+                            self.is_running = False
+                            wallet["is_running"] = False
+                            self.agent._add_thought(
+                                f"🛑 Orden binaria de {c_sym} enviada sin confirmación; se bloquea cualquier nueva entrada.",
+                                "WARNING", c_sym, "🛑"
+                            )
+                            break
                         err_msg = str(order_res.get('error', 'Rechazada por el broker'))
                         err_lower = err_msg.lower()
                         is_unavailable = any(k in err_lower for k in [
@@ -1462,9 +1610,10 @@ class RealTimeTradingEngine:
         amount: Optional[float] = None
     ) -> Dict[str, Any]:
         """
-        Dispara una orden de prueba controlada de Binarias Turbo directamente en IQ Option.
-        Respeta al 100% el límite inquebrantable de 1 sola operación a la vez (0/1).
+        Ejecuta una vista previa simulada de binarias solo en PAPER.
         """
+        if self.execution_environment != "PAPER" or getattr(self, "iq_mode", "FOREX_CFD") != "BINARY_OPTIONS":
+            return {"success": False, "error": "La vista previa binaria solo está disponible en el modo BINARY_OPTIONS PAPER."}
         if not hasattr(self, "binary_engine"):
             return {"success": False, "error": "Motor de opciones binarias no inicializado."}
 
@@ -1506,7 +1655,7 @@ class RealTimeTradingEngine:
             self.cash_balance = wallet["cash"]
             oid = res.get("order_id", "REGISTRADA")
             self.agent._add_thought(
-                f"🧪 PRUEBA BINARIA EN PRODUCCIÓN: {symbol} {direction} (${final_amount:,.2f}) | Orden Oficial #{oid} en IQ Option | 1/1 Ocupado",
+                f"🧪 VISTA PREVIA BINARIA PAPER: {symbol} {direction} (${final_amount:,.2f}) | Simulación local #{oid} | 1/1 Ocupado",
                 "SUCCESS",
                 symbol,
                 "🧪"
@@ -1530,6 +1679,17 @@ class RealTimeTradingEngine:
         # Operación directa con el efectivo de la cuenta
         available_cash = max(0.0, float(wallet.get("cash", 0.0)))
         is_broker_live = (wallet.get("environment") == "LIVE_REAL")
+        if is_broker_live:
+            if not (live_trading_armed() and live_cfd_execution_verified()) or getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS":
+                return
+            if not self.max_loss_enabled or self.max_loss_amount <= 0:
+                return
+            if not self.feed.is_live_data_quality_ok(symbol, interval_seconds=60):
+                self.agent._add_thought(
+                    f"🛑 Entrada en {symbol} bloqueada: faltan velas cerradas, recientes y verificadas de IQ Option.",
+                    "WARNING", symbol, "🛑"
+                )
+                return
         is_cop = (getattr(self.feed.iqoption, "currency", "USD") == "COP") if hasattr(self.feed, 'iqoption') else False
         kelly_pct = decision_data.get("budget_percent", 20.0)
         effective_pct = min(kelly_pct, 25.0)
@@ -1645,15 +1805,26 @@ class RealTimeTradingEngine:
                     symbol=symbol,
                     side=cfd_side,
                     amount=actual_investment,
-                    leverage=500,
+                    leverage=25,
                     stop_loss_pct=sl_pct,
                     take_profit_pct=tp_pct
                 )
             finally:
                 self._iqoption_order_pending = False
             if iq_res.get("success"):
+                if is_broker_live and str(iq_res.get("status", "")).upper().endswith("SIMULATED"):
+                    self._require_iqoption_reconciliation(
+                        symbol, position, "el adaptador devolvió una orden simulada durante LIVE_REAL"
+                    )
+                    return
                 oid = iq_res.get("order_id", "")
+                if is_broker_live and not oid:
+                    self._require_iqoption_reconciliation(
+                        symbol, position, "IQ Option aceptó una orden sin devolver identificador correlacionable"
+                    )
+                    return
                 position["broker_order_id"] = oid
+                position["execution_status"] = iq_res.get("status", "UNKNOWN")
                 actual_sym = iq_res.get("symbol", symbol)
                 position["symbol"] = actual_sym
                 position["name"] = self.feed.assets.get(actual_sym, {}).get("name", position["name"])
@@ -1662,8 +1833,14 @@ class RealTimeTradingEngine:
                 dir_label = "🔻 CORTO (SELL)" if cfd_side == "sell" else "🟢 LARGO (BUY)"
                 wallet["cash"] = round(wallet["cash"] - actual_investment, 2)
                 self.cash_balance = wallet["cash"]
-                self.agent._add_thought(f"📈 ORDEN FOREX CFD IQ OPTION ({mode_str}): {dir_label} en {symbol} (ID: {oid}) x500. SL: {sl_pct}% | TP: {tp_pct}%.", "INFO", symbol, "⚡")
+                self.agent._add_thought(f"📈 ORDEN FOREX CFD IQ OPTION ({mode_str}): {dir_label} en {symbol} (ID: {oid}) apalancamiento máximo x25. SL: {sl_pct}% | TP: {tp_pct}%.", "INFO", symbol, "⚡")
             else:
+                if iq_res.get("unknown"):
+                    self._require_iqoption_reconciliation(
+                        symbol, position,
+                        f"timeout tras enviar la orden; request_id={iq_res.get('request_id', 'sin id')}"
+                    )
+                    return
                 err_msg = str(iq_res.get('error', 'Error desconocido'))
                 is_closed_or_suspended = any(k in err_msg.lower() for k in ["not available", "suspended", "not found", "closed"])
                 cooldown_dur = 600.0 if is_closed_or_suspended else 120.0
@@ -1692,10 +1869,11 @@ class RealTimeTradingEngine:
     def _execute_sell(self, symbol: str, asset: Dict[str, Any], decision_data: Dict[str, Any]):
         if symbol not in self.open_positions:
             return
-        
-        pos = self.open_positions.pop(symbol)
+
+        pos = self.open_positions[symbol]
         if pos.get("is_closing") or pos.get("vault_transferred"):
             return
+        self.open_positions.pop(symbol, None)
         pos["is_closing"] = True
         pos["vault_transferred"] = True
         actual_sym = pos.get("symbol", symbol)
@@ -1712,23 +1890,13 @@ class RealTimeTradingEngine:
         if broker_id == "IQOPTION" and is_broker_live:
             pos_id = pos.get("broker_order_id") or pos.get("position_id") or pos.get("id")
             if not pos_id:
-                # Si no tiene ID de broker, es una posición residual sin respaldo real; purgarla definitivamente
+                self._require_iqoption_reconciliation(symbol, pos, "posición LIVE_REAL sin identificador del broker")
                 return
 
             close_res = self.feed.iqoption.close_position(str(pos_id))
             if not close_res.get("success"):
-                err_str = str(close_res.get("error", "")).lower()
-                # Si IQ Option indica que la posición no existe o ya fue cerrada, liberarla inmediatamente
-                if "not found" in err_str or "closed" in err_str or "does not exist" in err_str:
-                    return
-                pos["is_closing"] = False
-                pos["vault_transferred"] = False
-                self.open_positions[symbol] = pos
-                self.agent._add_thought(
-                    f"⚠️ Cierre IQ Option no confirmado para {symbol}: {close_res.get('error', 'sin confirmación')}. Posición retenida.",
-                    "WARNING",
-                    symbol,
-                    "⚠️",
+                self._require_iqoption_reconciliation(
+                    symbol, pos, f"IQ Option no confirmó el cierre: {close_res.get('error', 'sin detalle')}"
                 )
                 return
 
@@ -1784,6 +1952,12 @@ class RealTimeTradingEngine:
             "name": pos["name"],
             "broker": broker_id,
             "environment": wallet.get("environment", "PAPER"),
+            "learning_eligible": bool(
+                wallet.get("environment", "PAPER") == "PAPER"
+                and pos.get("execution_status") == "FILLED_SIMULATED"
+                and asset.get("source") == "IQOPTION_REAL_FEED"
+                and pos.get("category") in {"FOREX", "CFD"}
+            ),
             "category": pos.get("category", "TRADFI_STOCK"),
             "side": "BUY_LONG",
             "quantity": quantity,
@@ -1806,7 +1980,7 @@ class RealTimeTradingEngine:
         if hasattr(self, "risk_manager"):
             self.risk_manager.register_trade_close(pnl, symbol=symbol, is_intraday=True, broker_id=broker_id)
         if broker_id == "IQOPTION":
-            self.iqoption_risk_policy.record_closed_trade(pnl)
+            self.iqoption_risk_policy.record_closed_trade(pnl, trade_id=pos.get("broker_order_id") or pos.get("position_id"))
             self._apply_iqoption_daily_halt()
 
         b_curr = "COP" if (broker_id == "IQOPTION" and getattr(self.feed.iqoption, "currency", "USD") == "COP") else "USD"
@@ -1883,32 +2057,28 @@ class RealTimeTradingEngine:
         b_wal = self.broker_wallets.get(target_b, self.broker_wallets.get("IQOPTION", {}))
         b_name = b_wal.get("name", target_b)
 
-        cur_cash = b_wal.get("cash", 0.0)
-        if cur_cash > 0:
-            b_wal["initial_balance"] = cur_cash
-            self.initial_balance = cur_cash
+        risk_snapshot = self.iqoption_risk_policy.snapshot()
+        if risk_snapshot.get("reconciliation_required") or any(
+            pos.get("reconciliation_required") or pos.get("execution_state") == "UNKNOWN_RECONCILIATION"
+            for pos in self.open_positions.values()
+        ):
+            self.iqoption_risk_policy.require_reconciliation()
+            return False
 
         b_wal["is_running"] = True
-        b_wal["target_reached"] = False
-        b_wal["loss_limit_reached"] = False
-        b_wal["target_alerted"] = False
-        self.target_reached = False
-        self.loss_limit_reached = False
         self.is_running = True
 
         if hasattr(self, "iqoption_risk_policy"):
             self.iqoption_risk_policy.reset_halt()
 
         if hasattr(self, "binary_engine"):
-            if hasattr(self.binary_engine, "soros_manager") and hasattr(self.binary_engine.soros_manager, "reset_streaks"):
-                self.binary_engine.soros_manager.reset_streaks()
             if self.binary_engine.has_active_position:
                 b_pos = self.binary_engine.open_position
                 if b_pos and time.time() >= b_pos.get("expiration_timestamp", 0):
                     self.binary_engine.check_and_resolve_active_trade()
 
         self.agent._add_thought(
-            f"▶️ [{b_name}] Operaciones REANUDADAS MANUALMENTE por el usuario. Bloqueos levantados, escáner y entradas activas.",
+            f"▶️ [{b_name}] Motor reanudado. Se conservan los límites diarios; las entradas siguen sujetas al control de riesgo.",
             "INFO",
             icon="▶️"
         )

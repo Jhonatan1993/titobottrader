@@ -1,14 +1,15 @@
 # TitoBotTrader - Memoria Central de Configuración y Auditoría del Sistema
-**Última Actualización:** 2026-10-20 13:30 COT
-**Objetivo del Sistema:** Operación 100% enfocada y optimizada en **Forex Tradicional (CFD) en IQ Option**, eliminando intermediarios, brokers secundarios (Alpaca, Binance), y erradicando completamente las opciones binarias y lógicas redundantes (como la Bóveda de ganancias).
+**Última Actualización:** 2026-10-28
+**Objetivo vigente:** IQ Option con dos modalidades seleccionables y aisladas: opciones binarias y Forex CFD/margen. No existe método que garantice solo ganancias; las mejoras priorizan control de exposición, calidad de datos, evidencia del broker y bloqueo ante incertidumbre. Binance/Alpaca no forman parte de la operativa.
 
 ---
 
 ## 1. Reglas Maestras de Operación
 1. **Broker Único Exclusivo:** **IQ Option**. Todos los módulos de Alpaca y Binance quedan deshabilitados y eliminados del flujo operativo y de la interfaz visual para garantizar máximo rendimiento, cero latencia y cero confusión de saldo.
-2. **Modelo Único Exclusivo: Forex Tradicional (CFD):**
-   - **PROHIBICIÓN TOTAL DE OPCIONES BINARIAS:** Se eliminan de raíz las opciones binarias (`IQ_BINARY`, `IQ_HYBRID`, expiraciones de 60 segundos, payouts binarios y compuertas de tiempo de vela). El análisis de pérdidas reales del 19 de octubre demostró que la asimetría de binarias destruye el capital.
-   - Toda operación en IQ Option se ejecuta como **Forex CFD** con Stop-Loss matemático, Take-Profit garantizado (R:R mínimo 1:2.0), Break-Even automático a +1R y Trailing Stop dinámico a partir de +1.5R.
+2. **Modalidades seleccionables:** `BINARY_OPTIONS` y `FOREX_CFD` se mantienen separadas; el cambio de modalidad requiere cartera plana y ninguna orden en tránsito.
+   - Binarias permanecen disponibles en PAPER. `LIVE_REAL` binario está bloqueado hasta conciliar cada liquidación con el resultado oficial del broker.
+   - CFD/margen LIVE_REAL está bloqueado mientras no se verifiquen el sizing del contrato, el margen real y la pérdida posible contra el importe configurado.
+   - Stop-Loss, Take-Profit, break-even y trailing no se consideran garantizados ni confirmados por IQ Option salvo evidencia del broker.
 3. **Saldo Directo y Transparente:** Se elimina completamente el concepto de "Bóveda de Ganancias" (Profit Vault) y sus botones en la interfaz. El saldo operativo es directamente el saldo real de la cuenta de IQ Option (`real_amount` en COP).
 4. **Política Estricta de Despliegue a VPS:**
    - **NUNCA** realizar despliegues automáticos, `git push` o reinicios en el VPS sin antes explicar detallada y concisamente los cambios al usuario y obtener su aprobación explícita o permitir que él mismo ejecute los comandos en la consola del servidor.
@@ -16,15 +17,10 @@
 
 ---
 
-## 2. Mecánica Operativa: Forex CFD en IQ Option
-* **Mecánica:** Operaciones de compra (`CALL/BUY`) y venta (`PUT/SELL`) basadas en confluencia técnica (EMA 20/50, RSI, soportes y resistencias, régimen de mercado) sin expiración forzada de 60s.
-* **Relación Riesgo / Beneficio (R:R):** Mínimo 1:2.0 o 1:2.5 a favor. Solo se requiere ~35% de Win Rate para ser rentable.
-* **Control de Salida Dinámico:**
-  * **Take-Profit (TP):** Cierre automático garantizado al alcanzar el objetivo de beneficio matemático.
-  * **Stop-Loss (SL):** Cierre defensivo estricto para preservar capital si el precio se mueve en contra.
-  * **Break-Even Automático (+1R):** Al avanzar el precio a +1R de ganancia favorable, el Stop-Loss se mueve de inmediato al precio de entrada (`entry_price`), blindando la operación a CERO RIESGO.
-  * **Trailing Stop (+1.5R):** Acompaña la tendencia asegurando al menos +0.5R de beneficio acumulado ante cualquier retroceso.
-* **Filtro de Horarios de Mercado:** El bot opera pares Forex disponibles durante sesiones activas de mercado. Si un activo se encuentra cerrado, se aplica enfriamiento inteligente para no saturar la API.
+## 2. Modalidades IQ Option
+* **Forex CFD/margen:** posiciones sin expiración fija, sujetas a margen, spread, ejecución, gaps y riesgo de liquidación. Los stops remotos requieren confirmación.
+* **Opciones binarias:** contratos con vencimiento y pago condicionado al resultado; la pérdida puede ser el total de la apuesta. El resultado local simulado solo sirve para PAPER.
+* **Análisis actual:** las reglas EMA/RSI/soporte/resistencia son heurísticas. Una puntuación de confianza no es una probabilidad validada ni predice ganancias.
 
 ---
 
@@ -59,11 +55,11 @@
 
 ---
 
-## 4. Auditoría integral 2026-10-22 — Prevalencia obligatoria
+## 4. Auditoría integral 2026-10-22 — Historial y prevalencia
 
-El documento `data/AUDIT_PLAN_2026-10-22.md` prevalece sobre cualquier afirmación anterior de esta memoria o de los logs que contradiga su política. **Estado vigente: NO APTO PARA OPERACIÓN REAL AUTÓNOMA; mantener `PAPER` y `LIVE_REAL` desarmado.**
+Las prohibiciones de binarias del plan original quedaron reemplazadas por la decisión posterior del usuario de conservar ambas modalidades. La política vigente se documenta al final de este archivo y en la corrección fechada del plan. **Estado vigente: PAPER por defecto; no apto para operación real autónoma mientras haya gates de ejecución y conciliación pendientes.**
 
-- Solo se permite Forex CFD de IQ Option: binarias, OTC, turbo, blitz, digital options, fallback binario y multibroker están prohibidos.
+- Se permiten las modalidades seleccionables Binarias y Forex CFD/margen de IQ Option, sin fallback cruzado entre productos. LIVE_REAL binario queda bloqueado sin liquidación oficial; OTC no se permite en la allowlist CFD.
 - Ningún TP, SL, break-even, trailing, PnL, fill o cierre se considera real hasta recibir y registrar confirmación correlacionada del broker.
 - No se garantizan ganancias ni resultados; el sistema debe limitar riesgo y fallar cerrado.
 - Antes de cambiar ejecución, datos, riesgo, credenciales, dashboard o despliegue se deben leer este archivo, `data/PROJECT_CONVERSATION_LOG.md` y el plan de auditoría.
@@ -84,3 +80,19 @@ Reglas obligatorias:
 5. Las credenciales IQ Option nunca se devuelven completas por API.
 6. Las opciones binarias se mantienen como producto de alto riesgo: en `LIVE_REAL`, el resultado debe provenir del broker; la simulación de precio local no constituye evidencia de liquidación real.
 7. La plataforma permanece en `PAPER` hasta una autorización explícita para cambiar a `LIVE_REAL` y hasta verificar la reconciliación real de órdenes, posiciones y resultados.
+
+---
+
+## 6. Implementación preventiva local — 2026-10-28
+
+El usuario autorizó reforzar el bot conservando la selección entre binarias y CFD/margen. Cambios aplicados al código fuente local:
+- Binarias LIVE_REAL rechaza nuevas órdenes; si existe una posición heredada vencida, no infiere el resultado con cotización local.
+- CFD LIVE_REAL requiere dos gates de proceso (`LIVE_TRADING_ARMED` y `LIVE_CFD_EXECUTION_VERIFIED`), límite diario de pérdida positivo y feed reciente de velas cerradas IQ Option. El segundo gate permanece falso por defecto porque el payload CFD usa un tamaño fijo (`count=100`) no ligado al importe solicitado.
+- PAPER sigue siendo el entorno predeterminado. Se conservan ambos productos; el cambio de modo y entorno queda bloqueado con posiciones u órdenes pendientes.
+- Riesgo diario y bloqueos por conciliación se guardan en un archivo de estado; reanudar no limpia PnL ni límites.
+- El aprendizaje separa Binarias y CFD; ignora historial ambiguo y admite solo resultados con marca `learning_eligible` o liquidación LIVE_REAL verificada.
+- El estado LIVE_REAL desconocido conserva la posición y bloquea nuevas exposiciones. No se registra PnL por una respuesta vacía del broker.
+- WebSocket exige validación TLS; rutas de prueba binaria real, diagnóstico con conexión/orden, auto-actualización y reinicio remoto responden 410; el selector requiere administrador.
+- El servidor local se vincula a loopback; el instalador VPS crea un usuario de servicio sin privilegios y firewall solo web/SSH.
+
+No se ejecutaron pruebas, conexión a IQ Option, órdenes, reinicio ni despliegue durante esta edición. El código requiere revisión/validación antes de sustituir el proceso desplegado. La estrategia actual sigue siendo heurística y el histórico de trades carece de identificadores de broker suficientes para un entrenamiento supervisado fiable.

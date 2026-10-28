@@ -6,14 +6,11 @@ Este documento registra de forma cronológica, inmutable y persistente todas las
 
 ## 📌 Directivas Maestras del Usuario (Inviolables)
 
-1. **PROHIBICIÓN TOTAL DE OPCIONES BINARIAS:**
-   - Se elimina de raíz cualquier lógica, modo, compuerta o prueba de Opciones Binarias (`IQ_BINARY`, `IQ_HYBRID`, expiraciones de 60s, compuerta de segundo :00/:58, payouts binarios).
-   - El análisis del histórico de operaciones del 19 de octubre de 2026 demostró que la asimetría matemática de las binarias (arriesgar el 100% para ganar 80-88% con expiraciones fijas de 60 segundos) causó la pérdida de capital real, anula el análisis técnico y carece de gestión de riesgo (no permite Stop-Loss dinámico ni dejar correr ganancias).
-   - El bot debe ser **100% FOREX TRADICIONAL (CFD)** en **IQ Option**, con:
-     - Stop-Loss estricto y matemático.
-     - Take-Profit objetivo (mínimo 1:2 de Riesgo/Beneficio).
-     - Break-Even automático a +1R (proteger capital a cero riesgo).
-     - Trailing Stop dinámico a partir de +1.5R.
+1. **Modalidades IQ Option (política vigente desde 2026-10-22):**
+   - Se conservan dos modos aislados y seleccionables: `BINARY_OPTIONS` y `FOREX_CFD` (margen).
+   - Los párrafos cronológicos anteriores sobre eliminar binarias se conservan como historial, pero no son la instrucción vigente.
+   - Binarias se mantienen disponibles en PAPER; LIVE_REAL binario requiere liquidación oficial correlacionable y actualmente está bloqueado.
+   - CFD/margen real requiere sizing del contrato y margen verificados; sus stops solo cuentan como activos con confirmación del broker. No hay promesa de R:R garantizado ni de evitar pérdidas.
 2. **POLÍTICA DE DESPLIEGUE A VPS (ESTRICTA):**
    - **NUNCA** subir cambios, ejecutar `git push`, reiniciar servicios ni realizar despliegues automáticos al VPS sin previa explicación detallada y concisa.
    - El usuario debe dar su aprobación explícita primero, o en su defecto, se le entregarán los comandos exactos para que él mismo los ejecute en la consola del VPS.
@@ -118,7 +115,7 @@ Este documento registra de forma cronológica, inmutable y persistente todas las
 **Dictamen vigente: NO APTO PARA OPERACIÓN REAL AUTÓNOMA.** La suite local pasó `100`, pero no prueba seguridad productiva. Se identificaron rutas binarias ejecutables, riesgo de divergencia entre el estado local y el broker, datos potencialmente sintéticos, exposición de secretos, TLS no verificado, cálculo inconsistente de PnL/apalancamiento y despliegue sin rollback.
 
 El documento normativo `data/AUDIT_PLAN_2026-10-22.md` prevalece sobre registros históricos contradictorios. Establece:
-1. Solo Forex CFD de IQ Option; quedan prohibidos binarias, OTC, turbo/blitz, digital options y multibroker.
+1. Solo IQ Option; se conservan Binarias y Forex CFD/margen seleccionables. No hay fallback cruzado entre modalidades; binarias LIVE_REAL queda bloqueado hasta liquidación oficial.
 2. Mantener `PAPER`; `LIVE_REAL` queda desarmado hasta completar Fases 0–5 y la puerta de liberación documentada.
 3. Ningún fill, saldo, PnL, SL/TP, break-even, trailing ni cierre puede considerarse real sin confirmación correlacionada del broker.
 4. Diseño fail-closed para dato sintético/obsoleto, símbolo inválido, timeout, error o desincronización.
@@ -162,3 +159,20 @@ Restricción vigente: se mantiene `PAPER`. En `LIVE_REAL`, cualquier resultado b
 **Verificación:** Producción quedó en modo `BINARY_OPTIONS`, moneda `COP`, cero posiciones abiertas, máximo una posición global y nuevas entradas bloqueadas por Tolerancia Cero. La validación local previa al último despliegue finalizó con `107 passed`.
 
 **Regla obligatoria:** Registros históricos que etiqueten TP/SL con PnL incompatible no se deben usar para optimización, métricas, límites diarios o aprendizaje. Solo el PnL conciliado contra evidencia final del broker puede considerarse real.
+
+---
+
+### Sesión 28 de octubre de 2026 — Endurecimiento local de binarias y margen
+
+El usuario confirmó que deben seguir disponibles ambas modalidades: binarias y margen/Forex CFD, con selector. Se autorizó mejorar los controles; no se autorizó operar ni desplegar.
+
+Cambios hechos en el workspace:
+1. Binarias continúan disponibles en PAPER. Se bloqueó la entrada LIVE_REAL y se impidió liquidar una operación binaria real usando solo el precio local.
+2. CFD LIVE_REAL requiere `LIVE_TRADING_ARMED=true` y `LIVE_CFD_EXECUTION_VERIFIED=true`, límite diario de pérdida habilitado con monto positivo e historial reciente de velas cerradas etiquetadas como IQ Option. El segundo gate se mantiene desarmado por defecto: el payload aún utiliza `count=100` fijo y no vincula con evidencia el tamaño de contrato al importe solicitado.
+3. No se cambia de producto o entorno con exposiciones, órdenes en tránsito o posiciones detectadas por el adaptador. Se elimina el borrado de posiciones/cooldowns al cambiar modalidad.
+4. Riesgo diario y bloqueo por conciliación se persisten; las respuestas vacías/ambiguas del broker ya no se registran como cierres ni PnL local. `resume` no borra límites.
+5. El aprendizaje separa Binarias y CFD; ignora el historial ambiguo y usa solo registros PAPER marcados `learning_eligible` o resultados LIVE_REAL con liquidación verificada.
+6. TLS WebSocket exige certificado y hostname válidos; endpoints de prueba binaria real, diagnóstico con conexión/orden, auto-actualización y reinicio remoto devuelven 410; se protege el selector de modo para administradores.
+7. La aplicación usa loopback por defecto y el instalador de VPS configura usuario de servicio no-root, Gunicorn, cookies Secure y puertos 22/80/443.
+
+No se ejecutaron pruebas automatizadas, conexión al broker, órdenes, reinicios ni despliegue. No se modificaron los archivos de historial/calendario preexistentes del usuario. El proyecto continúa NO APTO PARA OPERACIÓN REAL autónoma: falta sizing CFD validado, liquidación binaria oficial, conciliación completa de cierres, validación estadística temporal y revisión/QA antes de reemplazar producción.

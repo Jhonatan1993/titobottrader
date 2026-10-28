@@ -85,6 +85,8 @@ class TradeJournal:
             "broker": trade_data.get("broker") or "IQOPTION",
             "category": trade_data.get("category", "FOREX"),
             "environment": trade_data.get("environment", "PAPER"),
+            "learning_eligible": bool(trade_data.get("learning_eligible", False)),
+            "settlement_verified": bool(trade_data.get("settlement_verified", False)),
             "opened_at": trade_data.get("opened_at", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
             "closed_at": trade_data.get("closed_at", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
             "duration": trade_data.get("duration", "2 min")

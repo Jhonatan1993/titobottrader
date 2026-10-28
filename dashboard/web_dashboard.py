@@ -4,8 +4,10 @@ import threading
 import time
 import datetime
 import re
+from urllib.parse import urlsplit
 from flask import Flask, render_template, jsonify, request, Response, redirect, url_for, session, g
 from functools import wraps
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from execution.trading_engine import RealTimeTradingEngine
@@ -31,13 +33,12 @@ app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.secret_key = get_secure_session_key()
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get("SESSION_COOKIE_SECURE", "false").strip().lower() == "true"
 app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(days=7)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 
 def get_client_ip():
-    """Obtiene la IP real del cliente considerando proxies inversos estándar."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    """Obtiene la IP resuelta por el proxy inverso de confianza, si está configurado."""
     return request.remote_addr or "127.0.0.1"
 
 @app.after_request
@@ -65,8 +66,15 @@ def check_authentication():
     client_ip = get_client_ip()
     
     # Rutas públicas sin autenticación requerida
-    if request.path.startswith("/static") or request.path in ("/login", "/logout"):
+    if request.path.startswith("/static") or request.path in ("/login", "/logout", "/healthz"):
         return None
+
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        origin = request.headers.get("Origin")
+        fetch_site = request.headers.get("Sec-Fetch-Site", "").lower()
+        if fetch_site == "cross-site" or (origin and urlsplit(origin).netloc != request.host):
+            log_security_event("CROSS_SITE_MUTATION_BLOCKED", "Solicitud de cambio con origen cruzado", ip=client_ip)
+            return jsonify({"success": False, "error": "CROSS_SITE_REQUEST_BLOCKED"}), 403
         
     user_id = session.get("user_id")
     if not user_id:
@@ -110,6 +118,8 @@ def check_authentication():
         "/api/control/transfer-vault",
         "/api/control/set-target",
         "/api/control/set-mode",
+        "/api/control/set-iqoption-mode",
+        "/api/control/test-binary-trade",
         "/api/control/recalibrate",
         "/api/control/clear-cooldown",
         "/api/control/toggle",
@@ -276,6 +286,10 @@ def api_admin_set_database_url():
 def index():
     return render_template("index.html", current_user=getattr(g, "current_user", {}))
 
+@app.route("/healthz", methods=["GET"])
+def healthz():
+    return jsonify({"status": "ok"})
+
 @app.route("/api/state", methods=["GET"])
 def get_state():
     return jsonify(ENGINE.get_full_state())
@@ -299,7 +313,8 @@ def resume_state():
     broker = data.get("broker") or ENGINE.active_broker
     is_run = ENGINE.resume_trading(broker=broker)
     return jsonify({
-        "success": True, 
+        "success": is_run,
+        "error": None if is_run else "RECONCILIACION_BROKER_REQUERIDA",
         "is_running": is_run, 
         "broker": broker, 
         "target_reached": ENGINE.target_reached,
@@ -333,9 +348,10 @@ def set_profit_target():
     loss_enabled = bool(data.get("loss_enabled", True))
     broker = data.get("broker")
     
-    ENGINE.set_risk_limits(target_amount, max_loss_amount, target_enabled, loss_enabled, broker)
+    res = ENGINE.set_risk_limits(target_amount, max_loss_amount, target_enabled, loss_enabled, broker)
     return jsonify({
-        "success": True, 
+        "success": bool((res or {}).get("success", True)),
+        "error": (res or {}).get("error"),
         "target_amount": ENGINE.profit_target_amount, 
         "max_loss_amount": ENGINE.max_loss_amount,
         "profit_target_enabled": ENGINE.profit_target_enabled,
@@ -346,8 +362,8 @@ def set_profit_target():
 def set_mode():
     data = request.get_json(silent=True) or {}
     mode = data.get("mode", "IQ_CFD")
-    ENGINE.set_operating_mode(mode)
-    return jsonify({"success": True, "mode": ENGINE.operating_mode, "iq_mode": getattr(ENGINE, "iq_mode", "FOREX_CFD")})
+    res = ENGINE.set_operating_mode(mode)
+    return jsonify({**res, "mode": ENGINE.operating_mode, "iq_mode": getattr(ENGINE, "iq_mode", "FOREX_CFD")})
 
 @app.route("/api/control/set-iqoption-mode", methods=["POST"])
 def set_iqoption_mode():
@@ -358,13 +374,8 @@ def set_iqoption_mode():
 
 @app.route("/api/control/test-binary-trade", methods=["POST"])
 def test_binary_trade():
-    """Permite disparar 1 orden real de prueba mínima respetando el gatekeeper de 1 sola operación (0/1)."""
-    data = request.get_json(silent=True) or {}
-    symbol = data.get("symbol", "EURJPY")
-    direction = data.get("direction", "CALL")
-    amount = data.get("amount")
-    res = ENGINE.trigger_test_binary_trade(symbol=symbol, direction=direction, amount=amount)
-    return jsonify(res)
+    """Endpoint retirado: una ruta de prueba no debe poder enviar órdenes."""
+    return jsonify({"success": False, "error": "RUTA_DESHABILITADA", "message": "Las órdenes de prueba están deshabilitadas."}), 410
 
 @app.route("/api/control/set-active-broker", methods=["POST"])
 def set_active_broker():
@@ -389,106 +400,23 @@ def recalibrate():
 
 @app.route("/api/admin/system-update", methods=["POST"])
 def api_admin_system_update():
-    """Descarga la última versión de GitHub y recarga el motor reiniciando el servicio en systemd."""
-    current_admin_id = session.get("user_id")
-    user = get_user_by_id(current_admin_id) if current_admin_id else None
-    if not user or user.get("role") != "admin":
-        return jsonify({"success": False, "error": "Acceso denegado: solo Administradores pueden actualizar el sistema."}), 403
-
-    import subprocess
-    try:
-        subprocess.run(["git", "checkout", "--", "data/trades_history.csv", "data/trades_history.json"], capture_output=True, text=True, timeout=10)
-        pull_res = subprocess.run(["git", "pull", "origin", "main"], capture_output=True, text=True, timeout=15)
-        if pull_res.returncode != 0:
-            subprocess.run(["git", "fetch", "origin", "main"], capture_output=True, text=True, timeout=15)
-            pull_res = subprocess.run(["git", "reset", "--hard", "origin/main"], capture_output=True, text=True, timeout=15)
-        ENGINE.agent.learner.clear_cooldown()
-        if hasattr(ENGINE.feed, "reset_forex_feed"):
-            ENGINE.feed.reset_forex_feed()
-
-        def trigger_restart():
-            time.sleep(1.2)
-            os._exit(0)
-        threading.Thread(target=trigger_restart, daemon=True).start()
-
-        return jsonify({
-            "success": True,
-            "stdout": pull_res.stdout,
-            "stderr": pull_res.stderr,
-            "message": "Sistema actualizado con éxito desde GitHub. Reiniciando servicio para aplicar cambios..."
-        })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+    """Actualización remota desde el dashboard deshabilitada hasta tener release y rollback verificables."""
+    return jsonify({"success": False, "error": "RUTA_DESHABILITADA", "message": "Actualiza mediante un release respaldado y revisado."}), 410
 
 @app.route("/api/admin/run-diagnose", methods=["POST"])
 def api_admin_run_diagnose():
-    """Ejecuta el script de diagnóstico y prueba real en vivo de IQ Option devolviendo la evidencia de consola."""
-    current_admin_id = session.get("user_id")
-    user = get_user_by_id(current_admin_id) if current_admin_id else None
-    if not user or user.get("role") != "admin":
-        return jsonify({"success": False, "error": "Acceso denegado"}), 403
-
-    import subprocess
-    try:
-        res = subprocess.run([sys.executable, "scripts/diagnose_iq_instruments.py"], capture_output=True, text=True, timeout=45)
-        return jsonify({
-            "success": True,
-            "stdout": res.stdout,
-            "stderr": res.stderr,
-            "returncode": res.returncode
-        })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+    """Sondeos de órdenes reales desde el dashboard retirados."""
+    return jsonify({"success": False, "error": "RUTA_DESHABILITADA", "message": "El diagnóstico no enviará órdenes ni conectará una cuenta real."}), 410
 
 @app.route("/api/admin/restart-service", methods=["POST"])
 def api_admin_restart_service():
-    """Reinicia limpiamente el proceso del servicio para cargar código fresco."""
-    current_admin_id = session.get("user_id")
-    user = get_user_by_id(current_admin_id) if current_admin_id else None
-    if not user or user.get("role") != "admin":
-        return jsonify({"success": False, "error": "Acceso denegado: solo Administradores pueden reiniciar el servicio."}), 403
-
-    def trigger_restart():
-        time.sleep(1.0)
-        os._exit(0)
-    threading.Thread(target=trigger_restart, daemon=True).start()
-    return jsonify({"success": True, "message": "Servicio reiniciando en 1 segundo..."})
+    """Reinicio remoto desde el dashboard deshabilitado."""
+    return jsonify({"success": False, "error": "RUTA_DESHABILITADA", "message": "Reinicia solo tras revisar el release y el estado del VPS."}), 410
 
 @app.route("/api/admin/force-real-binary-test", methods=["POST"])
 def api_admin_force_real_binary_test():
-    """Busca el activo disponible en IQ Option y dispara 1 orden real de 2,000 COP garantizando cupo 0/1."""
-    current_admin_id = session.get("user_id")
-    user = get_user_by_id(current_admin_id) if current_admin_id else None
-    if not user or user.get("role") != "admin":
-        return jsonify({"success": False, "error": "Acceso denegado"}), 403
-
-    iq = ENGINE.feed.iqoption
-    if not iq.ssid:
-        iq.connect()
-
-    is_cop = (getattr(iq, "currency", "COP") == "COP")
-    trade_amt = 2000.0 if is_cop else 1.0
-
-    # Activos candidatos comunes con alta liquidez (Forex estándar y OTC)
-    candidates = ["EURUSD", "AUDUSD", "EURGBP", "EURJPY", "GBPUSD", "USDJPY", "USDCHF-OTC", "EURUSD-OTC", "EURJPY-OTC", "AUDUSD-OTC"]
-    
-    results = {}
-    successful_order = None
-
-    for sym in candidates:
-        res = ENGINE.trigger_test_binary_trade(symbol=sym, direction="CALL", amount=trade_amt)
-        results[sym] = res
-        if res.get("success"):
-            successful_order = res
-            break
-
-    return jsonify({
-        "success": bool(successful_order),
-        "executed_trade": successful_order,
-        "attempts": results,
-        "currency": iq.currency,
-        "real_balance": iq.real_amount
-    })
+    """Endpoint retirado: no se permiten órdenes binarias de prueba real."""
+    return jsonify({"success": False, "error": "RUTA_DESHABILITADA", "message": "Las órdenes binarias de prueba real están deshabilitadas."}), 410
 
 @app.route("/api/admin/system-logs", methods=["GET"])
 def api_admin_system_logs():
@@ -524,7 +452,7 @@ def api_admin_iq_diagnostics():
     ws_url = "wss://iqoption.com/echo/websocket"
     headers = [f"Cookie: ssid={iq.ssid}", "User-Agent: Mozilla/5.0"]
     try:
-        ws = websocket.create_connection(ws_url, header=headers, timeout=6, sslopt={"cert_reqs": ssl.CERT_NONE})
+        ws = websocket.create_connection(ws_url, header=headers, timeout=6, sslopt={"cert_reqs": ssl.CERT_REQUIRED, "check_hostname": True})
         ws.send(json.dumps({
             "name": "authenticate",
             "msg": {"ssid": iq.ssid, "protocol": 3, "session_id": "", "client_session_id": ""},

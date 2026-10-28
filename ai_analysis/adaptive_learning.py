@@ -14,9 +14,10 @@ class AdaptiveLearningEngine:
     4. Auto-ajuste de umbrales de confianza y Stop-Loss/Take-Profit según volatilidad realizada.
     5. Nivel de Maestría del Agente basado en métricas institucionales y control de drawdown.
     """
-    def __init__(self, data_file: str = "data/trades_history.json", lookback_trades: int = 50):
+    def __init__(self, data_file: str = "data/trades_history.json", lookback_trades: int = 50, product_mode: str = "FOREX_CFD"):
         self.data_file = data_file
         self.lookback_trades = lookback_trades
+        self.product_mode = product_mode
         self.asset_stats: Dict[str, Dict[str, Any]] = {}
         self.cooldowns: Dict[str, float] = {}  # symbol -> expiration timestamp
         self.total_patterns_learned = 0
@@ -44,6 +45,31 @@ class AdaptiveLearningEngine:
 
         if not trades:
             return {"status": "Sin transacciones previas"}
+
+        expected_categories = {"BINARY_OPTIONS"} if self.product_mode == "BINARY_OPTIONS" else {"FOREX", "CFD"}
+        trades = [
+            trade for trade in trades
+            if isinstance(trade, dict)
+            and trade.get("category") in expected_categories
+            and str(trade.get("environment", "")).upper() in {"PAPER", "LIVE_REAL"}
+            and (
+                trade.get("learning_eligible") is True
+                or (str(trade.get("environment", "")).upper() == "LIVE_REAL" and trade.get("settlement_verified") is True)
+            )
+            and trade.get("symbol")
+            and isinstance(trade.get("pnl"), (int, float))
+            and math.isfinite(float(trade.get("pnl")))
+        ]
+
+        if not trades:
+            self.asset_stats = {}
+            self.total_patterns_learned = 0
+            self.portfolio_win_rate = 50.0
+            self.portfolio_profit_factor = 1.0
+            self.portfolio_expectancy = 0.0
+            self.portfolio_max_drawdown = 0.0
+            self.mastery_level = "🌱 Cadete Algorítmico"
+            return {"status": f"Sin registros confiables para {self.product_mode}"}
 
         if len(trades) != self.total_patterns_learned:
             self._cleared_cooldown_syms.clear()

@@ -14,11 +14,11 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "iqoption_profit_target_amount": 50000.0,
     "iqoption_profit_target_enabled": True,
     "iqoption_max_loss_amount": 0.0,
-    "iqoption_max_loss_enabled": False,
+    "iqoption_max_loss_enabled": True,
     "profit_target_amount": 50000.0,
     "profit_target_enabled": True,
     "max_loss_amount": 0.0,
-    "max_loss_enabled": False,
+    "max_loss_enabled": True,
     "iqoption": {
         "email": os.environ.get("IQOPTION_EMAIL", ""),
         "password": os.environ.get("IQOPTION_PASSWORD", ""),
@@ -26,6 +26,16 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "enabled": False
     }
 }
+
+
+def live_trading_armed() -> bool:
+    """Real trading requires an explicit process-level release flag; JSON/UI cannot arm it."""
+    return os.environ.get("LIVE_TRADING_ARMED", "false").strip().lower() == "true"
+
+
+def live_cfd_execution_verified() -> bool:
+    """Separate release gate for CFD contract sizing against the requested account risk."""
+    return os.environ.get("LIVE_CFD_EXECUTION_VERIFIED", "false").strip().lower() == "true"
 
 
 def load_broker_config() -> Dict[str, Any]:

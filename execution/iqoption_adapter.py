@@ -3,6 +3,7 @@ import requests
 import datetime
 import threading
 from typing import Dict, Any, Optional
+from config.broker_config import live_trading_armed, live_cfd_execution_verified
 
 ACTIVE_ASSET_IDS = {
     # Forex Turbo / Binarias (Lunes a Viernes)
@@ -87,6 +88,12 @@ ACTIVE_ID_TO_SYMBOL: Dict[int, str] = {
     1: "EURUSD", 2: "EURGBP", 3: "GBPJPY", 4: "EURJPY", 5: "GBPUSD", 6: "USDJPY", 7: "AUDCAD"
 }
 
+CFD_ALLOWED_SYMBOLS = frozenset({
+    "EURUSD", "EURGBP", "EURJPY", "USDJPY", "GBPJPY", "GBPUSD", "AUDCAD",
+    "AUDJPY", "AUDUSD", "GBPAUD", "GBPNZD", "NZDCAD", "AUDCHF", "NZDUSD",
+    "GBPCAD", "AUDNZD", "EURNZD", "USDCHF", "USDCAD", "CHFJPY", "CADCHF", "EURAUD",
+})
+
 class IQOptionAdapter:
     """
     Adaptador Oficial de IQ Option para TitoBotTrader:
@@ -98,7 +105,12 @@ class IQOptionAdapter:
         self.email = email.strip()
         self.password = password.strip()
         self.ssid: Optional[str] = ssid.strip() or None
-        self.environment = environment.upper() # "PAPER" o "LIVE_REAL"
+        self.live_trading_armed = live_trading_armed()
+        self.live_cfd_execution_verified = live_cfd_execution_verified()
+        requested_environment = environment.upper()
+        self.environment = requested_environment if requested_environment in {"PAPER", "LIVE_REAL"} else "PAPER"
+        if self.environment == "LIVE_REAL" and not (self.live_trading_armed and self.live_cfd_execution_verified):
+            self.environment = "PAPER"
         self.base_url = "https://iqoption.com/api"
         self.session = requests.Session()
         self.session.headers.update({
@@ -169,7 +181,7 @@ class IQOptionAdapter:
                         ws_url,
                         header=headers,
                         timeout=timeout,
-                        sslopt={"cert_reqs": ssl.CERT_NONE}
+                        sslopt={"cert_reqs": ssl.CERT_REQUIRED, "check_hostname": True}
                     )
                     self._persistent_ws = ws
                     self._start_keepalive_if_needed()
@@ -225,7 +237,7 @@ class IQOptionAdapter:
         try:
             ws_url = self._get_ws_url()
             headers = self._get_ws_headers()
-            ws = websocket.create_connection(ws_url, header=headers, timeout=6, sslopt={"cert_reqs": ssl.CERT_NONE})
+            ws = websocket.create_connection(ws_url, header=headers, timeout=6, sslopt={"cert_reqs": ssl.CERT_REQUIRED, "check_hostname": True})
             # 1. Enviar autenticación
             ws.send(json.dumps({
                 "name": "authenticate",
@@ -744,7 +756,14 @@ class IQOptionAdapter:
 
     def set_environment(self, env: str) -> Dict[str, Any]:
         """Conmuta de forma segura entre MODO PRÁCTICA (PAPER) y MODO REAL (LIVE_REAL)."""
-        self.environment = env.upper()
+        requested = str(env).upper()
+        if requested not in {"PAPER", "LIVE_REAL"}:
+            return {"success": False, "error": "Entorno inválido; use PAPER o LIVE_REAL."}
+        if requested == "LIVE_REAL" and not self.live_trading_armed:
+            return {"success": False, "error": "LIVE_REAL bloqueado: LIVE_TRADING_ARMED no está habilitado en el proceso."}
+        if requested == "LIVE_REAL" and not self.live_cfd_execution_verified:
+            return {"success": False, "error": "LIVE_REAL bloqueado: falta verificar el tamaño de contrato/margen CFD frente al importe solicitado."}
+        self.environment = requested
         if self.connected:
             target_id = self.real_balance_id if self.environment == "LIVE_REAL" else self.practice_balance_id
             if target_id:
@@ -804,7 +823,7 @@ class IQOptionAdapter:
             try:
                 ws_url = self._get_ws_url()
                 headers = self._get_ws_headers()
-                ws = websocket.create_connection(ws_url, header=headers, timeout=4.0, sslopt={"cert_reqs": ssl.CERT_NONE})
+                ws = websocket.create_connection(ws_url, header=headers, timeout=4.0, sslopt={"cert_reqs": ssl.CERT_REQUIRED, "check_hostname": True})
                 
                 # 1. Autenticar y esperar confirmación del broker
                 ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
@@ -977,7 +996,7 @@ class IQOptionAdapter:
         no_dash = clean_sym.replace("-OTC", "OTC")
         if hasattr(self, "_symbol_to_active_id") and no_dash in self._symbol_to_active_id:
             return self._symbol_to_active_id[no_dash]
-        return ACTIVE_ASSET_IDS.get(no_dash, 1861)
+        return ACTIVE_ASSET_IDS.get(no_dash)
 
     def _execute_real_ws_order(
         self, 
@@ -995,16 +1014,25 @@ class IQOptionAdapter:
         import json
         import ssl
 
+        if self.environment == "LIVE_REAL" and not (live_trading_armed() and live_cfd_execution_verified()):
+            return {"success": False, "error": "Orden CFD LIVE_REAL bloqueada por gates de liberación del proceso."}
+
         if not self.ssid:
             return {"success": False, "error": "No hay SSID de sesión activo para ejecutar orden en IQ Option"}
 
-        # Normalizar símbolo eliminando caracteres especiales y sufijos OTC
-        # Margen CFD en IQ Option opera exclusivamente sobre pares Forex estándar (EURUSD, GBPUSD, etc.) y Acciones
-        clean_sym = symbol.replace("/", "").replace(" ", "").replace("(", "").replace(")", "").replace("_", "").replace("-OTC", "").replace("OTC", "").upper()
-        active_id = ACTIVE_ASSET_IDS.get(clean_sym, 1)
+        raw_symbol = str(symbol).strip().upper()
+        if "OTC" in raw_symbol:
+            return {"success": False, "error": "Símbolos OTC no permitidos para Forex CFD."}
+        clean_sym = raw_symbol.replace("/", "").replace(" ", "").replace("(", "").replace(")", "").replace("_", "")
+        if clean_sym not in CFD_ALLOWED_SYMBOLS:
+            return {"success": False, "error": f"Símbolo CFD no autorizado: {clean_sym or '(vacío)'}"}
+        # CFD requires an active id confirmed by the broker; never substitute EURUSD.
+        active_id = self._symbol_to_active_id.get(clean_sym)
+        if active_id is None:
+            return {"success": False, "error": f"IQ Option no confirmó el instrumento CFD {clean_sym}. Orden rechazada."}
 
         cfd_side = "buy" if side.lower() in ["buy", "buy_long", "call"] else "sell"
-        order_leverage = int(leverage) if leverage else 25
+        order_leverage = max(1, min(int(leverage or 25), 25))
         
         # En cuentas COP de IQ Option, el importe mínimo de operación es de 2,000 COP (En USD es $1.00)
         min_amount = 2000.0 if self.currency == "COP" else 1.0
@@ -1021,6 +1049,8 @@ class IQOptionAdapter:
         headers = self._get_ws_headers()
 
         result = {"success": False, "error": "Tiempo de espera agotado al conectar al WebSocket de IQ Option"}
+        order_sent = False
+        req_id = None
 
         try:
             ws = self._get_persistent_ws(timeout=12.0)
@@ -1080,13 +1110,13 @@ class IQOptionAdapter:
             else:
                 target_balance = self.practice_balance_id or self.active_balance_id
 
-            order_leverage = int(leverage) if leverage else 25
+            order_leverage = max(1, min(int(leverage or 25), 25))
             target_bal_id = int(target_balance) if target_balance and str(target_balance).isdigit() else target_balance
 
             # Enviar orden de mercado oficial Quadcode Margen Forex CFD (100% Forex sin expiración de tiempo)
             # Instrument ID sigue el esquema mf.{active_id} (ej. mf.1 para EURUSD)
             count_units = "100" # Lote micro mínimo 0.001 (100 unidades de divisa base)
-            order_leverage_str = str(min(order_leverage, 500)) if order_leverage else "500"
+            order_leverage_str = str(order_leverage)
             
             body_payload = {
                 "side": cfd_side,
@@ -1121,6 +1151,7 @@ class IQOptionAdapter:
                 }
             }
             ws.send(json.dumps(cfd_payload))
+            order_sent = True
 
             # 3. Leer respuesta con timeout de 6 segundos
             start_wait = time.time()
@@ -1246,6 +1277,9 @@ class IQOptionAdapter:
                     pass
 
             if not result.get("success") and "Tiempo de espera" in str(result.get("error", "")):
+                if order_sent:
+                    result["unknown"] = True
+                    result["request_id"] = req_id
                 try:
                     ws.close()
                 except Exception:
@@ -1256,11 +1290,16 @@ class IQOptionAdapter:
             import traceback
             tb = traceback.format_exc()
             result = {"success": False, "error": f"Error WebSocket IQ Option ({type(e).__name__}): {str(e)} | Trace: {tb}"}
+            if order_sent:
+                result["unknown"] = True
+                result["request_id"] = req_id
 
         return result
 
     def close_position(self, position_id: str) -> Dict[str, Any]:
-        """Cierra una posición activa en IQ Option (vía sell-options anticipada o close-position)."""
+        """Solicita cierre CFD; en LIVE_REAL nunca convierte desconexión en éxito simulado."""
+        if self.environment == "LIVE_REAL" and (not self.ssid or not position_id or str(position_id).startswith("IQ_PAPER")):
+            return {"success": False, "error": "Cierre LIVE_REAL rechazado: faltan sesión o identificador válido del broker."}
         if not self.ssid or not position_id or str(position_id).startswith("IQ_PAPER"):
             return {"success": True, "status": "CLOSED_SIMULATED", "position_id": str(position_id)}
         import websocket
@@ -1366,18 +1405,26 @@ class IQOptionAdapter:
         Ejecuta o simula una orden Forex CFD en IQ Option según el entorno activo (PAPER o LIVE_REAL).
         """
         pos_id = position_id or option_id
+        if self.environment == "LIVE_REAL" and not self.live_trading_armed:
+            return {"success": False, "error": "LIVE_REAL bloqueado: el proceso no está armado para operar dinero real."}
+        if self.environment == "LIVE_REAL" and not self.live_cfd_execution_verified:
+            return {"success": False, "error": "LIVE_REAL bloqueado: sizing de CFD no verificado contra el riesgo solicitado."}
         # Si se solicita cierre explícito de posición
         if side.lower() in ["close", "sell_exit"]:
             if pos_id:
                 return self.close_position(pos_id)
+            if self.environment == "LIVE_REAL":
+                return {"success": False, "error": "Cierre LIVE_REAL rechazado: falta identificador de posición."}
             return {"success": True, "status": "CLOSED_SIMULATED"}
 
         # Si se recibe 'sell' con un ID de posición existente, se interpreta como cierre de esa posición
         if side.lower() == "sell" and pos_id:
             return self.close_position(pos_id)
 
-        # Si no hay sesión WebSocket activa con IQ Option, o no hay SSID, o no se ha sincronizado practice_balance_id, retornar orden simulada offline
+        # Offline simulation is valid only in PAPER; LIVE_REAL must fail closed.
         if not self.connected or not self.ssid or (self.environment != "LIVE_REAL" and not self.practice_balance_id):
+            if self.environment == "LIVE_REAL":
+                return {"success": False, "error": "IQ Option desconectado o sin sesión; orden LIVE_REAL rechazada sin simular."}
             order_id = f"IQ_PAPER_{int(time.time() * 1000)}"
             return {
                 "success": True,
@@ -1424,329 +1471,45 @@ class IQOptionAdapter:
         expiration_timestamp: Optional[int] = None
     ) -> Dict[str, Any]:
         """
-        Ejecuta una opción binaria (Turbo 1-5m o Blitz) en IQ Option según el entorno activo (PAPER o LIVE_REAL).
-        Mantiene aislamiento total respecto a las órdenes de Forex CFD.
+        Simula binarias solo en PAPER; la liquidación LIVE_REAL aún no está conciliada.
+        Mantiene aislamiento total respecto a las órdenes Forex CFD.
         """
         dir_clean = direction.lower()
         if dir_clean not in ["call", "put"]:
             return {"success": False, "error": f"Dirección inválida {direction}. Debe ser CALL o PUT."}
 
+        # Binary settlement is not yet reconciled against an authoritative broker result.
+        # Keep this mode available as an isolated local simulator, never as a broker order.
+        if self.environment == "LIVE_REAL":
+            return {
+                "success": False,
+                "error": "Binarias LIVE_REAL bloqueadas: falta conciliación del resultado oficial de IQ Option.",
+            }
+
         min_amount = 2000.0 if self.currency == "COP" else 1.0
         order_amount = max(min_amount, round(float(amount), 2))
+        order_id = f"BIN_PAPER_{int(time.time() * 1000)}"
+        return {
+            "success": True,
+            "order_id": order_id,
+            "symbol": symbol,
+            "direction": dir_clean,
+            "amount": order_amount,
+            "duration_minutes": duration_minutes,
+            "environment": "PAPER",
+            "status": "OPENED_SIMULATED"
+        }
 
-        # Si no hay sesión WebSocket activa con IQ Option, o no hay SSID, o no se ha sincronizado practice_balance_id, retornar orden simulada offline
-        if not self.connected or not self.ssid or (self.environment != "LIVE_REAL" and not self.practice_balance_id):
-            order_id = f"BIN_PAPER_{int(time.time() * 1000)}"
-            return {
-                "success": True,
-                "order_id": order_id,
-                "symbol": symbol,
-                "direction": dir_clean,
-                "amount": order_amount,
-                "duration_minutes": duration_minutes,
-                "environment": self.environment,
-                "status": "OPENED_SIMULATED"
-            }
-
-        if self.environment == "LIVE_REAL":
-            if self.real_amount <= 0.0 and self.balance <= 0.0:
-                return {
-                    "success": False,
-                    "error": f"Saldo insuficiente en cuenta real de IQ Option (Dispones de {self.real_amount:,.2f} {self.currency})."
-                }
-
-            if order_amount > self.real_amount:
-                return {
-                    "success": False,
-                    "error": f"Saldo insuficiente: La inversión es de {order_amount:,.2f} {self.currency} y dispones de {self.real_amount:,.2f} {self.currency}."
-                }
-
-            if self.real_balance_id:
-                self.change_balance(self.real_balance_id)
-        else:
-            # En modo PAPER conectado a IQ Option: Operar en la cuenta Demo/Practice de IQ Option
-            if self.practice_balance_id:
-                self.change_balance(self.practice_balance_id)
-
-        return self._execute_real_binary_ws_order(
-            symbol=symbol,
-            direction=dir_clean,
-            amount=order_amount,
-            duration_minutes=duration_minutes,
-            expiration_timestamp=expiration_timestamp
-        )
-
-    def _execute_real_binary_ws_order(
-        self, 
-        symbol: str, 
-        direction: str, 
-        amount: float, 
-        duration_minutes: int = 1,
-        expiration_timestamp: Optional[int] = None
-    ) -> Dict[str, Any]:
-        """
-        Envía una orden real de Opción Binaria Turbo al WebSocket oficial de IQ Option.
-        """
-        import websocket
-        import json
-        import ssl
-
-        if not self.ssid:
-            return {"success": False, "error": "No hay SSID de sesión activo para IQ Option"}
-
-        clean_sym = symbol.replace("/", "").replace(" ", "").replace("_", "").upper()
-        active_id = self.get_active_id(clean_sym)
-
-        target_balance = self.real_balance_id if self.environment == "LIVE_REAL" else (self.practice_balance_id or self.active_balance_id)
-        target_bal_id = int(target_balance) if target_balance and str(target_balance).isdigit() else target_balance
-
-        payout = self.get_payout(symbol)
-        profit_percent = int(round(payout * 100))
-
-        ws_url = self._get_ws_url()
-        headers = self._get_ws_headers()
-
-        result = {"success": False, "error": "Tiempo de espera agotado al conectar para opción binaria"}
-
-        ws = None
-        try:
-            ws = websocket.create_connection(ws_url, header=headers, timeout=10.0, sslopt={"cert_reqs": ssl.CERT_NONE})
-            now = time.time()
-            
-            # Handshake y sincronización con servidor IQ Option
-            ws.send(json.dumps({
-                "name": "authenticate",
-                "msg": {"ssid": self.ssid, "protocol": 3, "session_id": "", "client_session_id": ""},
-                "request_id": f"auth_bin_{int(now * 1000)}"
-            }))
-            ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
-
-            server_time_offset = 0.0
-            auth_start = time.time()
-            while time.time() - auth_start < 4.0:
-                try:
-                    raw = ws.recv()
-                except StopIteration:
-                    break
-                if not raw:
-                    continue
-                try:
-                    d = json.loads(raw)
-                    if d.get("name") == "timeSync":
-                        s_ms = d.get("msg")
-                        if s_ms and isinstance(s_ms, (int, float)):
-                            server_time_offset = (s_ms / 1000.0) - time.time()
-                    if d.get("name") == "profile":
-                        p_msg = d.get("msg", {})
-                        if isinstance(p_msg, dict):
-                            for b_item in p_msg.get("balances", []):
-                                if b_item.get("type") == 1:
-                                    self.real_balance_id = int(b_item.get("id"))
-                                    if self.environment == "LIVE_REAL":
-                                        target_bal_id = self.real_balance_id
-                                elif b_item.get("type") == 4:
-                                    self.practice_balance_id = int(b_item.get("id"))
-                                    if self.environment != "LIVE_REAL":
-                                        target_bal_id = self.practice_balance_id
-                        break
-                    elif d.get("name") in ["authenticated", "front", "timeSync", "heartbeat"]:
-                        continue
-                except Exception:
-                    pass
-
-            # Cálculo de expiración respetando estrictamente el dead-time de corte de 30s de IQ Option:
-            # Si current_second < 29: expira al cierre del minuto actual (+60s)
-            # Si current_second >= 29: expira al cierre del minuto siguiente (+120s)
-            synced_now = time.time() + server_time_offset
-            cur_sec = int(synced_now) % 60
-            if cur_sec < 29:
-                computed_expiration = int(synced_now - cur_sec + (60 * max(1, duration_minutes)))
-            else:
-                computed_expiration = int(synced_now - cur_sec + 60 + (60 * max(1, duration_minutes)))
-            expiration_ts = int(expiration_timestamp) if expiration_timestamp else computed_expiration
-
-            # Habilitar recepción de resultados de órdenes
-            ws.send(json.dumps({
-                "name": "setOptions",
-                "msg": {"sendResults": True},
-                "request_id": f"sopts_bin_{int(now * 1000)}"
-            }))
-
-            # Enviar mensaje oficial binary-options.open-option (Protocolo Estándar v1.0)
-            req_id = f"bin_opt_{int(time.time() * 1000)}"
-            body_payload = {
-                "name": "sendMessage",
-                "request_id": req_id,
-                "msg": {
-                    "name": "binary-options.open-option",
-                    "version": "1.0",
-                    "body": {
-                        "active_id": int(active_id),
-                        "active": int(active_id),
-                        "direction": direction.lower(),
-                        "expired": int(expiration_ts),
-                        "option_type_id": 3,
-                        "price": float(amount) if float(amount) % 1 != 0 else int(amount),
-                        "user_balance_id": int(target_bal_id) if target_bal_id else target_bal_id
-                    }
-                }
-            }
-            ws.send(json.dumps(body_payload))
-
-            order_start = time.time()
-            captured_frames = []
-            while time.time() - order_start < 6.0:
-                try:
-                    raw_resp = ws.recv()
-                except StopIteration:
-                    break
-                if not raw_resp:
-                    continue
-                try:
-                    data = json.loads(raw_resp)
-                    msg_name = data.get("name", "")
-                    msg_body = data.get("msg", {})
-                    req = data.get("request_id")
-                    st = data.get("status")
-                    captured_frames.append(msg_name)
-
-                    if req == req_id or (msg_name in ["order-placed-temp", "order-placed", "option-opened"] and isinstance(msg_body, dict) and "id" in msg_body):
-                        if isinstance(msg_body, dict) and "id" in msg_body:
-                            real_id = str(msg_body["id"])
-                            result = {
-                                "success": True,
-                                "order_id": real_id,
-                                "symbol": clean_sym,
-                                "direction": direction.upper(),
-                                "amount": amount,
-                                "expiration_timestamp": expiration_ts,
-                                "payout": payout,
-                                "status": "OPENED"
-                            }
-                            break
-                        elif isinstance(msg_body, dict) and ("message" in msg_body or "reason" in msg_body):
-                            err_msg = str(msg_body.get("message") or msg_body.get("reason") or "")
-                            err_lower = err_msg.lower()
-
-                            # Reintento si expiró la ventana de compra (dead-time de 30s)
-                            if any(k in err_lower for k in ["time for purchasing", "purchasing options is over", "expired"]):
-                                body_payload["msg"]["body"]["expired"] = int(body_payload["msg"]["body"]["expired"]) + 60
-                                expiration_ts = body_payload["msg"]["body"]["expired"]
-                                req_id_retry = f"bin_opt_time_{int(time.time() * 1000)}"
-                                body_payload["request_id"] = req_id_retry
-                                req_id = req_id_retry
-                                ws.send(json.dumps(body_payload))
-                                continue
-
-                            # Fallback automático ante rechazos de activo cerrado o no soportado en Turbo (option_type_id 3):
-                            should_fallback = any(k in err_lower for k in ["closed", "not available", "not found", "active", "reject", "instrument"])
-                            if should_fallback:
-                                # Fallback 1: Si se intentó activo regular y existe OTC disponible, cambiar a OTC inmediatamente
-                                if not clean_sym.endswith("-OTC") and not clean_sym.endswith("OTC"):
-                                    otc_id = self.get_active_id(f"{clean_sym}-OTC") or self.get_active_id(f"{clean_sym}OTC")
-                                    if otc_id and int(otc_id) != body_payload["msg"]["body"].get("active_id"):
-                                        req_id_otc = f"bin_opt_otc_{int(time.time() * 1000)}"
-                                        body_payload["request_id"] = req_id_otc
-                                        body_payload["msg"]["body"]["active_id"] = int(otc_id)
-                                        body_payload["msg"]["body"]["active"] = int(otc_id)
-                                        req_id = req_id_otc
-                                        ws.send(json.dumps(body_payload))
-                                        continue
-                                # Fallback 2: Si option_type_id es 3 (Turbo), alternar en <100ms a option_type_id 1 (Binaria estándar)
-                                if body_payload["msg"]["body"].get("option_type_id") == 3:
-                                    req_id_std = f"bin_opt_std_{int(time.time() * 1000)}"
-                                    body_payload["request_id"] = req_id_std
-                                    body_payload["msg"]["body"]["option_type_id"] = 1
-                                    req_id = req_id_std
-                                    ws.send(json.dumps(body_payload))
-                                    continue
-                            if any(k in err_lower for k in ["closed", "not available", "not found", "suspended", "cannot purchase", "disabled"]):
-                                self._active_status_cache[clean_sym] = False
-                                if f"{clean_sym}-OTC" in self._active_status_cache:
-                                    self._active_status_cache[f"{clean_sym}-OTC"] = False
-                                if symbol in self._active_status_cache:
-                                    self._active_status_cache[symbol] = False
-                            result = {"success": False, "error": f"Rechazado por IQ Option Binarias: {err_msg}"}
-                            break
-                        elif st and st != 2000:
-                            err_msg = data.get("message") or data.get("error") or (str(msg_body) if msg_body else f"Error status {st}")
-                            result = {"success": False, "error": f"Rechazado por IQ Option: {err_msg}"}
-                            break
-
-                    if msg_name in ["option-opened", "option"] and isinstance(msg_body, dict) and msg_body.get("id"):
-                        result = {
-                            "success": True,
-                            "order_id": str(msg_body.get("id")),
-                            "symbol": clean_sym,
-                            "direction": direction.upper(),
-                            "amount": amount,
-                            "expiration_timestamp": expiration_ts,
-                            "payout": payout,
-                            "status": "OPENED"
-                        }
-                        break
-                    elif msg_name in ["option-rejected", "rejected"]:
-                        err_msg = (msg_body.get("message") or msg_body.get("reason")) if isinstance(msg_body, dict) else (data.get("message") or str(msg_body))
-                        err_lower = str(err_msg).lower()
-
-                        if any(k in err_lower for k in ["time for purchasing", "purchasing options is over", "expired"]):
-                            body_payload["msg"]["body"]["expired"] = int(body_payload["msg"]["body"]["expired"]) + 60
-                            expiration_ts = body_payload["msg"]["body"]["expired"]
-                            req_id_retry = f"bin_opt_time_{int(time.time() * 1000)}"
-                            body_payload["request_id"] = req_id_retry
-                            req_id = req_id_retry
-                            ws.send(json.dumps(body_payload))
-                            continue
-
-                        should_fallback = any(k in err_lower for k in ["closed", "not available", "not found", "active", "reject", "instrument"])
-                        if should_fallback:
-                            if not clean_sym.endswith("-OTC") and not clean_sym.endswith("OTC"):
-                                otc_id = self.get_active_id(f"{clean_sym}-OTC") or self.get_active_id(f"{clean_sym}OTC")
-                                if otc_id and int(otc_id) != body_payload["msg"]["body"].get("active_id"):
-                                    req_id_otc = f"bin_opt_otc_{int(time.time() * 1000)}"
-                                    body_payload["request_id"] = req_id_otc
-                                    body_payload["msg"]["body"]["active_id"] = int(otc_id)
-                                    body_payload["msg"]["body"]["active"] = int(otc_id)
-                                    req_id = req_id_otc
-                                    ws.send(json.dumps(body_payload))
-                                    continue
-                            if body_payload["msg"]["body"].get("option_type_id") == 3:
-                                req_id_std = f"bin_opt_std_{int(time.time() * 1000)}"
-                                body_payload["request_id"] = req_id_std
-                                body_payload["msg"]["body"]["option_type_id"] = 1
-                                req_id = req_id_std
-                                ws.send(json.dumps(body_payload))
-                                continue
-                        if any(k in err_lower for k in ["closed", "not available", "not found", "suspended", "cannot purchase", "disabled"]):
-                            self._active_status_cache[clean_sym] = False
-                            if f"{clean_sym}-OTC" in self._active_status_cache:
-                                self._active_status_cache[f"{clean_sym}-OTC"] = False
-                            if symbol in self._active_status_cache:
-                                self._active_status_cache[symbol] = False
-                        result = {"success": False, "error": f"Rechazado por IQ Option: {err_msg}"}
-                        break
-                except Exception:
-                    pass
-
-            if not result.get("success") and "Tiempo de espera" in str(result.get("error", "")):
-                result["error"] += f" (Frames recibidos: {', '.join(captured_frames[:6])})"
-        except Exception as e:
-            result = {"success": False, "error": f"Error WebSocket Binarias: {str(e)}"}
-        finally:
-            if ws is not None:
-                try:
-                    ws.close()
-                except Exception:
-                    pass
-
-        return result
+    def _execute_real_binary_ws_order(self, *args, **kwargs) -> Dict[str, Any]:
+        """Ruta deshabilitada mientras no exista conciliación oficial de binarias."""
+        return {"success": False, "error": "Envío binario al broker deshabilitado; use el simulador PAPER."}
 
     def get_candles(self, symbol: str, interval: int = 60, count: int = 40) -> list:
         """Obtiene velas reales en vivo directamente desde IQ Option vía WebSocket."""
         clean_sym = symbol.upper().replace("/", "").replace("_", "")
         active_id = self.get_active_id(clean_sym)
-        
-        if not self.ssid:
+
+        if not self.ssid or active_id is None:
             return []
             
         import websocket
@@ -1755,7 +1518,7 @@ class IQOptionAdapter:
         try:
             ws_url = self._get_ws_url()
             headers = self._get_ws_headers()
-            ws = websocket.create_connection(ws_url, header=headers, timeout=5, sslopt={"cert_reqs": ssl.CERT_NONE})
+            ws = websocket.create_connection(ws_url, header=headers, timeout=5, sslopt={"cert_reqs": ssl.CERT_REQUIRED, "check_hostname": True})
             ws.send(json.dumps({
                 "name": "authenticate",
                 "msg": {"ssid": self.ssid, "protocol": 3, "session_id": "", "client_session_id": ""},
@@ -1823,4 +1586,3 @@ class IQOptionAdapter:
             return candles_list
         except Exception:
             return []
-

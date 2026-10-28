@@ -1,79 +1,91 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "=========================================================="
-echo "🚀 INICIANDO DESPLIEGUE DE TITOBOTTRADER EN HOSTINGER VPS"
-echo "=========================================================="
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Ejecuta este instalador como root o mediante sudo." >&2
+  exit 1
+fi
 
-# 1. Actualizar repositorios e instalar paquetes base
-echo "📦 [1/6] Actualizando sistema y dependencias de Linux..."
+INSTALL_DIR="/opt/titobot"
+SERVICE_FILE="/etc/systemd/system/titobot.service"
+
+echo "Instalando TitoBotTrader con usuario de servicio sin privilegios..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y python3 python3-pip python3-venv ufw curl git rsync
 
-# 2. Configurar Firewall seguro
-echo "🛡️ [2/6] Configurando Firewall UFW..."
-ufw allow 22/tcp comment 'SSH'
-ufw allow 5050/tcp comment 'TitoBotTrader Dashboard 5050'
-ufw allow 5055/tcp comment 'TitoBotTrader Dashboard 5055'
-ufw --force enable
-
-
-# 3. Descargar o actualizar desde GitHub
-echo "📥 [3/7] Obteniendo el código desde GitHub..."
-INSTALL_DIR="/root/titobot"
-if [ ! -d "$INSTALL_DIR" ]; then
-    git clone https://github.com/Jhonatan1993/titobottrader.git "$INSTALL_DIR"
-elif [ -d "$INSTALL_DIR/.git" ]; then
-    cd "$INSTALL_DIR"
-    git pull origin main || true
+if ! id -u titobot >/dev/null 2>&1; then
+  useradd --system --home-dir "$INSTALL_DIR" --create-home --shell /usr/sbin/nologin titobot
 fi
 
-# 4. Crear entorno virtual de Python
-echo "🐍 [4/7] Creando entorno virtual aislado de Python..."
-cd "$INSTALL_DIR"
-python3 -m venv venv
-source venv/bin/activate
+if [ ! -d "$INSTALL_DIR/.git" ]; then
+  if [ -e "$INSTALL_DIR" ] && [ "$(find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 | wc -l)" -gt 0 ]; then
+    echo "$INSTALL_DIR existe y no es un checkout Git; conserva los datos y migra la instalación manualmente." >&2
+    exit 1
+  fi
+  git clone https://github.com/Jhonatan1993/titobottrader.git "$INSTALL_DIR"
+fi
 
-# 4. Instalar librerías
-echo "📚 [4/6] Instalando requerimientos cuantitativos..."
-pip install --upgrade pip
-pip install -r requirements.txt
+python3 -m venv "$INSTALL_DIR/venv"
+"$INSTALL_DIR/venv/bin/pip" install --upgrade pip
+"$INSTALL_DIR/venv/bin/pip" install -r "$INSTALL_DIR/requirements.txt"
 
-# 5. Crear Servicio de Sistema (systemd) para operación 24/7 permanente
-echo "⚙️ [5/6] Configurando servicio 24/7 (systemd)..."
-cat << 'EOF' > /etc/systemd/system/titobot.service
+install -d -o titobot -g titobot -m 0750 "$INSTALL_DIR/data"
+chown -R titobot:titobot "$INSTALL_DIR"
+chmod 0700 "$INSTALL_DIR/data"
+if [ -f "$INSTALL_DIR/.env" ]; then
+  chmod 0600 "$INSTALL_DIR/.env"
+fi
+
+cat > "$SERVICE_FILE" <<'EOF'
 [Unit]
-Description=TitoBotTrader - Motor Cuantitativo 24/7
-After=network.target
+Description=TitoBotTrader dashboard and trading engine
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/root/titobot
-ExecStart=/root/titobot/venv/bin/python3 /root/titobot/main.py
-Restart=always
-RestartSec=3
-StandardOutput=journal
-StandardError=journal
+User=titobot
+Group=titobot
+WorkingDirectory=/opt/titobot
+EnvironmentFile=-/opt/titobot/.env
 Environment=PYTHONUNBUFFERED=1
+Environment=HOST=127.0.0.1
+Environment=PORT=5050
+Environment=SESSION_COOKIE_SECURE=true
+Environment=LIVE_TRADING_ARMED=false
+Environment=LIVE_CFD_EXECUTION_VERIFIED=false
+ExecStart=/opt/titobot/venv/bin/gunicorn --workers 1 --bind 127.0.0.1:5050 --access-logfile - --error-logfile - main:app
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/opt/titobot/data
 
 [Install]
 WantedBy=multi-user.target
 EOF
+chmod 0644 "$SERVICE_FILE"
 
-# 6. Recargar y activar servicio
-echo "🚀 [6/6] Activando servicio en segundo plano..."
+echo "Restringiendo firewall a SSH y tráfico web detrás de Nginx..."
+ufw delete allow 5050/tcp >/dev/null 2>&1 || true
+ufw delete allow 5055/tcp >/dev/null 2>&1 || true
+ufw allow 22/tcp comment 'SSH'
+ufw allow 80/tcp comment 'HTTP Nginx'
+ufw allow 443/tcp comment 'HTTPS Nginx'
+ufw --force enable
+
 systemctl daemon-reload
 systemctl enable titobot
 systemctl restart titobot
+sleep 2
+systemctl --no-pager --full status titobot
 
-sleep 3
-systemctl status titobot --no-pager
-
-echo ""
-echo "=========================================================="
-echo "✅ ¡TITOBOTTRADER DESPLEGADO Y OPERANDO 24/7 CON ÉXITO!"
-echo "Accede a tu panel en:"
-echo "👉 http://179.236.240.245:5055"
-echo "=========================================================="
+echo "Servicio instalado en 127.0.0.1:5050. Configura Nginx/HTTPS antes de exponer el panel."

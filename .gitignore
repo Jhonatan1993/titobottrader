@@ -20,6 +20,8 @@ data/*.db
 data/*.sqlite
 data/*.sqlite3
 data/users.db
+data/iqoption_risk_state.json
+data/iqoption_risk_state.json.tmp
 historico_transacciones_*.json
 
 # Logs & security audit trails
@@ -41,4 +43,3 @@ logs/
 .pytest_cache/
 venv/
 *.pyc
-

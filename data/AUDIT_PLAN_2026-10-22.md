@@ -1,5 +1,7 @@
 # Auditoría Integral y Plan Obligatorio de Mejora — 2026-10-22
 
+> **Corrección de alcance — 2026-10-28:** Por decisión posterior del usuario se conservan dos modalidades seleccionables y aisladas: `BINARY_OPTIONS` y `FOREX_CFD` (margen). Las propuestas de este documento que ordenaban eliminar binarias o quitar el selector quedan reemplazadas. La modalidad binaria sigue disponible en PAPER; `LIVE_REAL` binario permanece bloqueado hasta reconciliar liquidaciones con resultados oficiales del broker. La habilitación de CFD real también requiere validar tamaño de contrato y margen frente al importe solicitado.
+
 ## Alcance y límite de responsabilidad
 
 Auditoría de arquitectura, ejecución IQ Option, Forex CFD/margen, gestión de riesgo, datos de mercado, estrategia, IA, backtesting, trazabilidad, dashboard, seguridad, despliegue, registros y pruebas.
@@ -18,8 +20,9 @@ La suite local actual termina con `100 passed`, pero eso no certifica seguridad 
 
 ## Reglas vinculantes sin excepción
 
-1. **Producto permitido:** exclusivamente Forex CFD de IQ Option.
-   - Prohibidos: binarias, turbo, blitz, digital options, `binary-options.*`, `sell-options`, expiraciones, payouts, símbolos `OTC` y cualquier fallback a esos instrumentos.
+1. **Productos permitidos:** únicamente IQ Option, con selector entre Binarias y Forex CFD/margen.
+   - Las lógicas, riesgos y resultados deben permanecer aislados por modalidad. Binarias pueden operar en PAPER; binarias LIVE_REAL quedan bloqueadas sin liquidación oficial conciliable.
+   - El allowlist de CFD excluye OTC. OTC solo puede pertenecer a una modalidad binaria de práctica y nunca debe convertirse automáticamente en CFD.
 2. **Broker permitido en producción:** IQ Option únicamente.
    - Binance, Alpaca, bóvedas, arbitraje crypto, alta de brokers y modo multibroker no se inicializan ni se exponen en la ruta productiva.
 3. **Diseño fail-closed:** si el símbolo no está permitido, el feed es sintético/obsoleto, el broker no confirma, faltan SL/TP, hay una excepción o la reconciliación falla, la orden debe ser rechazada.
@@ -35,9 +38,8 @@ La suite local actual termina con `100 passed`, pero eso no certifica seguridad 
 
 | Prioridad | Hallazgo comprobado | Riesgo | Acción obligatoria |
 |---|---|---|---|
-| P0 | `execution/iqoption_adapter.py` conserva `submit_binary_option`, `_execute_real_binary_ws_order`, `binary-options.open-option`, tipos binarios y símbolos OTC. | Puede abrir binarias reales prohibidas. | Eliminar código, endpoints, mapeos, pruebas y UI binarios; prueba estática y runtime de ausencia. |
-| P0 | `execution/trading_engine.py` conserva `BinaryOptionsStrategyEngine`, `IQ_BINARY`, `_evaluate_and_trade_binary` y posiciones `OPTIONS`. | Una configuración/regresión puede reactivar binarias. | Reducir a CFD fijo, sin selector binario. |
-| P0 | `dashboard/web_dashboard.py` expone `/api/admin/test-binary-order`. | Un administrador puede abrir una binaria real. | Eliminar endpoint y añadir prueba HTTP 404. |
+| P0 | La liquidación binaria se infiere localmente del precio. | Un resultado y PnL falsos pueden atribuirse a una operación real. | Conservar la estrategia y el selector, pero bloquear órdenes binarias LIVE_REAL y toda liquidación local en modo real hasta disponer de evidencia oficial correlacionada. |
+| P0 | Rutas de prueba binarias pueden disparar órdenes. | Una llamada de diagnóstico puede arriesgar fondos. | Desactivar las rutas de prueba real; la API responde 410 sin llamar al motor. |
 | P0 | Se borra/acredita estado local antes de confirmación robusta de cierre y hay doble intento de cierre IQ Option. | Saldo/PnL/posición local divergen de la cuenta real. | Máquina de estados, idempotencia y reconciliación. |
 | P0 | Uso de `CERT_NONE`/TLS no verificado. | MITM, robo de SSID y ejecución adulterada. | Restaurar verificación TLS y no aceptar certificados inseguros. |
 | P0 | `/api/control/get-broker-keys` devuelve contraseña/SSID completos. | Compromiso de la cuenta y órdenes no autorizadas. | Nunca devolver secretos; rotar los actuales y usar secretos de entorno/gestor. |
@@ -59,20 +61,18 @@ La suite local actual termina con `100 passed`, pero eso no certifica seguridad 
 ### Fase 0 — Contención inmediata (P0)
 
 1. Forzar `PAPER` y bloquear `LIVE_REAL` mediante una bandera de liberación explícita (`LIVE_TRADING_ARMED=false` por defecto).
-2. Eliminar física y lógicamente:
-   - `execution/binary_options_engine.py`
-   - métodos/endpoints/pruebas binarias
-   - modos `IQ_BINARY`, `IQ_HYBRID`, `BINARY_OPTIONS`
-   - tipos/activos OTC y mensajes `binary-options.*`
-3. Reducir ruta productiva a IQ Option + Forex CFD.
+2. Conservar el selector entre `BINARY_OPTIONS` y `FOREX_CFD`, sin mezclar estados, órdenes ni métricas entre productos.
+3. Bloquear binarias en LIVE_REAL hasta comprobar liquidaciones oficiales; mantener su análisis y ejecución PAPER.
+4. Mantener IQ Option como único broker y rechazar cualquier fallback de binaria a CFD o viceversa.
 4. Rotar inmediatamente contraseña y SSID que pudieron estar expuestos por el endpoint.
 5. Eliminar devolución de secretos por API. El dashboard solo debe mostrar “configurado/no configurado” y permitir reemplazo, nunca lectura.
 6. Restaurar TLS estricto.
 7. Deshabilitar actualización/despliegue/reinicio desde el dashboard hasta que exista flujo aprobado.
 
 **Criterio de aceptación Fase 0**
-- Búsqueda global sin ocurrencias ejecutables de: `binary-options`, `sell-options`, `submit_binary`, `IQ_BINARY`, `BINARY_OPTIONS`, `OTC`.
-- Endpoint binario devuelve `404`.
+- Rutas de prueba binaria devuelven `410` y no envían órdenes.
+- El selector permite cambiar modalidad solo con cartera plana y sin órdenes en tránsito.
+- Ninguna operación LIVE_REAL binaria puede abrirse ni liquidarse con precios locales.
 - Un símbolo no permitido falla sin abrir WebSocket/orden.
 - No existen secretos en respuesta API, HTML, logs o archivos versionados.
 - `LIVE_REAL` rechaza toda apertura sin armado administrativo explícito y una lista de comprobaciones verdes.
@@ -87,7 +87,7 @@ La suite local actual termina con `100 passed`, pero eso no certifica seguridad 
 3. Toda orden debe tener `client_request_id` UUID persistido antes del envío.
 4. Nunca descontar/abonar saldo ni registrar resultado hasta recibir confirmación asociada y reconciliar contra posiciones/balance.
 5. Reintentos solo idempotentes; nunca repetir una orden tras timeout sin consultar su estado.
-6. Permitir máximo una posición CFD global, incluyendo posición detectada al arrancar.
+6. Permitir máximo una posición global entre ambas modalidades, incluyendo exposición detectada al arrancar.
 7. Usar only allowlist de instrumentos CFD verificables desde el broker. Sin fallback `active_id`.
 8. Crear/actualizar/cerrar SL, TP y trailing de forma remota; persistir ACK y valores efectivos devueltos.
 9. Emergencia: si no se confirma un cierre, mantener posición `UNKNOWN`, pausar entradas y alertar; no inventar un cierre local.
@@ -98,7 +98,7 @@ La suite local actual termina con `100 passed`, pero eso no certifica seguridad 
 - Las pruebas comprueban una sola llamada de cierre por intención.
 - Inicio/reinicio reconciliado no abre operaciones si hay una posición o estado incierto.
 
-### Fase 2 — Motor de riesgo CFD
+### Fase 2 — Motor de riesgo IQ Option
 
 1. Sustituir sizing por cálculo basado en:
    - equity reconciliada;
@@ -127,7 +127,7 @@ La suite local actual termina con `100 passed`, pero eso no certifica seguridad 
 ### Fase 3 — Datos y estrategia verificables
 
 1. Separar `LiveIQOptionMarketData` de `PaperSyntheticMarketData`.
-2. En vivo aceptar solo:
+2. En vivo aceptar CFD solo con:
    - símbolo CFD permitido;
    - cotización de IQ Option con bid/ask;
    - timestamp UTC fresco;
@@ -168,7 +168,7 @@ La suite local actual termina con `100 passed`, pero eso no certifica seguridad 
 3. Secretos fuera de JSON de aplicación; permisos mínimos, rotación y redacción de logs.
 4. Auditoría append-only con hash encadenado: actor, UTC, configuración, intención, payload redactado, ACK, fill, cierre y reconciliación.
 5. Alertas: orden desconocida, discrepancia, SL/TP no confirmado, calidad de feed, límites, excepción del loop y autenticación.
-6. Pipeline CI: lint, tests, pruebas negativas P0, análisis de secretos/dependencias y bloqueo si reaparece vocabulario/binario prohibido.
+6. Pipeline CI: lint, tests, pruebas negativas P0 y análisis de secretos/dependencias. Las pruebas deben cubrir ambos modos sin prohibir el selector ni vocabulario binario.
 7. Despliegue manual aprobado: tag/revisión, backup, migración, pruebas, canary paper, health check y rollback. Sin root ni auto-update por dashboard.
 
 **Criterio de aceptación Fase 5**

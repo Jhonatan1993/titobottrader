@@ -50,7 +50,12 @@ class IntelligentTradingAgent:
     def get_thoughts(self, limit: int = 30) -> List[Dict[str, Any]]:
         return self.thoughts[:limit]
 
-    def update_learning_from_disk(self):
+    def update_learning_from_disk(self, product_mode: str = None):
+        if product_mode in {"FOREX_CFD", "BINARY_OPTIONS"}:
+            if product_mode != self.learner.product_mode:
+                self.learner.cooldowns.clear()
+                self.learner._cleared_cooldown_syms.clear()
+            self.learner.product_mode = product_mode
         res = self.learner.recalibrate()
         patterns = self.learner.total_patterns_learned
         level = self.learner.mastery_level
@@ -374,4 +379,3 @@ class IntelligentTradingAgent:
             "regime": regime_info["regime"],
             "regime_tag": regime_info["tag"]
         }
-
