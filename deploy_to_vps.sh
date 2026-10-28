@@ -6,7 +6,11 @@ if [ -z "${VPS_HOST:-}" ]; then
   exit 2
 fi
 
-TARGET_DIR="/opt/titobot"
+TARGET_DIR="${TARGET_DIR:-/opt/titobot}"
+case "$TARGET_DIR" in
+  /opt/titobot|/root/titobot) ;;
+  *) echo "TARGET_DIR solo puede ser /opt/titobot o /root/titobot." >&2; exit 2 ;;
+esac
 RELEASE_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 REMOTE_STAGE="/tmp/titobot-release-$RELEASE_ID"
 
@@ -32,17 +36,29 @@ set -euo pipefail
 stage="$1"
 target="$2"
 release="$3"
-if [ "$target" != "/opt/titobot" ]; then
+case "$target" in
+  /opt/titobot)
+    archive_root="/opt"
+    archive_name="titobot"
+    service_user="titobot"
+    ;;
+  /root/titobot)
+    archive_root="/root"
+    archive_name="titobot"
+    service_user="root"
+    ;;
+  *)
   echo "Ruta de instalación no permitida." >&2
   exit 2
-fi
+    ;;
+esac
 backup_dir="/var/backups/titobot"
 backup="$backup_dir/$release.tar.gz"
 install -d -m 0700 "$backup_dir"
 umask 077
-tar --exclude='titobot/.git' --exclude='titobot/venv' -C /opt -czf "$backup" titobot
+tar --exclude='titobot/.git' --exclude='titobot/venv' -C "$archive_root" -czf "$backup" "$archive_name"
 rsync -a "$stage/" "$target/"
-chown -R titobot:titobot "$target"
+chown -R "$service_user:$service_user" "$target"
 chmod 0700 "$target/data"
 if [ -f "$target/.env" ]; then chmod 0600 "$target/.env"; fi
 "$target/venv/bin/pip" install -r "$target/requirements.txt"
