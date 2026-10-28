@@ -42,6 +42,7 @@ class RealTimeTradingEngine:
         self.max_open_positions = 1
         self.is_running = True
         self._iqoption_order_pending = False
+        self.unavailable_assets_blacklist: Dict[str, float] = {}
 
         # Gestor de Riesgo y Regulación FINRA 4210 (PDT Shield)
         self.risk_manager = RiskManager(
@@ -1295,7 +1296,15 @@ class RealTimeTradingEngine:
         candidates = []
         scanned_evals = []
         has_otc_assets = any("-OTC" in s for s in market_state.keys())
+        now_ts = time.time()
         for sym, asset in market_state.items():
+            # Exclusión de activos temporalmente no disponibles o cerrados en IQ Option (ej. USDJPY-OTC)
+            if sym in self.unavailable_assets_blacklist:
+                if now_ts < self.unavailable_assets_blacklist[sym]:
+                    continue
+                else:
+                    del self.unavailable_assets_blacklist[sym]
+
             cat = asset.get("category")
             # Enrutamiento inteligente: En horario OTC (noches y fines de semana), dar prioridad absoluta a pares OTC
             if is_otc_time and has_otc_assets and "-OTC" not in sym:
@@ -1346,12 +1355,26 @@ class RealTimeTradingEngine:
                         "🎯"
                     )
                 else:
-                    self.agent._add_thought(
-                        f"⚠️ Orden Binaria {best_sym} {best_dir} no concretada: {order_res.get('error', 'Rechazada por el broker')}",
-                        "WARNING",
-                        best_sym,
-                        "⚠️"
-                    )
+                    err_msg = str(order_res.get('error', 'Rechazada por el broker'))
+                    err_lower = err_msg.lower()
+                    if any(k in err_lower for k in ["not available", "cannot purchase", "closed", "not found"]):
+                        cooldown_secs = 1800.0  # 30 minutos de exclusión automática
+                        self.unavailable_assets_blacklist[best_sym] = time.time() + cooldown_secs
+                        if hasattr(self, "binary_engine"):
+                            self.binary_engine.disable_asset(best_sym, duration_seconds=cooldown_secs)
+                        self.agent._add_thought(
+                            f"🚫 Activo {best_sym} deshabilitado temporalmente por IQ Option ({err_msg}). En lista de exclusión durante 30 minutos para priorizar pares abiertos.",
+                            "WARNING",
+                            best_sym,
+                            "🚫"
+                        )
+                    else:
+                        self.agent._add_thought(
+                            f"⚠️ Orden Binaria {best_sym} {best_dir} no concretada: {err_msg}",
+                            "WARNING",
+                            best_sym,
+                            "⚠️"
+                        )
             else:
                 # Esperando segundo exacto 58 para no entrar a mitad de vela
                 now_scan = time.time()

@@ -200,6 +200,126 @@ AVAILABLE_ASSETS = [
         "base_price": 210.23,
         "volatility": 0.0065,
         "trend_bias": 0.0001
+    },
+    {
+        "symbol": "AUDCAD-OTC",
+        "name": "AUD / CAD (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Dólar Australiano / Canadiense OTC",
+        "icon": "🇦🇺",
+        "base_price": 0.8850,
+        "volatility": 0.0035,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "USDCAD-OTC",
+        "name": "USD / CAD (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Dólar / Dólar Canadiense OTC",
+        "icon": "🇨🇦",
+        "base_price": 1.4050,
+        "volatility": 0.0035,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "GBPAUD-OTC",
+        "name": "GBP / AUD (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Libra / Dólar Australiano OTC",
+        "icon": "🇬🇧",
+        "base_price": 2.0300,
+        "volatility": 0.0045,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "EURCAD-OTC",
+        "name": "EUR / CAD (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Euro / Dólar Canadiense OTC",
+        "icon": "🇪🇺",
+        "base_price": 1.5750,
+        "volatility": 0.0038,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "CHFJPY-OTC",
+        "name": "CHF / JPY (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Franco Suizo / Yen OTC",
+        "icon": "🇨🇭",
+        "base_price": 190.50,
+        "volatility": 0.0050,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "CADCHF-OTC",
+        "name": "CAD / CHF (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Dólar Canadiense / Franco OTC",
+        "icon": "🇨🇦",
+        "base_price": 0.5890,
+        "volatility": 0.0035,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "EURAUD-OTC",
+        "name": "EUR / AUD (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Euro / Dólar Australiano OTC",
+        "icon": "🇪🇺",
+        "base_price": 1.7150,
+        "volatility": 0.0040,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "AUDCAD",
+        "name": "AUD / CAD",
+        "category": "FOREX",
+        "type": "Dólar Australiano / Canadiense",
+        "icon": "🇦🇺",
+        "base_price": 0.8850,
+        "volatility": 0.0035,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "CHFJPY",
+        "name": "CHF / JPY",
+        "category": "FOREX",
+        "type": "Franco Suizo / Yen",
+        "icon": "🇨🇭",
+        "base_price": 190.50,
+        "volatility": 0.0050,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "GBPAUD",
+        "name": "GBP / AUD",
+        "category": "FOREX",
+        "type": "Libra / Dólar Australiano",
+        "icon": "🇬🇧",
+        "base_price": 2.0300,
+        "volatility": 0.0045,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "EURCAD",
+        "name": "EUR / CAD",
+        "category": "FOREX",
+        "type": "Euro / Canadiense",
+        "icon": "🇪🇺",
+        "base_price": 1.5750,
+        "volatility": 0.0038,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "EURAUD",
+        "name": "EUR / AUD",
+        "category": "FOREX",
+        "type": "Euro / Australiano",
+        "icon": "🇪🇺",
+        "base_price": 1.7150,
+        "volatility": 0.0040,
+        "trend_bias": 0.0001
     }
 ]
 
@@ -516,6 +636,9 @@ class MultiAssetMarketFeed:
 
         now = int(time.time())
         current_p = self.live_cache.get(sym, self.assets.get(sym, {}).get("price", item["base_price"]))
+        # Protección estricta: Pares con JPY no pueden cotizar por debajo de 50.0 (evita semillas a 0.988 o 1.0)
+        if "JPY" in sym and (current_p is None or current_p < 50.0):
+            current_p = item.get("base_price", 150.0)
         volat = item.get("volatility", 0.008)
 
         # 1. Intentar velas reales de IQ Option para activos FOREX y OTC

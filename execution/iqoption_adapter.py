@@ -1188,7 +1188,8 @@ class IQOptionAdapter:
         symbol: str, 
         direction: str, 
         amount: float, 
-        duration_minutes: int = 1
+        duration_minutes: int = 1,
+        expiration_timestamp: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Ejecuta una opción binaria (Turbo 1-5m o Blitz) en IQ Option según el entorno activo (PAPER o LIVE_REAL).
@@ -1239,7 +1240,8 @@ class IQOptionAdapter:
             symbol=symbol,
             direction=dir_clean,
             amount=order_amount,
-            duration_minutes=duration_minutes
+            duration_minutes=duration_minutes,
+            expiration_timestamp=expiration_timestamp
         )
 
     def _execute_real_binary_ws_order(
@@ -1247,7 +1249,8 @@ class IQOptionAdapter:
         symbol: str, 
         direction: str, 
         amount: float, 
-        duration_minutes: int = 1
+        duration_minutes: int = 1,
+        expiration_timestamp: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Envía una orden real de Opción Binaria Turbo al WebSocket oficial de IQ Option.
@@ -1318,14 +1321,16 @@ class IQOptionAdapter:
                 except Exception:
                     pass
 
-            # Cálculo de expiración sincronizado con el reloj del servidor IQ Option
+            # Cálculo de expiración respetando estrictamente el dead-time de corte de 30s de IQ Option:
+            # Si current_second < 29: expira al cierre del minuto actual (+60s)
+            # Si current_second >= 29: expira al cierre del minuto siguiente (+120s)
             synced_now = time.time() + server_time_offset
-            rem_sec = int(synced_now) % 60
-            if rem_sec > 30:
-                add_sec = (60 - rem_sec) + 60 * duration_minutes
+            cur_sec = int(synced_now) % 60
+            if cur_sec < 29:
+                computed_expiration = int(synced_now - cur_sec + (60 * max(1, duration_minutes)))
             else:
-                add_sec = (60 - rem_sec) + 60 * max(0, duration_minutes - 1)
-            expiration_ts = int(synced_now) + add_sec
+                computed_expiration = int(synced_now - cur_sec + 60 + (60 * max(1, duration_minutes)))
+            expiration_ts = int(expiration_timestamp) if expiration_timestamp else computed_expiration
 
             # Habilitar recepción de resultados de órdenes
             ws.send(json.dumps({
@@ -1389,6 +1394,17 @@ class IQOptionAdapter:
                         elif isinstance(msg_body, dict) and ("message" in msg_body or "reason" in msg_body):
                             err_msg = str(msg_body.get("message") or msg_body.get("reason") or "")
                             err_lower = err_msg.lower()
+
+                            # Reintento si expiró la ventana de compra (dead-time de 30s)
+                            if any(k in err_lower for k in ["time for purchasing", "purchasing options is over", "expired"]):
+                                body_payload["msg"]["body"]["expired"] = int(body_payload["msg"]["body"]["expired"]) + 60
+                                expiration_ts = body_payload["msg"]["body"]["expired"]
+                                req_id_retry = f"bin_opt_time_{int(time.time() * 1000)}"
+                                body_payload["request_id"] = req_id_retry
+                                req_id = req_id_retry
+                                ws.send(json.dumps(body_payload))
+                                continue
+
                             # Fallback automático ante rechazos de activo cerrado o no soportado en Turbo (option_type_id 3):
                             should_fallback = any(k in err_lower for k in ["closed", "not available", "not found", "active", "reject", "instrument"])
                             if should_fallback:
@@ -1433,6 +1449,16 @@ class IQOptionAdapter:
                     elif msg_name in ["option-rejected", "rejected"]:
                         err_msg = (msg_body.get("message") or msg_body.get("reason")) if isinstance(msg_body, dict) else (data.get("message") or str(msg_body))
                         err_lower = str(err_msg).lower()
+
+                        if any(k in err_lower for k in ["time for purchasing", "purchasing options is over", "expired"]):
+                            body_payload["msg"]["body"]["expired"] = int(body_payload["msg"]["body"]["expired"]) + 60
+                            expiration_ts = body_payload["msg"]["body"]["expired"]
+                            req_id_retry = f"bin_opt_time_{int(time.time() * 1000)}"
+                            body_payload["request_id"] = req_id_retry
+                            req_id = req_id_retry
+                            ws.send(json.dumps(body_payload))
+                            continue
+
                         should_fallback = any(k in err_lower for k in ["closed", "not available", "not found", "active", "reject", "instrument"])
                         if should_fallback:
                             if not clean_sym.endswith("-OTC") and not clean_sym.endswith("OTC"):

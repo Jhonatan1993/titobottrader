@@ -57,6 +57,20 @@ class BinaryOptionsStrategyEngine:
             max_consecutive_losses=3
         )
         self.telegram = TelegramService.get_instance()
+        self.disabled_assets: Dict[str, float] = {}
+
+    def disable_asset(self, symbol: str, duration_seconds: float = 1800.0):
+        """Deshabilita un activo temporalmente (ej. 30 min) si el broker reporta que no está disponible."""
+        self.disabled_assets[symbol] = time.time() + duration_seconds
+
+    def is_asset_disabled(self, symbol: str) -> bool:
+        """Verifica si un activo está en lista de exclusión temporal."""
+        if symbol not in self.disabled_assets:
+            return False
+        if time.time() < self.disabled_assets[symbol]:
+            return True
+        del self.disabled_assets[symbol]
+        return False
 
     @property
     def has_active_position(self) -> bool:
@@ -104,6 +118,43 @@ class BinaryOptionsStrategyEngine:
         ema50 = float(asset.get("ema50", price))
         support = float(asset.get("support", price * 0.99))
         resistance = float(asset.get("resistance", price * 1.01))
+        payout = self.iq.get_payout(symbol) if hasattr(self.iq, "get_payout") else 0.85
+        now = time.time()
+
+        # 0. Filtro de Exclusión de Activo (Cerrado o No disponible en IQ Option)
+        if self.is_asset_disabled(symbol):
+            return {
+                "decision": "HOLD",
+                "confidence": 0,
+                "payout": payout,
+                "reason": f"Activo {symbol} en lista de exclusión temporal (no disponible en IQ Option)."
+            }
+
+        # 0.1 Validación de Integridad de Datos (Prevenir evaluación a ciegas o congelada)
+        if "JPY" in symbol and price < 50.0:
+            return {
+                "decision": "HOLD",
+                "confidence": 0,
+                "payout": payout,
+                "reason": f"Precio anómalo para par JPY en {symbol} ({price:.4f} < 50.0). Bloqueado por datos anómalos."
+            }
+
+        if not candles or len(candles) < 10:
+            return {
+                "decision": "HOLD",
+                "confidence": 0,
+                "payout": payout,
+                "reason": f"Historial insuficiente en {symbol}: sólo {len(candles) if candles else 0}/10 velas disponibles."
+            }
+
+        recent_closes = [float(c.get("close", price)) for c in candles[-5:]]
+        if (max(recent_closes) - min(recent_closes)) < 1e-5:
+            return {
+                "decision": "HOLD",
+                "confidence": 0,
+                "payout": payout,
+                "reason": f"Velas congeladas/planas en {symbol} (rango {max(recent_closes) - min(recent_closes):.6f} < 1e-5). Bloqueado por seguridad."
+            }
 
         # 1. Filtro Macroeconómico de Calendario Económico (ForexFactory XML)
         is_safe, news_reason = self.calendar_filter.is_safe_to_trade(symbol)
@@ -126,7 +177,6 @@ class BinaryOptionsStrategyEngine:
             }
 
         # 3. Filtro de Payout (Rentabilidad matemática)
-        payout = self.iq.get_payout(symbol) if hasattr(self.iq, "get_payout") else 0.85
         if payout < self.min_payout:
             return {
                 "decision": "HOLD",
@@ -136,7 +186,6 @@ class BinaryOptionsStrategyEngine:
             }
 
         # 4. Filtro de Cooldown por Activo
-        now = time.time()
         time_since_last = now - self.last_trade_time.get(symbol, 0.0)
         if time_since_last < self.cooldown_duration:
             rem = int(self.cooldown_duration - time_since_last)
@@ -151,7 +200,7 @@ class BinaryOptionsStrategyEngine:
         smc_res = {}
         if candles and len(candles) >= 30:
             smc_res = self.smc_engine.analyze(candles, asset=symbol)
-            # Si el motor SMC detecta mitigación de Order Block o reversión de alta confianza (>= 88%)
+            # Si el motor SMC detecta mitigación de Order Block o reversión de alta confianza (>= 85%)
             if smc_res.get("decision") in ["CALL", "PUT"] and smc_res.get("confidence", 0) >= 85:
                 return {
                     "decision": smc_res["decision"],
@@ -185,6 +234,25 @@ class BinaryOptionsStrategyEngine:
                 has_bullish_rejection = True
             if (upper_wick / total_range) >= 0.35 and upper_wick >= body:
                 has_bearish_rejection = True
+
+        # Conteo de velas consecutivas del mismo color para detectar tendencias fuertes
+        consecutive_reds = 0
+        consecutive_greens = 0
+        for c in reversed(candles[-6:]):
+            c_o = float(c.get("open", price))
+            c_c = float(c.get("close", price))
+            if c_c < c_o:
+                if consecutive_greens == 0:
+                    consecutive_reds += 1
+                else:
+                    break
+            elif c_c > c_o:
+                if consecutive_reds == 0:
+                    consecutive_greens += 1
+                else:
+                    break
+            else:
+                break
 
         # Soportes y Resistencias dinámicos estrictos de las últimas 30 velas (M1)
         if candles and len(candles) >= 3:
@@ -222,111 +290,142 @@ class BinaryOptionsStrategyEngine:
                 "reason": f"Mercado lateral sin dirección en {symbol} (Medias comprimidas {ma_spread*100:.3f}%)."
             }
 
-        # Cálculo de Confluencia Institucional para CALL
-        call_score = 0
+        # =========================================================================
+        # ESTRATEGIA 1: REVERSIÓN SNIPER POR AGOTAMIENTO (Contratendencia extrema)
+        # =========================================================================
+        # Solo se permite reversión si el RSI muestra agotamiento real:
+        # CALL: RSI <= 32.0 (sobreventa extrema) + vela de rechazo alcista
+        # PUT:  RSI >= 68.0 (sobrecompra extrema) + vela de rechazo bajista
+        # PROHIBIDO abrir reversiones si el RSI está entre 35.0 y 65.0.
+        reversal_call_score = 0
+        reversal_put_score = 0
+        reversal_call_reason = ""
+        reversal_put_reason = ""
+
         dist_support_pct = ((price - support) / price) * 100 if support > 0 else 99.0
-        dist_bb_lower_pct = ((price - bb_lower) / price) * 100 if bb_lower > 0 else 99.0
-
-        if dist_support_pct <= 0.05 or price <= bb_lower * 1.0003:
-            call_score += 35
-        elif dist_support_pct <= 0.15 or dist_bb_lower_pct <= 0.10:
-            call_score += 25
-        elif dist_support_pct <= 0.30:
-            call_score += 15
-
-        if rsi <= 38.0:
-            call_score += 30
-        elif rsi <= 46.0:
-            call_score += 20
-        elif rsi <= 54.0 and (last_candle_green or change_pct > 0):
-            call_score += 15
-        elif rsi >= 72.0:
-            call_score -= 30
-
-        if has_bullish_rejection:
-            call_score += 25
-        if last_candle_green:
-            call_score += 10
-
-        if price >= ema20 or ema20 >= ema50:
-            call_score += 15
-        if "ALCISTA" in trend_status or "UP" in regime or change_pct > 0.02:
-            call_score += 10
-        elif "BAJISTA" in trend_status and not (has_bullish_rejection or dist_support_pct <= 0.05):
-            call_score -= 25
-
-        if ai_dec in ["BUY", "CALL"]:
-            call_score += 15
-        if ai_conf >= 60:
-            call_score += 10
-
-        # Bonificación si SMC coincide
-        if smc_res.get("decision") == "CALL":
-            call_score += 20
-
-        # Cálculo de Confluencia Institucional para PUT
-        put_score = 0
         dist_resistance_pct = ((resistance - price) / price) * 100 if resistance > 0 else 99.0
+        dist_bb_lower_pct = ((price - bb_lower) / price) * 100 if bb_lower > 0 else 99.0
         dist_bb_upper_pct = ((bb_upper - price) / price) * 100 if bb_upper > 0 else 99.0
 
-        if dist_resistance_pct <= 0.05 or price >= bb_upper * 0.9997:
-            put_score += 35
-        elif dist_resistance_pct <= 0.15 or dist_bb_upper_pct <= 0.10:
-            put_score += 25
-        elif dist_resistance_pct <= 0.30:
-            put_score += 15
+        is_at_support = (dist_support_pct <= 0.25 or (c_low <= bb_lower * 1.0005) or (price <= bb_lower * 1.0010))
+        is_at_resistance = (dist_resistance_pct <= 0.25 or (c_high >= bb_upper * 0.9995) or (price >= bb_upper * 0.9990))
 
-        if rsi >= 62.0:
-            put_score += 30
-        elif rsi >= 54.0:
-            put_score += 20
-        elif rsi >= 46.0 and (last_candle_red or change_pct < 0):
-            put_score += 15
-        elif rsi <= 28.0:
-            put_score -= 30
+        # Reversión Alcista (CALL)
+        if rsi <= 32.0 and is_at_support and (has_bullish_rejection or last_candle_green):
+            if not (consecutive_reds >= 4 and not has_bullish_rejection):
+                reversal_call_score += 35  # Agotamiento RSI extremo
+                reversal_call_score += 30  # Zona clave de soporte / BB inferior
+                if has_bullish_rejection:
+                    reversal_call_score += 25  # Mecha de absorción institucional
+                elif last_candle_green:
+                    reversal_call_score += 15  # Vela envolvente / cambio de color
+                if smc_res.get("decision") == "CALL":
+                    reversal_call_score += 15
+                reversal_call_reason = f"🎯 [Reversión Sniper Exhaustion] Agotamiento RSI {rsi:.1f} (<= 32) en Soporte/BB ({support:.5f}) con rechazo alcista en {symbol}."
 
-        if has_bearish_rejection:
-            put_score += 25
-        if last_candle_red:
-            put_score += 10
+        # Reversión Bajista (PUT)
+        if rsi >= 68.0 and is_at_resistance and (has_bearish_rejection or last_candle_red):
+            if not (consecutive_greens >= 4 and not has_bearish_rejection):
+                reversal_put_score += 35  # Agotamiento RSI extremo
+                reversal_put_score += 30  # Zona clave de resistencia / BB superior
+                if has_bearish_rejection:
+                    reversal_put_score += 25  # Mecha de absorción institucional
+                elif last_candle_red:
+                    reversal_put_score += 15  # Vela envolvente / cambio de color
+                if smc_res.get("decision") == "PUT":
+                    reversal_put_score += 15
+                reversal_put_reason = f"🎯 [Reversión Sniper Exhaustion] Agotamiento RSI {rsi:.1f} (>= 68) en Resistencia/BB ({resistance:.5f}) con rechazo bajista en {symbol}."
 
-        if price <= ema20 or ema20 <= ema50:
-            put_score += 15
-        if "BAJISTA" in trend_status or "DOWN" in regime or change_pct < -0.02:
-            put_score += 10
-        elif "ALCISTA" in trend_status and not (has_bearish_rejection or dist_resistance_pct <= 0.05):
-            put_score -= 25
+        # =========================================================================
+        # ESTRATEGIA 2: CONTINUACIÓN DE TENDENCIA / PULLBACK (A favor del flujo)
+        # =========================================================================
+        # Opera a favor de la tendencia cuando el RSI está en zona de expansión saludable (38.0 a 62.0)
+        # y las EMAs muestran dirección institucional clara.
+        trend_call_score = 0
+        trend_put_score = 0
+        trend_call_reason = ""
+        trend_put_reason = ""
 
-        if ai_dec in ["SELL", "PUT"]:
-            put_score += 15
-        if ai_conf >= 60:
-            put_score += 10
+        is_uptrend = (ema20 > ema50 and price >= ema20 * 0.9995)
+        is_downtrend = (ema20 < ema50 and price <= ema20 * 1.0005)
 
-        # Bonificación si SMC coincide
-        if smc_res.get("decision") == "PUT":
-            put_score += 20
+        if 38.0 <= rsi <= 62.0:
+            # Continuación Alcista (CALL)
+            if is_uptrend and (last_candle_green or has_bullish_rejection or change_pct > 0.005):
+                if dist_resistance_pct > 0.04:
+                    trend_call_score += 35  # Alineación institucional EMA20 > EMA50
+                    if 45.0 <= rsi <= 60.0:
+                        trend_call_score += 25  # RSI en zona dorada de continuación
+                    else:
+                        trend_call_score += 15
+                    if last_candle_green:
+                        trend_call_score += 15
+                    if has_bullish_rejection:
+                        trend_call_score += 15
+                    if "ALCISTA" in trend_status or "UP" in regime:
+                        trend_call_score += 10
+                    if ai_dec in ["BUY", "CALL"]:
+                        trend_call_score += 10
+                    if smc_res.get("decision") == "CALL":
+                        trend_call_score += 15
+                    trend_call_reason = f"🌊 [Continuación Alcista Trend] Impulso a favor de tendencia (EMA20 > EMA50, RSI {rsi:.1f} en zona de expansión) en {symbol}."
+
+            # Continuación Bajista (PUT)
+            if is_downtrend and (last_candle_red or has_bearish_rejection or change_pct < -0.005):
+                if dist_support_pct > 0.04:
+                    trend_put_score += 35  # Alineación institucional EMA20 < EMA50
+                    if 40.0 <= rsi <= 55.0:
+                        trend_put_score += 25  # RSI en zona dorada de continuación
+                    else:
+                        trend_put_score += 15
+                    if last_candle_red:
+                        trend_put_score += 15
+                    if has_bearish_rejection:
+                        trend_put_score += 15
+                    if "BAJISTA" in trend_status or "DOWN" in regime:
+                        trend_put_score += 10
+                    if ai_dec in ["SELL", "PUT"]:
+                        trend_put_score += 10
+                    if smc_res.get("decision") == "PUT":
+                        trend_put_score += 15
+                    trend_put_reason = f"🌊 [Continuación Bajista Trend] Impulso a favor de tendencia (EMA20 < EMA50, RSI {rsi:.1f} en zona de expansión) en {symbol}."
+
+        # Penalización estricta: Bloquear completamente operaciones contratendencia si NO hay agotamiento extremo certificado
+        if is_downtrend and rsi > 32.0:
+            reversal_call_score = 0
+            trend_call_score = 0
+        if is_uptrend and rsi < 68.0:
+            reversal_put_score = 0
+            trend_put_score = 0
+
+        # Selección de la mejor señal
+        final_call_score = max(reversal_call_score, trend_call_score)
+        final_call_reason = reversal_call_reason if reversal_call_score >= trend_call_score else trend_call_reason
+
+        final_put_score = max(reversal_put_score, trend_put_score)
+        final_put_reason = reversal_put_reason if reversal_put_score >= trend_put_score else trend_put_reason
 
         # Decisión Cuantitativa Institucional (>= min_confidence)
-        if call_score >= self.min_confidence and call_score > put_score:
+        if final_call_score >= self.min_confidence and final_call_score > final_put_score:
             return {
                 "decision": "CALL",
-                "confidence": min(98, call_score),
+                "confidence": min(98, final_call_score),
                 "payout": payout,
-                "reason": f"🎯 Confluencia Alcista Sniper ({call_score} pts): Soporte/BB ({support:.5f}), RSI {rsi:.1f} y estructura favorable en {symbol} con payout {int(payout*100)}%."
+                "reason": final_call_reason or f"🎯 Confluencia Alcista ({final_call_score} pts) en {symbol}."
             }
-        elif put_score >= self.min_confidence and put_score > call_score:
+        elif final_put_score >= self.min_confidence and final_put_score > final_call_score:
             return {
                 "decision": "PUT",
-                "confidence": min(98, put_score),
+                "confidence": min(98, final_put_score),
                 "payout": payout,
-                "reason": f"🎯 Confluencia Bajista Sniper ({put_score} pts): Resistencia/BB ({resistance:.5f}), RSI {rsi:.1f} y estructura favorable en {symbol} con payout {int(payout*100)}%."
+                "reason": final_put_reason or f"🎯 Confluencia Bajista ({final_put_score} pts) en {symbol}."
             }
 
         return {
             "decision": "HOLD",
-            "confidence": max(call_score, put_score, min(60, int(ai_conf * 0.7))),
+            "confidence": max(0, final_call_score, final_put_score),
             "payout": payout,
-            "reason": f"Filtro de Calidad Activo: Confluencia insuficiente (Call: {call_score}p, Put: {put_score}p < {self.min_confidence}p requeridos)."
+            "reason": f"Filtro de Calidad Activo: Confluencia insuficiente (Call: {final_call_score}p, Put: {final_put_score}p < {self.min_confidence}p requeridos)."
         }
 
     def trigger_test_binary_trade(
@@ -393,10 +492,14 @@ class BinaryOptionsStrategyEngine:
         payout = self.iq.get_payout(symbol) if hasattr(self.iq, "get_payout") else 0.85
         now = time.time()
         
-        # Sincronización precisa a expiración de 1 minuto redondo
-        rem_sec = int(now) % 60
-        add_sec = (60 - rem_sec) if rem_sec <= 30 else (120 - rem_sec)
-        expiration_ts = int(now) + add_sec + (max(1, duration_minutes) - 1) * 60
+        # Sincronización precisa a expiración respetando el dead-time de 30s de IQ Option:
+        # Si cur_sec < 29: expira al cierre del minuto actual (+60s)
+        # Si cur_sec >= 29 (ej. disparando en segundo 58): expira al cierre del minuto siguiente (+120s)
+        cur_sec = int(now) % 60
+        if cur_sec < 29:
+            expiration_ts = int(now - cur_sec + (60 * max(1, duration_minutes)))
+        else:
+            expiration_ts = int(now - cur_sec + 60 + (60 * max(1, duration_minutes)))
 
         # Ejecución en IQ Option vía Adaptador
         if hasattr(self.iq, "submit_binary_option"):
@@ -404,7 +507,8 @@ class BinaryOptionsStrategyEngine:
                 symbol=symbol,
                 direction=dir_clean,
                 amount=final_stake,
-                duration_minutes=duration_minutes
+                duration_minutes=duration_minutes,
+                expiration_timestamp=expiration_ts
             )
         else:
             exec_res = {
@@ -418,6 +522,10 @@ class BinaryOptionsStrategyEngine:
             }
 
         if not exec_res.get("success"):
+            err_msg = str(exec_res.get("error", ""))
+            err_lower = err_msg.lower()
+            if any(k in err_lower for k in ["not available", "cannot purchase", "closed", "not found"]):
+                self.disable_asset(symbol, duration_seconds=1800.0)
             return exec_res
 
         order_id = str(exec_res.get("order_id", f"BIN_{int(now*1000)}"))
