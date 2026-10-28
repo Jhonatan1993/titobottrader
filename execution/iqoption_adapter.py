@@ -237,8 +237,11 @@ class IQOptionAdapter:
             # 2. Esperar confirmación de autenticación del broker antes de enviar peticiones de portafolio
             auth_start = time.time()
             found_profile = False
-            while time.time() - auth_start < 2.5:
-                raw = ws.recv()
+            while time.time() - auth_start < 4.0:
+                try:
+                    raw = ws.recv()
+                except Exception:
+                    continue
                 if not raw:
                     continue
                 try:
@@ -271,8 +274,8 @@ class IQOptionAdapter:
                                 self.currency = getattr(self, "practice_currency", "USD")
                         found_profile = True
                         break
-                    elif msg_name in ["authenticated", "front"]:
-                        break
+                    elif msg_name in ["authenticated", "front", "timeSync", "heartbeat"]:
+                        continue
                 except Exception:
                     pass
 
