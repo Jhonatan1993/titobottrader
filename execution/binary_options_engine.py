@@ -52,8 +52,8 @@ class BinaryOptionsStrategyEngine:
         self.calendar_filter = EconomicCalendarFilter(window_minutes=15)
         self.soros_manager = SorosRiskManager(
             base_stake=2.0,
-            soros_enabled=True,
-            max_soros_level=1,
+            soros_enabled=False,
+            max_soros_level=0,
             max_consecutive_losses=3
         )
         self.telegram = TelegramService.get_instance()

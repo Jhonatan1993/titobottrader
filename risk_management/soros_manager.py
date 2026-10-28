@@ -22,7 +22,7 @@ class SorosRiskManager:
     ):
         self.base_stake = max(1.0, float(base_stake))
         self.soros_enabled = bool(soros_enabled)
-        self.max_soros_level = max(1, int(max_soros_level))
+        self.max_soros_level = max(0, int(max_soros_level))
         self.max_consecutive_losses = max(1, int(max_consecutive_losses))
 
         self.current_date = self._get_today_str()

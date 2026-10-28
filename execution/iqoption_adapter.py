@@ -1344,6 +1344,7 @@ class IQOptionAdapter:
                     "version": "1.0",
                     "body": {
                         "active_id": int(active_id),
+                        "active": int(active_id),
                         "direction": direction.lower(),
                         "expired": int(expiration_ts),
                         "option_type_id": 3,
@@ -1386,20 +1387,24 @@ class IQOptionAdapter:
                             }
                             break
                         elif isinstance(msg_body, dict) and ("message" in msg_body or "reason" in msg_body):
-                            err_msg = msg_body.get("message") or msg_body.get("reason")
-                            # Si el activo regular está cerrado en turbo, intentar con OTC o con option_type_id 1
-                            if ("closed" in str(err_msg).lower() or "not available" in str(err_msg).lower()):
+                            err_msg = str(msg_body.get("message") or msg_body.get("reason") or "")
+                            err_lower = err_msg.lower()
+                            # Fallback automático ante rechazos de activo cerrado o no soportado en Turbo (option_type_id 3):
+                            should_fallback = any(k in err_lower for k in ["closed", "not available", "not found", "active", "reject", "instrument"])
+                            if should_fallback:
+                                # Fallback 1: Si se intentó activo regular y existe OTC disponible, cambiar a OTC inmediatamente
                                 if not clean_sym.endswith("-OTC") and not clean_sym.endswith("OTC"):
                                     otc_id = ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC", ACTIVE_ASSET_IDS.get(f"{clean_sym}OTC"))
-                                    if otc_id:
+                                    if otc_id and int(otc_id) != body_payload["msg"]["body"].get("active_id"):
                                         req_id_otc = f"bin_opt_otc_{int(time.time() * 1000)}"
                                         body_payload["request_id"] = req_id_otc
-                                        body_payload["msg"]["body"]["active_id"] = otc_id
+                                        body_payload["msg"]["body"]["active_id"] = int(otc_id)
+                                        body_payload["msg"]["body"]["active"] = int(otc_id)
                                         req_id = req_id_otc
                                         ws.send(json.dumps(body_payload))
                                         continue
-                                elif body_payload["msg"]["body"]["option_type_id"] == 3:
-                                    # Probar con option_type_id 1 (Binaria estándar)
+                                # Fallback 2: Si option_type_id es 3 (Turbo), alternar en <100ms a option_type_id 1 (Binaria estándar)
+                                if body_payload["msg"]["body"].get("option_type_id") == 3:
                                     req_id_std = f"bin_opt_std_{int(time.time() * 1000)}"
                                     body_payload["request_id"] = req_id_std
                                     body_payload["msg"]["body"]["option_type_id"] = 1
@@ -1427,6 +1432,26 @@ class IQOptionAdapter:
                         break
                     elif msg_name in ["option-rejected", "rejected"]:
                         err_msg = (msg_body.get("message") or msg_body.get("reason")) if isinstance(msg_body, dict) else (data.get("message") or str(msg_body))
+                        err_lower = str(err_msg).lower()
+                        should_fallback = any(k in err_lower for k in ["closed", "not available", "not found", "active", "reject", "instrument"])
+                        if should_fallback:
+                            if not clean_sym.endswith("-OTC") and not clean_sym.endswith("OTC"):
+                                otc_id = ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC", ACTIVE_ASSET_IDS.get(f"{clean_sym}OTC"))
+                                if otc_id and int(otc_id) != body_payload["msg"]["body"].get("active_id"):
+                                    req_id_otc = f"bin_opt_otc_{int(time.time() * 1000)}"
+                                    body_payload["request_id"] = req_id_otc
+                                    body_payload["msg"]["body"]["active_id"] = int(otc_id)
+                                    body_payload["msg"]["body"]["active"] = int(otc_id)
+                                    req_id = req_id_otc
+                                    ws.send(json.dumps(body_payload))
+                                    continue
+                            if body_payload["msg"]["body"].get("option_type_id") == 3:
+                                req_id_std = f"bin_opt_std_{int(time.time() * 1000)}"
+                                body_payload["request_id"] = req_id_std
+                                body_payload["msg"]["body"]["option_type_id"] = 1
+                                req_id = req_id_std
+                                ws.send(json.dumps(body_payload))
+                                continue
                         result = {"success": False, "error": f"Rechazado por IQ Option: {err_msg}"}
                         break
                 except Exception:

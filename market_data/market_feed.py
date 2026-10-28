@@ -363,7 +363,22 @@ class MultiAssetMarketFeed:
                     self.live_cache["EURGBP"] = round(float(rates["GBP"]) / float(rates["EUR"]), 5)
                 if "EUR" in rates and "JPY" in rates and float(rates["EUR"]) > 0:
                     self.live_cache["EURJPY"] = round(float(rates["JPY"]) / float(rates["EUR"]), 3)
-                # Los pares OTC conservan sus cotizaciones algorítmicas exclusivas de IQ Option
+                if "GBP" in rates and "JPY" in rates and float(rates["GBP"]) > 0:
+                    self.live_cache["GBPJPY"] = round(float(rates["JPY"]) / float(rates["GBP"]), 3)
+
+            # Si IQ Option está autenticado, refrescar cotizaciones reales de los pares FOREX y OTC
+            if hasattr(self, "iqoption") and getattr(self.iqoption, "is_configured", False) and getattr(self.iqoption, "ssid", None):
+                for sym, asset in self.assets.items():
+                    if asset.get("category") == "FOREX":
+                        try:
+                            iq_c = self.iqoption.get_candles(sym, interval=60, count=30)
+                            if iq_c and len(iq_c) >= 5:
+                                self.candles[sym] = iq_c
+                                self.live_cache[sym] = iq_c[-1]["close"]
+                                asset["price"] = iq_c[-1]["close"]
+                                asset["source"] = "IQOPTION_REAL_FEED"
+                        except Exception:
+                            pass
         except Exception:
             pass
         finally:
@@ -391,28 +406,26 @@ class MultiAssetMarketFeed:
             use_live_price = (sym in self.live_cache)
             if use_live_price:
                 base_ref = self.live_cache[sym]
-                if category == "FOREX":
-                    # Micro-ticks de alta frecuencia anclados al precio interbancario real en vivo
-                    pip_noise = random.gauss(0, asset.get("volatility", 0.003) * 0.05)
-                    new_price = round(base_ref * (1 + pip_noise), dec_places)
-                else:
-                    new_price = round(base_ref, dec_places)
-                asset["source"] = "LIVE_MARKET"
+                new_price = round(base_ref, dec_places)
+                asset["source"] = asset.get("source", "LIVE_MARKET")
+                if asset["source"] not in ["IQOPTION_REAL_FEED", "LIVE_MARKET"]:
+                    asset["source"] = "LIVE_MARKET"
             else:
                 if category == "FOREX":
-                    base_p = asset.get("base_price", asset.get("open_price", 1.0))
-                    # Si el precio anterior colapsó o se disparó más de 50%, recuperamos el base
-                    if old_price < base_p * 0.5 or old_price > base_p * 2.0:
-                        old_price = base_p
-                    reversion = (base_p - old_price) * 0.05
-                    shock = random.gauss(reversion, asset["volatility"] * 0.15)
-                    new_price = max(base_p * 0.7, round(old_price * (1 + shock), dec_places))
+                    # Prohibir precios sintéticos o random walk: si hay velas de IQ Option, usar su close real
+                    if sym in self.candles and len(self.candles[sym]) > 0:
+                        new_price = round(float(self.candles[sym][-1].get("close", asset.get("base_price", 1.0))), dec_places)
+                        asset["source"] = "IQOPTION_REAL_FEED"
+                    else:
+                        base_p = asset.get("base_price", asset.get("open_price", 1.0))
+                        new_price = round(base_p, dec_places)
+                        asset["source"] = "BASE_ANCHOR"
                 else:
                     shock = random.gauss(asset["trend_bias"], asset["volatility"])
                     wave = math.sin(now / 18.0 + hash(sym) % 12) * (asset["volatility"] * 0.35)
                     delta_ratio = shock + wave
                     new_price = max(0.01, round(old_price * (1 + delta_ratio), dec_places))
-                asset["source"] = "SIMULATION"
+                    asset["source"] = "SIMULATION"
 
             asset["price"] = new_price
             open_p = asset.get("open_price", new_price)
@@ -461,25 +474,6 @@ class MultiAssetMarketFeed:
             if sym in self.candles and len(self.candles[sym]) > 0:
                 current_minute = (int(now) // 60) * 60
                 last_c = self.candles[sym][-1]
-                prev_close = last_c.get("close", new_price)
-
-                # Detección y corrección de salto artificial por cambio de fuente (>1.5% de desviación)
-                if prev_close > 0 and abs(new_price - prev_close) / prev_close > 0.015:
-                    ratio = new_price / prev_close
-                    for c in self.candles[sym]:
-                        c["open"] = round(c["open"] * ratio, dec_places)
-                        c["high"] = round(c["high"] * ratio, dec_places)
-                        c["low"] = round(c["low"] * ratio, dec_places)
-                        c["close"] = round(c["close"] * ratio, dec_places)
-                    # Resincronizar indicadores técnicos para eliminar distorsión
-                    asset["open_price"] = new_price
-                    asset["high_24h"] = round(new_price * 1.01, dec_places)
-                    asset["low_24h"] = round(new_price * 0.99, dec_places)
-                    asset["ema20"] = new_price
-                    asset["ema50"] = new_price
-                    asset["rsi"] = 50.0
-                    last_c = self.candles[sym][-1]
-
                 last_c_time = last_c.get("time", current_minute)
                 if last_c_time == current_minute:
                     last_c["high"] = max(last_c.get("high", new_price), new_price)

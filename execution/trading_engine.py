@@ -249,6 +249,11 @@ class RealTimeTradingEngine:
                         "💰"
                     )
 
+            # En modo Opciones Binarias Turbo, open_positions se mantiene aislado para no confundir CFDs
+            if getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS":
+                self.open_positions.clear()
+                return
+
             # Reconstruir o actualizar en memoria las posiciones que SÍ están activas en el broker
             for bp in broker_positions:
                 act_id = bp.get("active_id")
@@ -845,80 +850,81 @@ class RealTimeTradingEngine:
                     res_icon
                 )
 
-        # 1. Actualizar posiciones abiertas y gestionar Trailing Stop Adaptativo
-        for pos_key, pos in list(self.open_positions.items()):
-            sym = pos.get("symbol", pos_key)
-            asset = market_state.get(sym)
-            if not asset:
-                continue
-            current_price = asset["price"]
-            entry_price = pos["entry_price"]
-            quantity = pos["quantity"]
-            category = asset.get("category", "TRADFI_STOCK")
-            
-            if category == "FOREX" or pos.get("broker") == "IQOPTION":
-                pos["current_price"] = current_price
-                leverage = float(pos.get("leverage", 500))
-                inv = float(pos.get("invested_amount", 0.0))
-                side = str(pos.get("side", "BUY")).upper()
-                if entry_price > 0 and inv > 0:
-                    diff = (current_price - entry_price) if side in ["BUY", "BUY_LONG", "CALL"] else (entry_price - current_price)
-                    # Fórmula institucional exacta de IQ Option para Margen Forex CFD:
-                    live_pnl = round(inv * (diff / entry_price) * leverage, 2)
-                    pos["current_pnl"] = live_pnl
-                    pos["current_value"] = round(max(0.0, inv + live_pnl), 2)
-                    pos["current_pnl_percent"] = round((live_pnl / inv) * 100, 2)
-                else:
-                    pos["current_value"] = round(inv + pos.get("current_pnl", 0.0), 2)
-                pnl_pct = pos.get("current_pnl_percent", 0.0)
-            else:
-                current_value = quantity * current_price
-                pnl = current_value - pos["invested_amount"]
-                pnl_pct = ((current_price - entry_price) / entry_price) * 100
+        # 1. Actualizar posiciones abiertas y gestionar Trailing Stop Adaptativo (EXCLUSIVO MODO FOREX CFD)
+        if getattr(self, "iq_mode", "FOREX_CFD") != "BINARY_OPTIONS":
+            for pos_key, pos in list(self.open_positions.items()):
+                sym = pos.get("symbol", pos_key)
+                asset = market_state.get(sym)
+                if not asset:
+                    continue
+                current_price = asset["price"]
+                entry_price = pos["entry_price"]
+                quantity = pos["quantity"]
+                category = asset.get("category", "TRADFI_STOCK")
                 
-                pos["current_price"] = current_price
-                pos["current_value"] = round(current_value, 2)
-                pos["current_pnl"] = round(pnl, 2)
-                pos["current_pnl_percent"] = round(pnl_pct, 2)
+                if category == "FOREX" or pos.get("broker") == "IQOPTION":
+                    pos["current_price"] = current_price
+                    leverage = float(pos.get("leverage", 500))
+                    inv = float(pos.get("invested_amount", 0.0))
+                    side = str(pos.get("side", "BUY")).upper()
+                    if entry_price > 0 and inv > 0:
+                        diff = (current_price - entry_price) if side in ["BUY", "BUY_LONG", "CALL"] else (entry_price - current_price)
+                        # Fórmula institucional exacta de IQ Option para Margen Forex CFD:
+                        live_pnl = round(inv * (diff / entry_price) * leverage, 2)
+                        pos["current_pnl"] = live_pnl
+                        pos["current_value"] = round(max(0.0, inv + live_pnl), 2)
+                        pos["current_pnl_percent"] = round((live_pnl / inv) * 100, 2)
+                    else:
+                        pos["current_value"] = round(inv + pos.get("current_pnl", 0.0), 2)
+                    pnl_pct = pos.get("current_pnl_percent", 0.0)
+                else:
+                    current_value = quantity * current_price
+                    pnl = current_value - pos["invested_amount"]
+                    pnl_pct = ((current_price - entry_price) / entry_price) * 100
+                    
+                    pos["current_price"] = current_price
+                    pos["current_value"] = round(current_value, 2)
+                    pos["current_pnl"] = round(pnl, 2)
+                    pos["current_pnl_percent"] = round(pnl_pct, 2)
 
-            pos["highest_price"] = max(pos.get("highest_price", entry_price), current_price)
-            entry_ts = pos.get("entry_timestamp", 0)
-            elapsed = time.time() - entry_ts if entry_ts > 0 else 999
+                pos["highest_price"] = max(pos.get("highest_price", entry_price), current_price)
+                entry_ts = pos.get("entry_timestamp", 0)
+                elapsed = time.time() - entry_ts if entry_ts > 0 else 999
 
-            # TRAILING STOP & BREAK-EVEN DINÁMICO FOREX CFD IQ OPTION:
-            # Protege ganancias progresivamente con holgura dinámica y asegura Cero Pérdidas (Riesgo Cero).
-            side = str(pos.get("side", "BUY_LONG")).upper()
-            is_long = side in ["BUY", "BUY_LONG", "CALL"]
-            
-            # 1. Break-Even Protector ultra-rápido: Al alcanzar +0.25% de ganancia tras 15 segundos,
-            # asegura el precio de entrada + spread para garantizar CERO PÉRDIDAS.
-            if pnl_pct >= 0.25 and elapsed >= 15.0:
-                be_sl = round(entry_price * 1.0003, 5) if is_long else round(entry_price * 0.9997, 5)
-                if (is_long and pos.get("stop_loss", 0) < be_sl) or (not is_long and (pos.get("stop_loss", 999999) > be_sl or pos.get("stop_loss", 0) == 0)):
-                    pos["stop_loss"] = be_sl
-                    self.agent._add_thought(f"🛡️ Break-Even Blindado en {sym}: Stop-Loss elevado a ${be_sl:,.5f} (Riesgo Cero / Cero Pérdidas).", "INFO", sym, "🛡️")
+                # TRAILING STOP & BREAK-EVEN DINÁMICO FOREX CFD IQ OPTION:
+                # Protege ganancias progresivamente con holgura dinámica y asegura Cero Pérdidas (Riesgo Cero).
+                side = str(pos.get("side", "BUY_LONG")).upper()
+                is_long = side in ["BUY", "BUY_LONG", "CALL"]
+                
+                # 1. Break-Even Protector ultra-rápido: Al alcanzar +0.25% de ganancia tras 15 segundos,
+                # asegura el precio de entrada + spread para garantizar CERO PÉRDIDAS.
+                if pnl_pct >= 0.25 and elapsed >= 15.0:
+                    be_sl = round(entry_price * 1.0003, 5) if is_long else round(entry_price * 0.9997, 5)
+                    if (is_long and pos.get("stop_loss", 0) < be_sl) or (not is_long and (pos.get("stop_loss", 999999) > be_sl or pos.get("stop_loss", 0) == 0)):
+                        pos["stop_loss"] = be_sl
+                        self.agent._add_thought(f"🛡️ Break-Even Blindado en {sym}: Stop-Loss elevado a ${be_sl:,.5f} (Riesgo Cero / Cero Pérdidas).", "INFO", sym, "🛡️")
 
-            # 2. Locking Profit: Al superar +0.60% de retorno, asegura al menos +0.25% neto
-            if pnl_pct >= 0.60:
-                lock_sl = round(entry_price * 1.0025, 5) if is_long else round(entry_price * 0.9975, 5)
-                if (is_long and pos.get("stop_loss", 0) < lock_sl) or (not is_long and pos.get("stop_loss", 999999) > lock_sl):
-                    pos["stop_loss"] = lock_sl
-                    self.agent._add_thought(f"🔒 Bloqueo de Ganancia en {sym}: Beneficio mínimo asegurado en ${lock_sl:,.5f}.", "INFO", sym, "🔒")
+                # 2. Locking Profit: Al superar +0.60% de retorno, asegura al menos +0.25% neto
+                if pnl_pct >= 0.60:
+                    lock_sl = round(entry_price * 1.0025, 5) if is_long else round(entry_price * 0.9975, 5)
+                    if (is_long and pos.get("stop_loss", 0) < lock_sl) or (not is_long and pos.get("stop_loss", 999999) > lock_sl):
+                        pos["stop_loss"] = lock_sl
+                        self.agent._add_thought(f"🔒 Bloqueo de Ganancia en {sym}: Beneficio mínimo asegurado en ${lock_sl:,.5f}.", "INFO", sym, "🔒")
 
-            # 3. Trailing Stop Dinámico: Persigue máximos con holgura para maximizar ganancias
-            if pnl_pct >= 1.20:
-                high_p = pos.get("highest_price", entry_price)
-                trail_sl = round(high_p * 0.997, 5) if is_long else round(pos.get("lowest_price", entry_price) * 1.003, 5)
-                if (is_long and pos.get("stop_loss", 0) < trail_sl) or (not is_long and pos.get("stop_loss", 999999) > trail_sl):
-                    pos["stop_loss"] = trail_sl
-                    self.agent._add_thought(f"🚀 Trailing Stop Forex en {sym}: Persiguiendo pico, Stop asegurado en ${trail_sl:,.5f}.", "INFO", sym, "🚀")
-            
-            tp = pos.get("take_profit", entry_price * 1.04)
-            if tp > entry_price:
-                pct_to_tp = min(100.0, max(0.0, ((current_price - entry_price) / (tp - entry_price)) * 100))
-            else:
-                pct_to_tp = 0.0
-            pos["progress_to_target"] = round(pct_to_tp, 1)
+                # 3. Trailing Stop Dinámico: Persigue máximos con holgura para maximizar ganancias
+                if pnl_pct >= 1.20:
+                    high_p = pos.get("highest_price", entry_price)
+                    trail_sl = round(high_p * 0.997, 5) if is_long else round(pos.get("lowest_price", entry_price) * 1.003, 5)
+                    if (is_long and pos.get("stop_loss", 0) < trail_sl) or (not is_long and pos.get("stop_loss", 999999) > trail_sl):
+                        pos["stop_loss"] = trail_sl
+                        self.agent._add_thought(f"🚀 Trailing Stop Forex en {sym}: Persiguiendo pico, Stop asegurado en ${trail_sl:,.5f}.", "INFO", sym, "🚀")
+                
+                tp = pos.get("take_profit", entry_price * 1.04)
+                if tp > entry_price:
+                    pct_to_tp = min(100.0, max(0.0, ((current_price - entry_price) / (tp - entry_price)) * 100))
+                else:
+                    pct_to_tp = 0.0
+                pos["progress_to_target"] = round(pct_to_tp, 1)
 
         # 2 & 3. CIRCUIT BREAKERS PARA IQ OPTION
         for b_id, b_wal in list(self.broker_wallets.items()):
