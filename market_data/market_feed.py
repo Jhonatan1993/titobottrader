@@ -260,11 +260,16 @@ class MultiAssetMarketFeed:
                 })
 
     def _fetch_live_data_background(self):
-        """Actualiza cotizaciones Forex reales interbancarias desde open.er-api.com / frankfurter.dev."""
+        """Dispara la actualización de cotizaciones Forex en hilo daemon sin bloquear el bucle tick()."""
         now = time.time()
-        if now - self._last_fx_fetch < 4.0:
+        if now - self._last_fx_fetch < 4.0 or getattr(self, "_fx_fetching", False):
             return
         self._last_fx_fetch = now
+        self._fx_fetching = True
+        import threading
+        threading.Thread(target=self._run_fx_fetch_worker, daemon=True).start()
+
+    def _run_fx_fetch_worker(self):
         try:
             import urllib.request
             import json
@@ -277,7 +282,7 @@ class MultiAssetMarketFeed:
                     "https://open.er-api.com/v6/latest/USD",
                     headers={"User-Agent": "TitoBotTrader/3.0"}
                 )
-                with urllib.request.urlopen(req1, timeout=3.0, context=ctx) as resp1:
+                with urllib.request.urlopen(req1, timeout=2.5, context=ctx) as resp1:
                     data1 = json.loads(resp1.read().decode())
                     if data1.get("result") == "success":
                         rates = data1.get("rates", {})
@@ -290,7 +295,7 @@ class MultiAssetMarketFeed:
                         "https://api.frankfurter.dev/v1/latest?from=USD",
                         headers={"User-Agent": "TitoBotTrader/3.0"}
                     )
-                    with urllib.request.urlopen(req2, timeout=3.0, context=ctx) as resp2:
+                    with urllib.request.urlopen(req2, timeout=2.5, context=ctx) as resp2:
                         rates = json.loads(resp2.read().decode()).get("rates", {})
                 except Exception:
                     pass
@@ -321,6 +326,8 @@ class MultiAssetMarketFeed:
                         self.live_cache[f"{fx_pair}-OTC"] = self.live_cache[fx_pair]
         except Exception:
             pass
+        finally:
+            self._fx_fetching = False
 
     def tick(self) -> Dict[str, Dict[str, Any]]:
         now = time.time()

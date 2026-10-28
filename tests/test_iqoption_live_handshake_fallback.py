@@ -93,7 +93,7 @@ def test_iqoption_set_options_ack_does_not_trigger_false_order_fill():
 
     with patch("websocket.create_connection", return_value=mock_ws):
         res = adapter.submit_order("EURUSD", "BUY", 2000.0, leverage=50)
-        assert res["success"] is True
+        assert res["success"] is True, f"submit_order failed with: {res}"
         # Debe haber tomado el ID real de la orden (987654321), NUNCA 'set_opts'
         assert res["order_id"] == "987654321"
 

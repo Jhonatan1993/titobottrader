@@ -302,7 +302,17 @@ class RealTimeTradingEngine:
             if not hasattr(self, "_zero_pos_counter"):
                 self._zero_pos_counter = 0
             self._zero_pos_counter += 1
-            if self._zero_pos_counter >= 1:
+
+            # Purgar de inmediato posiciones no confirmadas por el broker (sin ID)
+            for pos_key, pos in list(iq_memory_positions):
+                pos_id = str(pos.get("broker_order_id", ""))
+                ext_id = str(pos.get("position_id", ""))
+                if not pos_id and not ext_id:
+                    if pos_key in self.open_positions:
+                        del self.open_positions[pos_key]
+
+            # Esperar 3 sondeos vacíos consecutivos antes de purgar posiciones reales con ID (resistencia a micro-caídas del socket)
+            if self._zero_pos_counter >= 3:
                 for pos_key, pos in iq_memory_positions:
                     sym = pos.get("symbol", pos_key)
                     if pos_key in self.open_positions:
@@ -1753,6 +1763,14 @@ class RealTimeTradingEngine:
 
         if hasattr(self, "iqoption_risk_policy"):
             self.iqoption_risk_policy.reset_halt()
+
+        if hasattr(self, "binary_engine"):
+            if hasattr(self.binary_engine, "soros_manager") and hasattr(self.binary_engine.soros_manager, "reset_streaks"):
+                self.binary_engine.soros_manager.reset_streaks()
+            if self.binary_engine.has_active_position:
+                b_pos = self.binary_engine.open_position
+                if b_pos and time.time() >= b_pos.get("expiration_timestamp", 0):
+                    self.binary_engine.check_and_resolve_active_trade()
 
         self.agent._add_thought(
             f"▶️ [{b_name}] Operaciones REANUDADAS MANUALMENTE por el usuario. Bloqueos levantados, escáner y entradas activas.",

@@ -65,9 +65,27 @@ class SorosRiskManager:
         self.check_day_rollover()
 
         if self.consecutive_losses >= self.max_consecutive_losses:
-            return False, f"Pausa preventiva: {self.consecutive_losses} pérdidas consecutivas alcanzadas. Cooldown activo para preservar capital."
+            import time
+            now = time.time()
+            if not hasattr(self, "_loss_streak_cooldown_until") or self._loss_streak_cooldown_until == 0.0:
+                self._loss_streak_cooldown_until = now + 900.0 # 15 minutos de enfriamiento defensivo
+            if now < self._loss_streak_cooldown_until:
+                rem_m = max(1, int((self._loss_streak_cooldown_until - now) / 60))
+                return False, f"Pausa preventiva anti-racha: {self.consecutive_losses} pérdidas consecutivas. Cooldown activo ({rem_m}m restantes) para preservar capital."
+            else:
+                self.consecutive_losses = 0
+                self._loss_streak_cooldown_until = 0.0
+                logger.info("🛡️ [Anti-Racha] Cooldown de 15 minutos completado. Reanudando operaciones.")
 
         return True, "Gestor de riesgo operativo y autorizado."
+
+    def reset_streaks(self) -> None:
+        """Restablece manualmente las rachas negativas para reanudar de inmediato."""
+        self.consecutive_losses = 0
+        self._loss_streak_cooldown_until = 0.0
+        self.soros_step = 0
+        self.last_profit = 0.0
+        logger.info("🔄 [SorosRiskManager] Rachas y cooldowns reiniciados manualmente.")
 
     def calculate_stake(self, configured_stake: float = 0.0) -> float:
         """

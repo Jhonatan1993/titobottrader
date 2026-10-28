@@ -55,7 +55,7 @@ def test_iqoption_real_mode_executes_ws_order_when_balance_available():
 
     with patch("websocket.create_connection", return_value=mock_ws):
         res = adapter.submit_order("EURUSD", "BUY", 10000.0)
-        assert res["success"] is True
+        assert res["success"] is True, f"submit_order failed with: {res}"
         assert res["environment"] == "LIVE_REAL"
         assert res["status"] == "FILLED"
         assert res["order_id"] == "184920491"
@@ -77,7 +77,7 @@ def test_iqoption_connected_paper_mode_executes_on_practice_balance():
 
     with patch("websocket.create_connection", return_value=mock_ws):
         res = adapter.submit_order("EURUSD", "BUY", 2.0)
-        assert res["success"] is True
+        assert res["success"] is True, f"submit_order failed with: {res}"
         assert res["order_id"] == "14389232901"
         assert res["status"] == "FILLED"
 

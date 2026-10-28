@@ -427,7 +427,7 @@ class IQOptionAdapter:
                     "name": user_label,
                     "method": "SSID_DIRECT"
                 }
-            else:
+            elif not (self.email and self.password):
                 return {
                     "connected": False,
                     "authenticated": False,
@@ -546,9 +546,11 @@ class IQOptionAdapter:
         """Cambia el balance activo en IQ Option entre cuenta REAL y cuenta PRACTICE (Demo)."""
         if not self.ssid:
             return False
+        if getattr(self, "active_balance_id", None) == balance_id:
+            return True
         for endpoint in [f"{self.base_url}/profile/changebalance", f"{self.base_url}/changebalance"]:
             try:
-                resp = self.session.post(endpoint, data={"balance_id": balance_id}, timeout=6)
+                resp = self.session.post(endpoint, data={"balance_id": balance_id}, timeout=4)
                 if resp.status_code == 200:
                     self.active_balance_id = balance_id
                     return True
@@ -731,7 +733,7 @@ class IQOptionAdapter:
             # Esperar confirmación de handshake y perfil antes de enviar la orden
             auth_start = time.time()
             pending_order_data = None
-            while time.time() - auth_start < 2.5:
+            while time.time() - auth_start < 4.0:
                 raw = ws.recv()
                 if not raw:
                     continue
@@ -921,7 +923,9 @@ class IQOptionAdapter:
 
             ws.close()
         except Exception as e:
-            result = {"success": False, "error": f"Error WebSocket IQ Option: {str(e)}"}
+            import traceback
+            tb = traceback.format_exc()
+            result = {"success": False, "error": f"Error WebSocket IQ Option ({type(e).__name__}): {str(e)} | Trace: {tb}"}
 
         return result
 

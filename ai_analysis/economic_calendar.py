@@ -29,43 +29,47 @@ class EconomicCalendarFilter:
         self.cache_dir = os.path.join(base_dir, "data")
         os.makedirs(self.cache_dir, exist_ok=True)
         self.cache_file = os.path.join(self.cache_dir, "ff_calendar.xml")
+        self._is_fetching = False
+
+        # Cargar de inmediato desde caché local en disco si existe
+        if os.path.exists(self.cache_file):
+            try:
+                with open(self.cache_file, "rb") as f:
+                    self._parse_xml(f.read())
+                mtime = os.path.getmtime(self.cache_file)
+                self.last_fetch = datetime.fromtimestamp(mtime, tz=timezone.utc)
+            except Exception:
+                pass
 
     def update_calendar(self, force: bool = False) -> None:
-        """Descarga el calendario económico y actualiza el caché en memoria."""
+        """Descarga el calendario económico en segundo plano sin congelar el ciclo de trading."""
         now = datetime.now(timezone.utc)
         if not force and self.last_fetch and (now - self.last_fetch).total_seconds() < 21600:
             return
 
-        # Intentar cargar desde caché local si es reciente (< 6 horas)
-        if not force and os.path.exists(self.cache_file):
-            try:
-                mtime = os.path.getmtime(self.cache_file)
-                if (time.time() - mtime) < 21600:
-                    with open(self.cache_file, "rb") as f:
-                        self._parse_xml(f.read())
-                    self.last_fetch = datetime.fromtimestamp(mtime, tz=timezone.utc)
-                    return
-            except Exception as e:
-                logger.debug(f"Error cargando caché XML local: {e}")
+        if self._is_fetching:
+            return
 
-        # Descarga desde el feed remoto
+        # Si ya hay eventos en memoria, ejecutar la actualización remota en hilo daemon
+        import threading
+        self._is_fetching = True
+        t = threading.Thread(target=self._fetch_remote_worker, args=(now,), daemon=True)
+        t.start()
+
+    def _fetch_remote_worker(self, now_dt: datetime) -> None:
         try:
             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-            response = requests.get(self.feed_url, headers=headers, timeout=12)
+            response = requests.get(self.feed_url, headers=headers, timeout=8)
             if response.status_code == 200 and response.content:
                 with open(self.cache_file, "wb") as f:
                     f.write(response.content)
                 self._parse_xml(response.content)
-                self.last_fetch = now
-                logger.info(f"Calendario económico actualizado: {len(self.high_impact_events)} eventos de Alto Impacto cargados.")
+                self.last_fetch = now_dt
+                logger.info(f"Calendario económico actualizado en segundo plano: {len(self.high_impact_events)} eventos de Alto Impacto cargados.")
         except Exception as e:
             logger.warning(f"No se pudo descargar calendario económico remoto: {e}")
-            if os.path.exists(self.cache_file):
-                try:
-                    with open(self.cache_file, "rb") as f:
-                        self._parse_xml(f.read())
-                except Exception:
-                    pass
+        finally:
+            self._is_fetching = False
 
     def _parse_xml(self, xml_bytes: bytes) -> None:
         """Parsea el contenido XML e indexa eventos de Alto Impacto."""
