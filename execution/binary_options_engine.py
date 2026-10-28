@@ -544,13 +544,10 @@ class BinaryOptionsStrategyEngine:
                 )
         else:
             exec_res = {
-                "success": True,
-                "order_id": f"BIN_SIM_{int(now*1000)}",
-                "symbol": symbol,
-                "direction": dir_clean,
-                "amount": final_stake,
-                "payout": payout,
-                "status": "OPENED"
+                "success": False,
+                "execution_blocked": True,
+                "status": "BLOCKED",
+                "error": "Ejecución binaria bloqueada: el adaptador no ofrece envío y conciliación oficial de IQ Option.",
             }
 
         if not exec_res.get("success"):

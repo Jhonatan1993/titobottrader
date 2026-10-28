@@ -9,13 +9,20 @@ Este documento registra de forma cronológica, inmutable y persistente todas las
 1. **Modalidades IQ Option (política vigente desde 2026-10-22):**
    - Se conservan dos modos aislados y seleccionables: `BINARY_OPTIONS` y `FOREX_CFD` (margen).
    - Los párrafos cronológicos anteriores sobre eliminar binarias se conservan como historial, pero no son la instrucción vigente.
-   - Binarias se mantienen disponibles en PAPER; LIVE_REAL binario requiere liquidación oficial correlacionable y actualmente está bloqueado.
+   - El selector de binarias se conserva; sus órdenes Demo y LIVE_REAL quedan bloqueadas mientras no exista conciliación oficial correlacionable.
    - CFD/margen real requiere sizing del contrato y margen verificados; sus stops solo cuentan como activos con confirmación del broker. No hay promesa de R:R garantizado ni de evitar pérdidas.
 2. **POLÍTICA DE DESPLIEGUE A VPS (ESTRICTA):**
    - **NUNCA** subir cambios, ejecutar `git push`, reiniciar servicios ni realizar despliegues automáticos al VPS sin previa explicación detallada y concisa.
    - El usuario debe dar su aprobación explícita primero, o en su defecto, se le entregarán los comandos exactos para que él mismo los ejecute en la consola del VPS.
 3. **BROKER ÚNICO:**
    - Exclusivamente **IQ Option**. Binance y Alpaca están completamente deshabilitados.
+
+## Incidente de binaria PAPER — 2026-10-28
+
+- Evidencia del usuario: el dashboard mostraba una posición con ID `BIN_PAPER_*` y el texto “OPCIÓN BINARIA LANZADA [IQ OPTION]”, mientras IQ Option Demo no mostraba operación activa.
+- Causa: el adaptador devolvía una aceptación simulada local para binarias PAPER; el estado del dashboard y el mensaje de actividad afirmaban erróneamente que se había enviado una orden al broker.
+- Corrección preventiva: no crear ni enviar entradas binarias en PAPER o LIVE_REAL hasta poder correlacionar confirmación y liquidación oficiales de IQ Option; mostrar estado bloqueado. CFD PAPER y el selector de productos se conservan.
+- La versión `iqoptionapi` instalada en el VPS no ofrece una función de conciliación de resultado binario por identificador; no se reactivó el envío Demo con PnL inferido de cotizaciones locales.
 4. **CERO CONFUSIÓN DE SALDO:**
    - Saldo real directo de la cuenta IQ Option. Sin bóvedas ficticias ni divisiones confusas.
 

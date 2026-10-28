@@ -1470,39 +1470,39 @@ class IQOptionAdapter:
         duration_minutes: int = 1,
         expiration_timestamp: Optional[int] = None
     ) -> Dict[str, Any]:
-        """
-        Simula binarias solo en PAPER; la liquidación LIVE_REAL aún no está conciliada.
-        Mantiene aislamiento total respecto a las órdenes Forex CFD.
-        """
+        """Reject binary orders until broker execution and settlement can be verified."""
         dir_clean = direction.lower()
         if dir_clean not in ["call", "put"]:
             return {"success": False, "error": f"Dirección inválida {direction}. Debe ser CALL o PUT."}
 
-        # Binary settlement is not yet reconciled against an authoritative broker result.
-        # Keep this mode available as an isolated local simulator, never as a broker order.
         if self.environment == "LIVE_REAL":
             return {
                 "success": False,
                 "error": "Binarias LIVE_REAL bloqueadas: falta conciliación del resultado oficial de IQ Option.",
+                "execution_blocked": True,
+                "status": "BLOCKED",
             }
 
-        min_amount = 2000.0 if self.currency == "COP" else 1.0
-        order_amount = max(min_amount, round(float(amount), 2))
-        order_id = f"BIN_PAPER_{int(time.time() * 1000)}"
         return {
-            "success": True,
-            "order_id": order_id,
+            "success": False,
             "symbol": symbol,
             "direction": dir_clean,
-            "amount": order_amount,
+            "amount": amount,
             "duration_minutes": duration_minutes,
             "environment": "PAPER",
-            "status": "OPENED_SIMULATED"
+            "execution_blocked": True,
+            "status": "BLOCKED",
+            "error": "Binarias Demo bloqueadas: falta conciliar el resultado oficial de IQ Option. No se creó una operación simulada ni se envió una orden.",
         }
 
     def _execute_real_binary_ws_order(self, *args, **kwargs) -> Dict[str, Any]:
-        """Ruta deshabilitada mientras no exista conciliación oficial de binarias."""
-        return {"success": False, "error": "Envío binario al broker deshabilitado; use el simulador PAPER."}
+        """Ruta deshabilitada hasta verificar aceptación y liquidación oficial de binarias."""
+        return {
+            "success": False,
+            "execution_blocked": True,
+            "status": "BLOCKED",
+            "error": "Envío binario a IQ Option deshabilitado hasta implementar conciliación oficial.",
+        }
 
     def get_candles(self, symbol: str, interval: int = 60, count: int = 40) -> list:
         """Obtiene velas reales en vivo directamente desde IQ Option vía WebSocket."""

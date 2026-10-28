@@ -78,7 +78,7 @@ Reglas obligatorias:
 3. La meta diaria de ganancia y el límite diario de pérdida se acumulan sobre PnL realizado de ambos productos y bloquean nuevas entradas al alcanzarse.
 4. El endpoint de prueba binaria fuera del motor y el alta de brokers están deshabilitados; Binance y Alpaca no pueden activarse mediante API.
 5. Las credenciales IQ Option nunca se devuelven completas por API.
-6. Las opciones binarias se mantienen como producto de alto riesgo: en `LIVE_REAL`, el resultado debe provenir del broker; la simulación de precio local no constituye evidencia de liquidación real.
+6. Las opciones binarias se mantienen como producto de alto riesgo: no se envían órdenes ni se simulan operaciones en Demo o `LIVE_REAL` hasta contar con aceptación y liquidación oficiales correlacionadas por ID.
 7. La plataforma permanece en `PAPER` hasta una autorización explícita para cambiar a `LIVE_REAL` y hasta verificar la reconciliación real de órdenes, posiciones y resultados.
 
 ---
@@ -86,9 +86,9 @@ Reglas obligatorias:
 ## 6. Implementación preventiva local — 2026-10-28
 
 El usuario autorizó reforzar el bot conservando la selección entre binarias y CFD/margen. Cambios aplicados al código fuente local:
-- Binarias LIVE_REAL rechaza nuevas órdenes; si existe una posición heredada vencida, no infiere el resultado con cotización local.
+- Entradas binarias rechazadas en PAPER y LIVE_REAL; no se crean operaciones locales como si fueran del broker ni se infieren sus resultados con cotizaciones locales.
 - CFD LIVE_REAL requiere dos gates de proceso (`LIVE_TRADING_ARMED` y `LIVE_CFD_EXECUTION_VERIFIED`), límite diario de pérdida positivo y feed reciente de velas cerradas IQ Option. El segundo gate permanece falso por defecto porque el payload CFD usa un tamaño fijo (`count=100`) no ligado al importe solicitado.
-- PAPER sigue siendo el entorno predeterminado. Se conservan ambos productos; el cambio de modo y entorno queda bloqueado con posiciones u órdenes pendientes.
+- PAPER sigue siendo el entorno predeterminado. Se conservan ambos productos; el cambio de modo y entorno queda bloqueado con posiciones u órdenes pendientes. CFD PAPER puede usar la cuenta Demo; las entradas binarias están bloqueadas hasta que exista conciliación del resultado oficial de IQ Option.
 - Riesgo diario y bloqueos por conciliación se guardan en un archivo de estado; reanudar no limpia PnL ni límites.
 - El aprendizaje separa Binarias y CFD; ignora historial ambiguo y admite solo resultados con marca `learning_eligible` o liquidación LIVE_REAL verificada.
 - El estado LIVE_REAL desconocido conserva la posición y bloquea nuevas exposiciones. No se registra PnL por una respuesta vacía del broker.

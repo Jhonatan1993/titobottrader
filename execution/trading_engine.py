@@ -1395,213 +1395,23 @@ class RealTimeTradingEngine:
                     )
 
     def _evaluate_and_trade_binary(self, market_state: Dict[str, Any]):
-        """
-        Lógica 100% aislada para Opciones Binarias Turbo / Blitz:
-        - Gatekeeper estricto: máximo 1 sola posición activa a la vez.
-        - Filtro matemático de Payout >= 80%.
-        - Confluencia A+ (confianza >= 85%) con análisis de mecha y RSI.
-        - Cooldown forzado de 180s en el activo tras cierre.
-        """
+        """Keep binary analysis selectable, but do not fabricate broker executions."""
         if not hasattr(self, "binary_engine"):
             return
-
-        # Gatekeeper único compartido por binarias y CFD.
-        if not self._iqoption_can_open():
-            return
-
         wallet = self.broker_wallets.get("IQOPTION", {})
         if not wallet.get("is_running", True):
             return
 
-        is_cop = (getattr(self.feed.iqoption, "currency", "USD") == "COP")
-        min_cash = 2000.0 if is_cop else 1.0
-        cash = wallet.get("cash", 0.0)
-        if cash < min_cash:
-            return
-
-        trade_amount = 2000.0 if is_cop else 2.0
-
-        now_dt = datetime.datetime.now(datetime.timezone.utc)
-        # Horario Forex Institucional IQ Option:
-        # 1. Fines de semana: Cierra viernes 21:00 UTC y abre domingo 21:00 UTC
-        is_weekend = (now_dt.weekday() == 4 and now_dt.hour >= 21) or (now_dt.weekday() == 5) or (now_dt.weekday() == 6 and now_dt.hour < 21)
-        # 2. Noches entre semana: De 21:00 UTC a 06:00 UTC sólo cotizan pares OTC en IQ Option Binarias
-        is_night_otc = (now_dt.hour >= 21 or now_dt.hour < 6)
-        is_otc_time = is_weekend or is_night_otc
-
-        second_in_minute = now_dt.second
-        is_timing_window = (54 <= second_in_minute <= 59) or (0 <= second_in_minute <= 2)
-        # En tests o llamadas directas de simulación, bypass de ventana de segundos
-        is_test_env = "pytest" in sys.modules
-
-        candidates = []
-        scanned_evals = []
-        has_otc_assets = any("-OTC" in s for s in market_state.keys())
-        now_ts = time.time()
-        for sym, asset in market_state.items():
-            # Exclusión de activos temporalmente no disponibles o cerrados en IQ Option (ej. USDJPY-OTC)
-            if sym in self.unavailable_assets_blacklist:
-                if now_ts < self.unavailable_assets_blacklist[sym]:
-                    continue
-                else:
-                    del self.unavailable_assets_blacklist[sym]
-
-            # 1. Validación previa de disponibilidad en catálogo oficial de IQ Option (Evitar active is suspended)
-            iq_adapter = getattr(self.feed, "iqoption", None) or getattr(self.binary_engine, "iq", None)
-            if iq_adapter and hasattr(iq_adapter, "is_asset_open"):
-                if not iq_adapter.is_asset_open(sym):
-                    continue
-
-            cat = asset.get("category")
-            # Enrutamiento inteligente: En horario OTC (noches y fines de semana), preferir OTC solo si el par OTC existe y está abierto en IQ Option
-            if is_otc_time and "-OTC" not in sym:
-                otc_sym = f"{sym}-OTC"
-                if otc_sym in market_state:
-                    if iq_adapter and hasattr(iq_adapter, "is_asset_open") and iq_adapter.is_asset_open(otc_sym):
-                        continue
-            if not is_otc_time and "-OTC" in sym:
-                # En horario normal de mercado interbancario, preferir pares regulares si existen y están abiertos
-                regular_sym = sym.replace("-OTC", "")
-                if regular_sym in market_state:
-                    if iq_adapter and hasattr(iq_adapter, "is_asset_open") and iq_adapter.is_asset_open(regular_sym):
-                        continue
-            if cat not in ["FOREX", "OPTIONS", "CFD"] and "-OTC" not in sym:
-                continue
-
-            if self.execution_environment == "LIVE_REAL" and not self.feed.is_live_data_quality_ok(sym, interval_seconds=60):
-                continue
-
-            candles = getattr(self.feed, "candles", {}).get(sym, [])
-            eval_res = self.binary_engine.evaluate_asset(asset, candles)
-            dec = eval_res.get("decision")
-            conf = eval_res.get("confidence", 0)
-            scanned_evals.append((conf, sym, dec, eval_res))
-
-            if dec in ["CALL", "PUT"] and conf >= self.binary_engine.min_confidence:
-                payout = eval_res.get("payout", 0.85)
-                score = conf * payout
-                candidates.append((score, sym, dec, asset, eval_res))
-
-        if candidates:
-            candidates.sort(key=lambda x: x[0], reverse=True)
-            best_score, best_sym, best_dir, best_asset, best_eval = candidates[0]
-
-            # Sincronización en Segundo 58: Abrir contrato al cierre de la vela actual (o inmediato en test)
-            if is_timing_window or is_test_env:
-                trade_executed = False
-                for idx, (c_score, c_sym, c_dir, c_asset, c_eval) in enumerate(candidates):
-                    # 2. FILTRO DE CONFLUENCIA MÍNIMA ESTRICTA PARA DISPARO (>= 65%)
-                    c_conf = c_eval.get("confidence", 0)
-                    if c_conf < self.binary_engine.min_confidence:
-                        continue
-
-                    c_price = c_asset.get("price", 1.0)
-                    c_thesis = c_eval.get("reason", "Confluencia Institucional SMC")
-
-                    order_res = self.binary_engine.execute_binary_option(
-                        symbol=c_sym,
-                        direction=c_dir,
-                        amount=trade_amount,
-                        duration_minutes=1,
-                        entry_price=c_price,
-                        thesis_reason=c_thesis
-                    )
-                    if order_res.get("success"):
-                        wallet["cash"] = round(wallet.get("cash", 0.0) - trade_amount, 2)
-                        self.cash_balance = wallet["cash"]
-                        real_oid = order_res.get("order_id", "EN_CURSO")
-                        self.agent._add_thought(
-                            f"🎯 OPCIÓN BINARIA LANZADA [IQ OPTION]: {c_sym} {c_dir} (${trade_amount:,.2f}) | Expiración 60s | ID #{real_oid} | {c_thesis}",
-                            "SUCCESS",
-                            c_sym,
-                            "🎯"
-                        )
-                        trade_executed = True
-                        break
-                    else:
-                        if order_res.get("unknown"):
-                            self.iqoption_risk_policy.require_reconciliation()
-                            self.is_running = False
-                            wallet["is_running"] = False
-                            self.agent._add_thought(
-                                f"🛑 Orden binaria de {c_sym} enviada sin confirmación; se bloquea cualquier nueva entrada.",
-                                "WARNING", c_sym, "🛑"
-                            )
-                            break
-                        err_msg = str(order_res.get('error', 'Rechazada por el broker'))
-                        err_lower = err_msg.lower()
-                        is_unavailable = any(k in err_lower for k in [
-                            "not available", "cannot purchase", "closed", "not found", "suspended", "disabled"
-                        ])
-                        if is_unavailable:
-                            cooldown_secs = 1800.0  # 30 minutos de exclusión automática
-                            self.unavailable_assets_blacklist[c_sym] = time.time() + cooldown_secs
-                            if hasattr(self, "binary_engine"):
-                                self.binary_engine.disable_asset(c_sym, duration_seconds=cooldown_secs)
-                            iq_ad = getattr(self.feed, "iqoption", None) or getattr(self.binary_engine, "iq", None)
-                            if iq_ad and hasattr(iq_ad, "_active_status_cache"):
-                                iq_ad._active_status_cache[c_sym] = False
-
-                            # Comprobar si hay un siguiente candidato calificado (>= 65%)
-                            remaining = [
-                                other for other in candidates[idx+1:]
-                                if other[4].get("confidence", 0) >= self.binary_engine.min_confidence
-                            ]
-                            if remaining:
-                                next_c = remaining[0]
-                                self.agent._add_thought(
-                                    f"⚠️ Activo {c_sym} suspendido en IQ Option ({err_msg}). Bloqueado 30m. Saltando de inmediato a respaldo #{idx+2}: {next_c[1]} ({next_c[2]} {next_c[4].get('confidence', 0)}%)...",
-                                    "WARNING",
-                                    c_sym,
-                                    "⚠️"
-                                )
-                                continue  # Salta de inmediato al siguiente par disponible en este mismo segundo 58!
-                            else:
-                                self.agent._add_thought(
-                                    f"🚫 Activo {c_sym} deshabilitado temporalmente por IQ Option ({err_msg}). En lista de exclusión durante 30 minutos para priorizar pares abiertos.",
-                                    "WARNING",
-                                    c_sym,
-                                    "🚫"
-                                )
-                                break
-                        else:
-                            self.agent._add_thought(
-                                f"⚠️ Orden Binaria {c_sym} {c_dir} no concretada: {err_msg}",
-                                "WARNING",
-                                c_sym,
-                                "⚠️"
-                            )
-                            break
-            else:
-                # Esperando segundo exacto 58 para no entrar a mitad de vela
-                now_scan = time.time()
-                if not hasattr(self, "_last_timing_thought_ts"):
-                    self._last_timing_thought_ts = 0.0
-                if (now_scan - self._last_timing_thought_ts) >= 6.0:
-                    self._last_timing_thought_ts = now_scan
-                    self.agent._add_thought(
-                        f"⏱️ [Sincronización Segundo 58] Confluencia detectada en {best_sym} ({best_dir} {best_eval.get('confidence',0)}%). "
-                        f"Alineando al segundo 58 de la vela de 1m (segundo actual: {second_in_minute}).",
-                        "INFO",
-                        best_sym,
-                        "⏱️"
-                    )
-        else:
-            # Heartbeat informativo para el Dashboard cada 8-10 segundos
-            now_scan = time.time()
-            if not hasattr(self, "_last_binary_scan_ts"):
-                self._last_binary_scan_ts = 0.0
-            if (now_scan - self._last_binary_scan_ts) >= 10.0:
-                self._last_binary_scan_ts = now_scan
-                if scanned_evals:
-                    scanned_evals.sort(key=lambda x: x[0], reverse=True)
-                    top_conf, top_sym, top_dec, top_res = scanned_evals[0]
-                    self.agent._add_thought(
-                        f"⏱️ [Binarias Turbo] Escaneando {len(scanned_evals)} pares en vivo. Mejor activo: {top_sym} ({top_dec} {top_conf}% - Req: >= {self.binary_engine.min_confidence}%). Cartera 0/1 disponible.",
-                        "INFO",
-                        top_sym,
-                        "⏱️"
-                    )
+        now = time.time()
+        last_notice = getattr(self, "_binary_execution_block_notice_ts", 0.0)
+        if now - last_notice >= 300.0:
+            self._binary_execution_block_notice_ts = now
+            self.agent._add_thought(
+                "🛑 Entradas binarias bloqueadas: falta conciliación del resultado oficial de IQ Option. "
+                "No se envían órdenes ni se crean operaciones simuladas.",
+                "WARNING",
+                icon="🛑",
+            )
 
     def trigger_test_binary_trade(
         self, 
@@ -1610,65 +1420,14 @@ class RealTimeTradingEngine:
         amount: Optional[float] = None
     ) -> Dict[str, Any]:
         """
-        Ejecuta una vista previa simulada de binarias solo en PAPER.
+        Binary test entries are disabled until broker execution can be reconciled.
         """
-        if self.execution_environment != "PAPER" or getattr(self, "iq_mode", "FOREX_CFD") != "BINARY_OPTIONS":
-            return {"success": False, "error": "La vista previa binaria solo está disponible en el modo BINARY_OPTIONS PAPER."}
-        if not hasattr(self, "binary_engine"):
-            return {"success": False, "error": "Motor de opciones binarias no inicializado."}
-
-        if self.binary_engine.has_active_position:
-            return {
-                "success": False, 
-                "error": "GATEKEEPER ACTIVO: Ya existe 1 operación binaria en curso (1/1 ocupado). Espere su resolución."
-            }
-
-        active_count = len(self.get_broker_positions("IQOPTION"))
-        if hasattr(self, "binary_engine") and self.binary_engine.has_active_position:
-            active_count += 1
-        if active_count >= 1 or self._iqoption_order_pending:
-            return {
-                "success": False,
-                "error": "GATEKEEPER ACTIVO: Ya existe 1 operación en curso (1/1 ocupado). Espere su resolución."
-            }
-
-        wallet = self.broker_wallets.get("IQOPTION", {})
-        is_cop = (getattr(self.feed.iqoption, "currency", "USD") == "COP")
-        min_amount = 2000.0 if is_cop else 1.0
-        final_amount = float(amount) if amount and float(amount) >= min_amount else min_amount
-
-        cash = wallet.get("cash", 0.0)
-        if cash < final_amount:
-            return {
-                "success": False,
-                "error": f"Saldo insuficiente: Dispones de {cash:,.2f} y se requieren al menos {final_amount:,.2f}."
-            }
-
-        res = self.binary_engine.trigger_test_binary_trade(
-            symbol=symbol,
-            direction=direction,
-            amount=final_amount,
-            duration_minutes=1
-        )
-        if res.get("success"):
-            wallet["cash"] = round(wallet.get("cash", 0.0) - final_amount, 2)
-            self.cash_balance = wallet["cash"]
-            oid = res.get("order_id", "REGISTRADA")
-            self.agent._add_thought(
-                f"🧪 VISTA PREVIA BINARIA PAPER: {symbol} {direction} (${final_amount:,.2f}) | Simulación local #{oid} | 1/1 Ocupado",
-                "SUCCESS",
-                symbol,
-                "🧪"
-            )
-        else:
-            self.agent._add_thought(
-                f"⚠️ Error en prueba binaria {symbol}: {res.get('error', 'Rechazada por el broker')}",
-                "WARNING",
-                symbol,
-                "⚠️"
-            )
-
-        return res
+        return {
+            "success": False,
+            "execution_blocked": True,
+            "status": "BLOCKED",
+            "error": "Entradas binarias Demo y LIVE_REAL bloqueadas hasta conciliar aceptación y liquidación oficial de IQ Option.",
+        }
 
 
     def _execute_buy(self, symbol: str, asset: Dict[str, Any], decision_data: Dict[str, Any], broker_id: Optional[str] = None):
@@ -2186,8 +1945,10 @@ class RealTimeTradingEngine:
             status_text = "🛑 LÍMITE PÉRDIDA ALCANZADO (DETENIDO)"
         elif not broker_running:
             status_text = "EN PAUSA"
+        elif is_binary and wallet.get("environment", "PAPER") == "PAPER":
+            status_text = "🛑 BINARIAS BLOQUEADAS (DEMO SIN CONCILIACIÓN)"
         elif is_binary:
-            status_text = "OPERANDO EN VIVO (BINARIAS 1 A LA VEZ)"
+            status_text = "🛑 BINARIAS LIVE_REAL BLOQUEADAS"
         elif risk_snapshot.get("halted_reason") == "TOLERANCIA_CERO_BLOQUEA_NUEVAS_ENTRADAS":
             status_text = "🛡️ TOLERANCIA CERO: ENTRADAS BLOQUEADAS"
         else:
