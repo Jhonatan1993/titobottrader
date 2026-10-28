@@ -786,15 +786,30 @@ class IQOptionAdapter:
                 headers = self._get_ws_headers()
                 ws = websocket.create_connection(ws_url, header=headers, timeout=4.0, sslopt={"cert_reqs": ssl.CERT_NONE})
                 
-                # Autenticar
+                # 1. Autenticar y esperar confirmación del broker
+                ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
                 ws.send(json.dumps({
                     "name": "authenticate",
                     "msg": {"ssid": self.ssid, "protocol": 3, "session_id": "", "client_session_id": ""},
                     "request_id": f"auth_init_{int(now * 1000)}"
                 }))
-                ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
 
-                # Solicitar initialization-data v3.0
+                auth_start = time.time()
+                while time.time() - auth_start < 2.0:
+                    try:
+                        raw = ws.recv()
+                    except StopIteration:
+                        break
+                    if not raw:
+                        continue
+                    try:
+                        d = json.loads(raw)
+                        if d.get("name") in ["authenticated", "profile", "timeSync"]:
+                            break
+                    except Exception:
+                        pass
+
+                # 2. Solicitar catálogo oficial de activos initialization-data v3.0
                 req_id = f"init_{int(time.time() * 1000)}"
                 ws.send(json.dumps({
                     "name": "sendMessage",
