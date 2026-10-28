@@ -1,6 +1,6 @@
 # Auditoría Integral y Plan Obligatorio de Mejora — 2026-10-22
 
-> **Corrección de alcance — 2026-10-28:** Por decisión posterior del usuario se conservan dos modalidades seleccionables y aisladas: `BINARY_OPTIONS` y `FOREX_CFD` (margen). Las propuestas de este documento que ordenaban eliminar binarias o quitar el selector quedan reemplazadas. El selector binario se conserva, pero sus entradas quedan bloqueadas tanto en Demo como en `LIVE_REAL` hasta reconciliar aceptación y liquidación con resultados oficiales del broker. La habilitación de CFD real también requiere validar tamaño de contrato y margen frente al importe solicitado.
+> **Corrección de alcance — 2026-10-28:** Se conservan dos modalidades seleccionables y aisladas: `BINARY_OPTIONS` y `FOREX_CFD` (margen). Binarias Demo deben enviarse a la cuenta Practice de IQ Option, mostrarse como abiertas solo con ID confirmado por el broker y liquidarse solo con resultado oficial correlacionado. Binarias `LIVE_REAL` permanecen bloqueadas. La habilitación de CFD real también requiere validar tamaño de contrato y margen frente al importe solicitado.
 
 ## Alcance y límite de responsabilidad
 
@@ -21,7 +21,7 @@ La suite local actual termina con `100 passed`, pero eso no certifica seguridad 
 ## Reglas vinculantes sin excepción
 
 1. **Productos permitidos:** únicamente IQ Option, con selector entre Binarias y Forex CFD/margen.
-   - Las lógicas, riesgos y resultados deben permanecer aislados por modalidad. El análisis binario permanece disponible, pero las entradas están bloqueadas tanto en PAPER como en LIVE_REAL hasta poder confirmar aceptación y liquidación del broker.
+   - Las lógicas, riesgos y resultados deben permanecer aislados por modalidad. Binarias `PAPER` significa la cuenta Demo real de IQ Option cuando hay sesión; no se permiten operaciones binarias simuladas locales. Las binarias `LIVE_REAL` permanecen bloqueadas.
    - El allowlist de CFD excluye OTC. OTC solo puede pertenecer a una modalidad binaria de práctica y nunca debe convertirse automáticamente en CFD.
 2. **Broker permitido en producción:** IQ Option únicamente.
    - Binance, Alpaca, bóvedas, arbitraje crypto, alta de brokers y modo multibroker no se inicializan ni se exponen en la ruta productiva.
@@ -62,7 +62,7 @@ La suite local actual termina con `100 passed`, pero eso no certifica seguridad 
 
 1. Forzar `PAPER` y bloquear `LIVE_REAL` mediante una bandera de liberación explícita (`LIVE_TRADING_ARMED=false` por defecto).
 2. Conservar el selector entre `BINARY_OPTIONS` y `FOREX_CFD`, sin mezclar estados, órdenes ni métricas entre productos.
-3. Bloquear nuevas entradas binarias en cualquier entorno hasta comprobar aceptación y liquidaciones oficiales correlacionadas; conservar el selector y análisis, sin crear operaciones simuladas que parezcan órdenes del broker.
+3. Permitir binarias solo en Demo cuando el broker confirme el ID; liquidar y registrar únicamente con el resultado oficial correlacionado. Mantener binarias LIVE_REAL bloqueadas.
 4. Mantener IQ Option como único broker y rechazar cualquier fallback de binaria a CFD o viceversa.
 4. Rotar inmediatamente contraseña y SSID que pudieron estar expuestos por el endpoint.
 5. Eliminar devolución de secretos por API. El dashboard solo debe mostrar “configurado/no configurado” y permitir reemplazo, nunca lectura.

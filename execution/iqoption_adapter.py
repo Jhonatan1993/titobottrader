@@ -97,7 +97,7 @@ CFD_ALLOWED_SYMBOLS = frozenset({
 class IQOptionAdapter:
     """
     Adaptador Oficial de IQ Option para TitoBotTrader:
-    - Modo Simulación / Práctica (PAPER): Opera con saldo demo ($10,000 USD de práctica de IQ Option o simulación aislada).
+    - Binarias PAPER se envían a la cuenta Practice de IQ Option cuando hay sesión; nunca se simulan localmente.
     - Modo Dinero Real (LIVE_REAL): Autentica con email y contraseña en los servidores de IQ Option para operar con saldo real.
     - Soporte para consulta de saldos en tiempo real y cambio dinámico entre DEMO y REAL.
     """
@@ -137,6 +137,10 @@ class IQOptionAdapter:
         self._last_active_status_sync: float = 0.0
         self._sync_status_lock = threading.Lock()
         self._active_sync_thread_started = False
+        self._binary_result_lock = threading.Lock()
+        self._binary_results: Dict[str, Dict[str, Any]] = {}
+        self._binary_result_watchers: Dict[str, threading.Thread] = {}
+        self._binary_result_queries: Dict[str, float] = {}
 
     def _get_persistent_ws(self, timeout: float = 12.0) -> Any:
         """
@@ -1470,9 +1474,9 @@ class IQOptionAdapter:
         duration_minutes: int = 1,
         expiration_timestamp: Optional[int] = None
     ) -> Dict[str, Any]:
-        """Reject binary orders until broker execution and settlement can be verified."""
-        dir_clean = direction.lower()
-        if dir_clean not in ["call", "put"]:
+        """Submit a single binary order to the IQ Option practice account only."""
+        dir_clean = str(direction).lower()
+        if dir_clean not in {"call", "put"}:
             return {"success": False, "error": f"Dirección inválida {direction}. Debe ser CALL o PUT."}
 
         if self.environment == "LIVE_REAL":
@@ -1483,26 +1487,467 @@ class IQOptionAdapter:
                 "status": "BLOCKED",
             }
 
+        if not self.connected or not self.ssid:
+            return {"success": False, "error": "IQ Option Demo no está conectado; no se envió la orden."}
+        if self.practice_balance_id is None:
+            return {"success": False, "error": "No se identificó el balance Demo de IQ Option; no se envió la orden."}
+        if not self.change_balance(self.practice_balance_id):
+            return {"success": False, "error": "No se pudo seleccionar el balance Demo de IQ Option; no se envió la orden."}
+
+        clean_sym = self._normalize_binary_symbol(symbol)
+        symbol_key = clean_sym.replace("-OTC", "OTC")
+        active_id = self._symbol_to_active_id.get(clean_sym) or self._symbol_to_active_id.get(symbol_key)
+        if active_id is None:
+            self.sync_active_statuses(force=True)
+            active_id = self._symbol_to_active_id.get(clean_sym) or self._symbol_to_active_id.get(symbol_key)
+        if active_id is None:
+            return {"success": False, "error": f"IQ Option no publicó un active_id vigente para {clean_sym}; no se envió la orden."}
+        if self._active_status_cache.get(clean_sym) is not True and self._active_status_cache.get(symbol_key) is not True:
+            return {"success": False, "error": f"Activo {clean_sym} cerrado o suspendido en IQ Option; no se envió la orden."}
+
+        min_amount = 2000.0 if self.currency == "COP" else 1.0
+        try:
+            order_amount = round(float(amount), 2)
+        except (TypeError, ValueError):
+            return {"success": False, "error": "Importe binario inválido; no se envió la orden."}
+        if order_amount < min_amount:
+            return {"success": False, "error": f"El importe mínimo en la cuenta Demo es {min_amount:,.2f} {self.currency}."}
+        if self.practice_amount > 0 and order_amount > self.practice_amount:
+            return {"success": False, "error": "Saldo Demo insuficiente; no se envió la orden."}
+
+        return self._execute_real_binary_ws_order(
+            symbol=clean_sym,
+            active_id=int(active_id),
+            direction=dir_clean,
+            amount=order_amount,
+            duration_minutes=max(1, int(duration_minutes)),
+            expiration_timestamp=expiration_timestamp,
+            balance_id=int(self.practice_balance_id),
+        )
+
+    @staticmethod
+    def _normalize_binary_symbol(symbol: str) -> str:
+        clean = str(symbol).upper().replace("/", "").replace("_", "").replace(" ", "")
+        clean = clean.replace("(", "").replace(")", "")
+        if clean.endswith("OTC") and not clean.endswith("-OTC"):
+            clean = f"{clean[:-3]}-OTC"
+        return clean
+
+    def _execute_real_binary_ws_order(
+        self,
+        symbol: str,
+        active_id: int,
+        direction: str,
+        amount: float,
+        duration_minutes: int,
+        expiration_timestamp: Optional[int],
+        balance_id: int,
+    ) -> Dict[str, Any]:
+        """Send one broker order on Demo and retain its socket for official settlement."""
+        import json
+        import ssl
+        import websocket
+
+        if self.environment != "PAPER" or not self.ssid or balance_id != self.practice_balance_id:
+            return {"success": False, "execution_blocked": True, "status": "BLOCKED", "error": "La orden binaria solo se permite en el balance Demo de IQ Option."}
+
+        ws = None
+        order_sent = False
+        req_id = f"bin_opt_{time.time_ns()}"
+        try:
+            ws = websocket.create_connection(
+                self._get_ws_url(),
+                header=self._get_ws_headers(),
+                timeout=2.0,
+                sslopt={"cert_reqs": ssl.CERT_REQUIRED, "check_hostname": True},
+            )
+            ws.send(json.dumps({
+                "name": "authenticate",
+                "msg": {"ssid": self.ssid, "protocol": 3, "session_id": "", "client_session_id": ""},
+                "request_id": f"auth_{time.time_ns()}",
+            }))
+            ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
+
+            auth_deadline = time.monotonic() + 6.0
+            profile_practice_id = None
+            server_time_offset = 0.0
+            while time.monotonic() < auth_deadline:
+                try:
+                    raw = ws.recv()
+                except websocket.WebSocketTimeoutException:
+                    continue
+                if not raw:
+                    continue
+                try:
+                    frame = json.loads(raw)
+                except (TypeError, ValueError):
+                    continue
+                if frame.get("name") == "timeSync":
+                    server_time = frame.get("msg")
+                    if isinstance(server_time, (int, float)):
+                        server_time_offset = server_time / 1000.0 - time.time()
+                if frame.get("name") == "profile":
+                    profile = frame.get("msg", {})
+                    self.profile_data.update(profile if isinstance(profile, dict) else {})
+                    for balance in profile.get("balances", []) if isinstance(profile, dict) else []:
+                        try:
+                            if int(balance.get("type", 0)) == 4:
+                                profile_practice_id = int(balance.get("id"))
+                                self.practice_balance_id = profile_practice_id
+                                break
+                        except (TypeError, ValueError):
+                            continue
+                    if profile_practice_id is not None:
+                        break
+
+            if profile_practice_id != balance_id:
+                ws.close()
+                return {"success": False, "error": "IQ Option no confirmó el balance Demo en el WebSocket; no se envió la orden."}
+
+            server_now = time.time() + server_time_offset
+            current_second = int(server_now) % 60
+            if current_second < 29:
+                computed_expiration = int(server_now - current_second + 60 * duration_minutes)
+            else:
+                computed_expiration = int(server_now - current_second + 60 + 60 * duration_minutes)
+            # Use the broker clock and purchase window; a stale caller timestamp must not extend the contract.
+            expiration_ts = computed_expiration
+
+            ws.send(json.dumps({
+                "name": "setOptions",
+                "msg": {"sendResults": True},
+                "request_id": f"sopts_{time.time_ns()}",
+            }))
+            body = {
+                "active_id": active_id,
+                "active": active_id,
+                "direction": direction,
+                "expired": expiration_ts,
+                "option_type_id": 3,
+                "price": amount,
+                "user_balance_id": balance_id,
+            }
+            payload = {
+                "name": "sendMessage",
+                "request_id": req_id,
+                "msg": {
+                    "name": "binary-options.open-option",
+                    "version": "1.0",
+                    "body": body,
+                },
+            }
+            order_sent = True
+            ws.send(json.dumps(payload))
+
+            ack_deadline = time.monotonic() + 8.0
+            while time.monotonic() < ack_deadline:
+                try:
+                    raw = ws.recv()
+                except websocket.WebSocketTimeoutException:
+                    continue
+                if not raw:
+                    continue
+                try:
+                    frame = json.loads(raw)
+                except (TypeError, ValueError):
+                    continue
+
+                frame_name = str(frame.get("name", ""))
+                frame_msg = frame.get("msg", {})
+                response_id = frame.get("request_id")
+                related = response_id == req_id or frame_name in {"option", "option-opened", "order-placed", "order-placed-temp", "option-rejected", "rejected"}
+                if not related:
+                    continue
+                if isinstance(frame_msg, dict):
+                    error_text = frame_msg.get("message") or frame_msg.get("reason")
+                    if error_text:
+                        ws.close()
+                        return {"success": False, "error": f"IQ Option rechazó la binaria: {error_text}"}
+                    broker_id = frame_msg.get("id") or frame_msg.get("option_id")
+                    if broker_id is not None and (
+                        response_id == req_id
+                        or frame_name in {"option", "option-opened", "order-placed", "order-placed-temp"}
+                    ):
+                        order_id = str(broker_id)
+                        watcher = threading.Thread(
+                            target=self._watch_binary_option_settlement,
+                            args=(ws, order_id, amount, expiration_ts),
+                            name=f"iqoption-binary-result-{order_id}",
+                            daemon=True,
+                        )
+                        with self._binary_result_lock:
+                            self._binary_result_watchers[order_id] = watcher
+                        watcher.start()
+                        return {
+                            "success": True,
+                            "order_id": order_id,
+                            "symbol": symbol,
+                            "direction": direction.upper(),
+                            "amount": amount,
+                            "expiration_timestamp": expiration_ts,
+                            "payout": self.get_payout(symbol),
+                            "environment": "PAPER",
+                            "status": "OPENED_DEMO",
+                            "broker_confirmed": True,
+                        }
+                status = frame.get("status")
+                if response_id == req_id and status not in (None, 2000, "2000"):
+                    ws.close()
+                    return {"success": False, "error": f"IQ Option rechazó la orden binaria (status {status})."}
+
+            if order_sent:
+                # A timeout after send is ambiguous: keep the gatekeeper blocked to prevent a duplicate.
+                watcher = threading.Thread(
+                    target=self._watch_binary_option_settlement,
+                    args=(ws, req_id, amount, expiration_ts),
+                    name=f"iqoption-binary-unknown-{req_id}",
+                    daemon=True,
+                )
+                with self._binary_result_lock:
+                    self._binary_result_watchers[req_id] = watcher
+                watcher.start()
+                return {
+                    "success": False,
+                    "unknown": True,
+                    "request_id": req_id,
+                    "status": "UNKNOWN_RECONCILIATION",
+                    "error": "IQ Option no confirmó la orden; queda pendiente de conciliación para evitar duplicarla.",
+                }
+            ws.close()
+            return {"success": False, "error": "No se pudo enviar la orden binaria a IQ Option Demo."}
+        except Exception as exc:
+            if ws is not None and order_sent:
+                watcher = threading.Thread(
+                    target=self._watch_binary_option_settlement,
+                    args=(ws, req_id, amount, int(expiration_timestamp or time.time() + 60)),
+                    name=f"iqoption-binary-unknown-{req_id}",
+                    daemon=True,
+                )
+                with self._binary_result_lock:
+                    self._binary_result_watchers[req_id] = watcher
+                watcher.start()
+                return {
+                    "success": False,
+                    "unknown": True,
+                    "request_id": req_id,
+                    "status": "UNKNOWN_RECONCILIATION",
+                    "error": f"Conexión interrumpida después del envío; orden pendiente de conciliación ({type(exc).__name__}).",
+                }
+            if ws is not None:
+                try:
+                    ws.close()
+                except Exception:
+                    pass
+            return {"success": False, "error": f"Error WebSocket al enviar binaria Demo: {type(exc).__name__}."}
+
+    def _watch_binary_option_settlement(self, ws: Any, order_id: str, amount: float, expiration_ts: int) -> None:
+        """Wait for IQ Option's option-closed event; never settle from a local quote."""
+        import json
+        import websocket
+
+        deadline = max(time.time() + 120.0, float(expiration_ts) + 300.0)
+        next_heartbeat = time.monotonic() + 15.0
+        try:
+            ws.settimeout(1.0)
+            while time.time() < deadline:
+                if time.monotonic() >= next_heartbeat:
+                    try:
+                        ws.send(json.dumps({"name": "heartbeat", "msg": int(time.time() * 1000)}))
+                    except Exception:
+                        return
+                    next_heartbeat = time.monotonic() + 15.0
+                try:
+                    raw = ws.recv()
+                except websocket.WebSocketTimeoutException:
+                    continue
+                if not raw:
+                    continue
+                try:
+                    frame = json.loads(raw)
+                except (TypeError, ValueError):
+                    continue
+                frame_name = frame.get("name")
+                msg = frame.get("msg", {})
+                if frame_name not in {"option-closed", "socket-option-closed"} or not isinstance(msg, dict):
+                    continue
+                received_id = (msg.get("option_id") or msg.get("id")) if frame_name == "option-closed" else msg.get("id")
+                if str(received_id) != str(order_id):
+                    continue
+                settlement = self._normalize_binary_settlement(msg, order_id, amount)
+                if settlement is None:
+                    continue
+                with self._binary_result_lock:
+                    self._binary_results[str(order_id)] = settlement
+                return
+        except Exception:
+            return
+        finally:
+            try:
+                ws.close()
+            except Exception:
+                pass
+
+    @staticmethod
+    def _normalize_binary_settlement(msg: Dict[str, Any], order_id: str, requested_amount: float) -> Optional[Dict[str, Any]]:
+        outcome = str(msg.get("result") or msg.get("win") or "").strip().lower()
+        if outcome in {"win", "won", "winner"}:
+            result_type = "WIN"
+            gross_return = msg.get("profit_amount")
+            if gross_return is None:
+                gross_return = msg.get("win_amount")
+            if gross_return is None:
+                return None
+            pnl = round(float(gross_return) - float(requested_amount), 2)
+        elif outcome in {"loose", "loss", "lost"}:
+            result_type = "LOSS"
+            pnl = -round(float(requested_amount), 2)
+        elif outcome in {"equal", "tie", "draw"}:
+            result_type = "TIE"
+            pnl = 0.0
+        else:
+            return None
         return {
-            "success": False,
-            "symbol": symbol,
-            "direction": dir_clean,
-            "amount": amount,
-            "duration_minutes": duration_minutes,
-            "environment": "PAPER",
-            "execution_blocked": True,
-            "status": "BLOCKED",
-            "error": "Binarias Demo bloqueadas: falta conciliar el resultado oficial de IQ Option. No se creó una operación simulada ni se envió una orden.",
+            "order_id": str(order_id),
+            "verified": True,
+            "result": result_type,
+            "pnl": pnl,
+            "exit_price": msg.get("expiration_value"),
+            "broker_result": outcome,
         }
 
-    def _execute_real_binary_ws_order(self, *args, **kwargs) -> Dict[str, Any]:
-        """Ruta deshabilitada hasta verificar aceptación y liquidación oficial de binarias."""
-        return {
-            "success": False,
-            "execution_blocked": True,
-            "status": "BLOCKED",
-            "error": "Envío binario a IQ Option deshabilitado hasta implementar conciliación oficial.",
-        }
+    def get_binary_option_result(self, order_id: str) -> Optional[Dict[str, Any]]:
+        with self._binary_result_lock:
+            result = self._binary_results.get(str(order_id))
+            watcher = self._binary_result_watchers.get(str(order_id))
+            if result:
+                return dict(result)
+            if watcher and watcher.is_alive():
+                return None
+            last_query = self._binary_result_queries.get(str(order_id), 0.0)
+            if time.time() - last_query < 10.0:
+                return None
+            self._binary_result_queries[str(order_id)] = time.time()
+
+        result = self._query_binary_option_settlement(order_id)
+        if result:
+            with self._binary_result_lock:
+                self._binary_results[str(order_id)] = result
+            return dict(result)
+        return None
+
+    def _query_binary_option_settlement(self, order_id: str) -> Optional[Dict[str, Any]]:
+        """Fallback to IQ Option's official bet-info result if the settlement event was missed."""
+        import json
+        import ssl
+        import websocket
+
+        if not self.ssid:
+            return None
+        try:
+            numeric_id = int(order_id)
+        except (TypeError, ValueError):
+            return None
+
+        ws = None
+        try:
+            ws = websocket.create_connection(
+                self._get_ws_url(),
+                header=self._get_ws_headers(),
+                timeout=2.0,
+                sslopt={"cert_reqs": ssl.CERT_REQUIRED, "check_hostname": True},
+            )
+            ws.send(json.dumps({
+                "name": "authenticate",
+                "msg": {"ssid": self.ssid, "protocol": 3, "session_id": "", "client_session_id": ""},
+                "request_id": f"auth_result_{time.time_ns()}",
+            }))
+            ws.send(json.dumps({"name": "ssid", "msg": self.ssid}))
+            auth_deadline = time.monotonic() + 5.0
+            authenticated = False
+            while time.monotonic() < auth_deadline:
+                try:
+                    raw = ws.recv()
+                except websocket.WebSocketTimeoutException:
+                    continue
+                if not raw:
+                    continue
+                try:
+                    frame = json.loads(raw)
+                except (TypeError, ValueError):
+                    continue
+                if frame.get("name") in {"authenticated", "profile"}:
+                    authenticated = True
+                    if frame.get("name") == "profile":
+                        break
+            if not authenticated:
+                return None
+
+            req_id = f"betinfo_{time.time_ns()}"
+            ws.send(json.dumps({
+                "name": "api_game_betinfo",
+                "request_id": req_id,
+                "msg": {"currency": self.currency, "id[0]": numeric_id},
+            }))
+            response_deadline = time.monotonic() + 5.0
+            while time.monotonic() < response_deadline:
+                try:
+                    raw = ws.recv()
+                except websocket.WebSocketTimeoutException:
+                    continue
+                if not raw:
+                    continue
+                try:
+                    frame = json.loads(raw)
+                except (TypeError, ValueError):
+                    continue
+                if frame.get("name") != "api_game_betinfo_result":
+                    continue
+                msg = frame.get("msg", {})
+                if not isinstance(msg, dict) or not msg.get("isSuccessful"):
+                    continue
+                data = msg.get("result", {}).get("data", {}) if isinstance(msg.get("result"), dict) else {}
+                record = data.get(str(numeric_id)) or data.get(numeric_id) if isinstance(data, dict) else None
+                if not isinstance(record, dict):
+                    continue
+                outcome = str(record.get("win", "")).strip().lower()
+                deposit = record.get("deposit")
+                returned = record.get("profit")
+                if outcome in {"win", "won"} and deposit is not None and returned is not None:
+                    result_type = "WIN"
+                    pnl = round(float(returned) - float(deposit), 2)
+                elif outcome in {"loose", "loss", "lost"}:
+                    result_type = "LOSS"
+                    pnl = -round(float(deposit), 2) if deposit is not None else None
+                elif outcome in {"equal", "tie", "draw"}:
+                    result_type = "TIE"
+                    pnl = 0.0
+                else:
+                    continue
+                if pnl is None:
+                    continue
+                return {
+                    "order_id": str(order_id),
+                    "verified": True,
+                    "result": result_type,
+                    "pnl": pnl,
+                    "exit_price": None,
+                    "broker_result": outcome,
+                }
+        except Exception:
+            return None
+        finally:
+            if ws is not None:
+                try:
+                    ws.close()
+                except Exception:
+                    pass
+        return None
+
+    def forget_binary_option_result(self, order_id: str) -> None:
+        with self._binary_result_lock:
+            self._binary_results.pop(str(order_id), None)
+            self._binary_result_watchers.pop(str(order_id), None)
+            self._binary_result_queries.pop(str(order_id), None)
 
     def get_candles(self, symbol: str, interval: int = 60, count: int = 40) -> list:
         """Obtiene velas reales en vivo directamente desde IQ Option vía WebSocket."""

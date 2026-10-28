@@ -54,7 +54,7 @@ class AdaptiveLearningEngine:
             and str(trade.get("environment", "")).upper() in {"PAPER", "LIVE_REAL"}
             and (
                 trade.get("learning_eligible") is True
-                or (str(trade.get("environment", "")).upper() == "LIVE_REAL" and trade.get("settlement_verified") is True)
+                or trade.get("settlement_verified") is True
             )
             and trade.get("symbol")
             and isinstance(trade.get("pnl"), (int, float))

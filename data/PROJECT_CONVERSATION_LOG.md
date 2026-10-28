@@ -9,7 +9,7 @@ Este documento registra de forma cronológica, inmutable y persistente todas las
 1. **Modalidades IQ Option (política vigente desde 2026-10-22):**
    - Se conservan dos modos aislados y seleccionables: `BINARY_OPTIONS` y `FOREX_CFD` (margen).
    - Los párrafos cronológicos anteriores sobre eliminar binarias se conservan como historial, pero no son la instrucción vigente.
-   - El selector de binarias se conserva; sus órdenes Demo y LIVE_REAL quedan bloqueadas mientras no exista conciliación oficial correlacionable.
+   - Binarias Demo deben enviarse a IQ Option Practice, con aceptación y liquidación oficial correlacionadas; binarias LIVE_REAL permanecen bloqueadas.
    - CFD/margen real requiere sizing del contrato y margen verificados; sus stops solo cuentan como activos con confirmación del broker. No hay promesa de R:R garantizado ni de evitar pérdidas.
 2. **POLÍTICA DE DESPLIEGUE A VPS (ESTRICTA):**
    - **NUNCA** subir cambios, ejecutar `git push`, reiniciar servicios ni realizar despliegues automáticos al VPS sin previa explicación detallada y concisa.
@@ -23,6 +23,13 @@ Este documento registra de forma cronológica, inmutable y persistente todas las
 - Causa: el adaptador devolvía una aceptación simulada local para binarias PAPER; el estado del dashboard y el mensaje de actividad afirmaban erróneamente que se había enviado una orden al broker.
 - Corrección preventiva: no crear ni enviar entradas binarias en PAPER o LIVE_REAL hasta poder correlacionar confirmación y liquidación oficiales de IQ Option; mostrar estado bloqueado. CFD PAPER y el selector de productos se conservan.
 - La versión `iqoptionapi` instalada en el VPS no ofrece una función de conciliación de resultado binario por identificador; no se reactivó el envío Demo con PnL inferido de cotizaciones locales.
+
+## Corrección de regresión: reactivación de binarias Demo — 2026-10-28
+
+- El hotfix `f35c710` bloqueó toda entrada binaria, lo que corrigió las operaciones fantasma pero también impidió operar en la cuenta Demo como solicitó el usuario.
+- Se restablece la entrada automática solo para Demo mediante `binary-options.open-option`, con balance Practice explícito, `active_id` y estado abierto confirmados por IQ Option. LIVE_REAL continúa bloqueado.
+- El bot mantiene el WebSocket de la orden para esperar `option-closed` / `socket-option-closed`; no calcula PnL con cotización local. Si el resultado oficial no llega, conserva la posición y no abre otra.
+- El saldo no se incrementa/decrementa localmente; la sincronización del saldo Demo de IQ Option es la fuente de verdad.
 4. **CERO CONFUSIÓN DE SALDO:**
    - Saldo real directo de la cuenta IQ Option. Sin bóvedas ficticias ni divisiones confusas.
 

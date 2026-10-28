@@ -63,7 +63,8 @@ class TradeJournal:
             raw_res = "GANANCIA" if pnl_val > 0 else ("EMPATE" if pnl_val == 0 else "PÉRDIDA CONTROLADA")
 
         entry_raw = float(trade_data.get("entry_price", 0.0))
-        exit_raw = float(trade_data.get("exit_price", 0.0))
+        exit_value = trade_data.get("exit_price")
+        exit_raw = float(exit_value) if exit_value is not None else None
         dec = 5 if abs(entry_raw) < 100 and abs(entry_raw) > 0 else 2
 
         trade = {
@@ -74,7 +75,7 @@ class TradeJournal:
             "type": trade_data.get("type", "COMPRA / VENTA"),
             "quantity": trade_data.get("quantity", 1),
             "entry_price": round(entry_raw, dec),
-            "exit_price": round(exit_raw, dec),
+            "exit_price": round(exit_raw, dec) if exit_raw is not None else None,
             "invested_amount": round(float(trade_data.get("invested_amount", 0.0)), 2),
             "pnl": pnl_val,
             "pnl_percent": round(float(trade_data.get("pnl_percent", 0.0)), 2),

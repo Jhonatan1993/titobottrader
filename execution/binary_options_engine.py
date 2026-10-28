@@ -460,25 +460,14 @@ class BinaryOptionsStrategyEngine:
         duration_minutes: int = 1
     ) -> Dict[str, Any]:
         """
-        Fuerza una operación controlada de prueba en IQ Option (respetando estrictamente el cupo único 0/1).
+        Manual test orders are disabled; production entries come only from the strategy scan.
         """
-        if self.has_active_position:
-            return {
-                "success": False,
-                "error": "GATEKEEPER ACTIVO: Ya existe 1 operación binaria en curso (1/1). Espere a su finalización."
-            }
-        
-        dir_clean = direction.upper()
-        if dir_clean not in ["CALL", "PUT"]:
-            dir_clean = "CALL"
-
-        return self.execute_binary_option(
-            symbol=symbol,
-            direction=dir_clean,
-            amount=amount,
-            duration_minutes=duration_minutes,
-            is_manual_test=True
-        )
+        return {
+            "success": False,
+            "execution_blocked": True,
+            "status": "BLOCKED",
+            "error": "Órdenes binarias manuales de prueba deshabilitadas; el motor solo opera con señal automática confirmada en Demo.",
+        }
 
     def execute_binary_option(
         self, 
@@ -575,6 +564,12 @@ class BinaryOptionsStrategyEngine:
                 self.disable_asset(symbol, duration_seconds=1800.0)
             return exec_res
 
+        if not exec_res.get("broker_confirmed"):
+            return {
+                "success": False,
+                "error": "IQ Option no confirmó la apertura de la binaria; no se registró como operación activa.",
+            }
+
         if getattr(self.iq, "environment", "PAPER") == "LIVE_REAL" and str(exec_res.get("status", "")).upper().endswith("SIMULATED"):
             return {"success": False, "error": "Binaria LIVE_REAL rechazada: el adaptador reportó una ejecución simulada."}
 
@@ -588,7 +583,7 @@ class BinaryOptionsStrategyEngine:
             "payout": payout,
             "potential_profit": round(final_stake * payout, 2),
             "entry_timestamp": now,
-            "expiration_timestamp": expiration_ts,
+            "expiration_timestamp": int(exec_res.get("expiration_timestamp") or expiration_ts),
             "duration_minutes": duration_minutes,
             "status": "OPEN",
             "thesis": thesis_reason
@@ -635,50 +630,62 @@ class BinaryOptionsStrategyEngine:
         if pos.get("reconciliation_required") or pos.get("status") == "UNKNOWN_RECONCILIATION":
             return None
 
-        if getattr(self.iq, "environment", "PAPER") == "LIVE_REAL":
-            # Never infer broker settlement from a local or synthetic quote.
-            pos["status"] = "UNKNOWN_RECONCILIATION"
-            pos["reconciliation_required"] = True
-            if not pos.get("reconciliation_alerted"):
-                pos["reconciliation_alerted"] = True
-                logger.error("Binaria LIVE_REAL vencida sin resultado oficial conciliado: %s", pos.get("id"))
-            return None
-
         # Si aún no ha expirado el tiempo de la opción, sigue esperando
         if now < exp_ts:
             return None
 
         sym = pos["symbol"]
-        cur_p = current_prices.get(sym, pos["entry_price"])
         entry_p = pos["entry_price"]
         dir_clean = pos["direction"]
         invested = pos["amount"]
         payout = pos.get("payout", 0.85)
+        if getattr(self.iq, "environment", "PAPER") != "PAPER":
+            pos["status"] = "UNKNOWN_RECONCILIATION"
+            pos["reconciliation_required"] = True
+            return None
 
-        # Determinación matemática del resultado oficial
-        is_tie = (cur_p == entry_p) or math.isclose(cur_p, entry_p, abs_tol=1e-6)
-        if dir_clean == "CALL":
-            is_win = cur_p > entry_p and not is_tie
-        else: # PUT
-            is_win = cur_p < entry_p and not is_tie
+        get_result = getattr(self.iq, "get_binary_option_result", None)
+        settlement = get_result(pos["id"]) if callable(get_result) else None
+        if not settlement or settlement.get("verified") is not True:
+            pos["status"] = "AWAITING_BROKER_SETTLEMENT"
+            if not pos.get("settlement_wait_logged"):
+                pos["settlement_wait_logged"] = True
+                logger.warning("Binaria Demo vencida; esperando liquidación oficial de IQ Option: %s", pos.get("id"))
+            return None
 
+        result_type = str(settlement.get("result", "")).upper()
+        if result_type not in {"WIN", "LOSS", "TIE"}:
+            pos["status"] = "UNKNOWN_RECONCILIATION"
+            pos["reconciliation_required"] = True
+            return None
+        try:
+            pnl = round(float(settlement["pnl"]), 2)
+        except (KeyError, TypeError, ValueError):
+            pos["status"] = "UNKNOWN_RECONCILIATION"
+            pos["reconciliation_required"] = True
+            return None
+        if (result_type == "WIN" and pnl <= 0) or (result_type == "LOSS" and pnl >= 0) or (result_type == "TIE" and pnl != 0):
+            pos["status"] = "UNKNOWN_RECONCILIATION"
+            pos["reconciliation_required"] = True
+            return None
+
+        exit_price = settlement.get("exit_price")
+        try:
+            exit_price = float(exit_price) if exit_price is not None else None
+        except (TypeError, ValueError):
+            exit_price = None
+        is_win = result_type == "WIN"
+        is_tie = result_type == "TIE"
         if is_tie:
-            result_type = "TIE"
-            pnl = 0.0
             self.total_ties += 1
-            reason = f"Empate exacto en {sym} (Entrada {entry_p} == Cierre {cur_p}). Reembolso íntegro."
+            reason = f"IQ Option confirmó empate en {sym}; inversión reembolsada."
         elif is_win:
-            result_type = "WIN"
-            pnl = round(invested * payout, 2)
             self.total_wins += 1
-            self.net_profit += pnl
-            reason = f"🏆 ¡OPCIÓN BINARIA GANADA! {sym} {dir_clean}. Ganancia: +${pnl:.2f} (+{int(payout*100)}%)."
+            reason = f"IQ Option confirmó ganancia en {sym} {dir_clean}: +${pnl:.2f}."
         else:
-            result_type = "LOSS"
-            pnl = -round(invested, 2)
             self.total_losses += 1
-            self.net_profit += pnl
-            reason = f"🛡️ Opción binaria finalizada en {sym}. Pérdida controlada de inversión: -${invested:.2f}."
+            reason = f"IQ Option confirmó pérdida en {sym} {dir_clean}: -${abs(pnl):.2f}."
+        self.net_profit += pnl
 
         # Registrar resultado en SorosRiskManager y liberar exposición
         soros_res = self.soros_manager.register_trade_result(pnl, invested)
@@ -689,12 +696,13 @@ class BinaryOptionsStrategyEngine:
             "symbol": sym,
             "direction": dir_clean,
             "entry_price": entry_p,
-            "exit_price": cur_p,
+            "exit_price": exit_price,
             "amount": invested,
             "pnl": pnl,
             "result": result_type,
             "reason": reason,
             "timestamp": now,
+            "settlement_verified": True,
             "soros_step": soros_res.get("soros_step", 0),
             "daily_pnl": soros_res.get("daily_pnl", 0.0)
         }
@@ -717,19 +725,25 @@ class BinaryOptionsStrategyEngine:
                     "side": dir_clean,
                     "quantity": 1,
                     "entry_price": entry_p,
-                    "exit_price": cur_p,
+                    "exit_price": exit_price,
                     "invested_amount": invested,
                     "pnl": pnl,
-                    "pnl_percent": (payout * 100) if is_win else (-100.0 if not is_tie else 0.0),
+                    "pnl_percent": round((pnl / invested) * 100.0, 2) if invested > 0 else 0.0,
                     "result": res_str,
                     "reason": reason,
                     "exit_reason": reason,
+                    "learning_eligible": True,
+                    "settlement_verified": True,
                     "opened_at": datetime.datetime.fromtimestamp(open_ts).strftime("%Y-%m-%d %H:%M:%S"),
                     "closed_at": datetime.datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M:%S"),
                     "duration": f"{dur_sec}s"
                 })
             except Exception as e:
                 logger.error(f"Error registrando binaria en journal: {e}")
+
+        forget_result = getattr(self.iq, "forget_binary_option_result", None)
+        if callable(forget_result):
+            forget_result(pos["id"])
 
         # Notificación inmediata por Telegram
         self.telegram.notify_result(
