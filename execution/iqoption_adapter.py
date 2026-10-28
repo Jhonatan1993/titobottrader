@@ -1448,7 +1448,10 @@ class IQOptionAdapter:
     def get_candles(self, symbol: str, interval: int = 60, count: int = 40) -> list:
         """Obtiene velas reales en vivo directamente desde IQ Option vía WebSocket."""
         clean_sym = symbol.upper().replace("/", "").replace("_", "")
-        active_id = ACTIVE_ASSET_IDS.get(clean_sym, ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC", 76))
+        # Buscar ID exacto o con prefijo OTC
+        active_id = ACTIVE_ASSET_IDS.get(clean_sym)
+        if not active_id:
+            active_id = ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC") or ACTIVE_ASSET_IDS.get(f"{clean_sym}OTC", 76)
         
         if not self.ssid:
             return []
@@ -1487,10 +1490,10 @@ class IQOptionAdapter:
                     "name": "get-candles",
                     "version": "2.0",
                     "body": {
-                        "active_id": active_id,
-                        "split_normalization": 0,
-                        "count": count,
-                        "size": interval
+                        "active_id": int(active_id),
+                        "split_normalization": False,
+                        "count": int(count),
+                        "size": int(interval)
                     }
                 }
             }
@@ -1510,17 +1513,20 @@ class IQOptionAdapter:
                         if raw_c:
                             for c in raw_c:
                                 candles_list.append({
-                                    "time": c.get("from") or c.get("time") or int(time.time()),
+                                    "time": int(c.get("from") or c.get("time") or time.time()),
                                     "open": float(c.get("open", 0.0)),
-                                    "high": float(c.get("max") or c.get("high", 0.0)),
-                                    "low": float(c.get("min") or c.get("low", 0.0)),
+                                    "high": float(c.get("max") if "max" in c else c.get("high", 0.0)),
+                                    "low": float(c.get("min") if "min" in c else c.get("low", 0.0)),
                                     "close": float(c.get("close", 0.0)),
                                     "volume": float(c.get("volume", 0.0))
                                 })
                             break
                 except Exception:
                     pass
-            ws.close()
+            try:
+                ws.close()
+            except Exception:
+                pass
             return candles_list
         except Exception:
             return []

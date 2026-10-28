@@ -186,11 +186,25 @@ class BinaryOptionsStrategyEngine:
             if (upper_wick / total_range) >= 0.35 and upper_wick >= body:
                 has_bearish_rejection = True
 
+        # Soportes y Resistencias dinámicos estrictos de las últimas 30 velas (M1)
         if candles and len(candles) >= 3:
-            recent_lows = [float(c.get("low", c.get("close", price))) for c in candles[-15:]]
-            recent_highs = [float(c.get("high", c.get("close", price))) for c in candles[-15:]]
+            recent_candles = candles[-30:] if len(candles) >= 30 else candles
+            recent_lows = [float(c.get("low", c.get("close", price))) for c in recent_candles]
+            recent_highs = [float(c.get("high", c.get("close", price))) for c in recent_candles]
             support = min(recent_lows)
             resistance = max(recent_highs)
+
+        # Bandas de Bollinger cuantitativas (20 períodos, 2 dev std)
+        bb_upper = resistance
+        bb_lower = support
+        if candles and len(candles) >= 5:
+            bb_slice = candles[-20:] if len(candles) >= 20 else candles
+            bb_closes = [float(c.get("close", price)) for c in bb_slice]
+            bb_sma = sum(bb_closes) / len(bb_closes)
+            bb_var = sum((x - bb_sma) ** 2 for x in bb_closes) / len(bb_closes)
+            bb_std = math.sqrt(max(0.0, bb_var))
+            bb_upper = bb_sma + 2.0 * bb_std
+            bb_lower = bb_sma - 2.0 * bb_std
 
         change_pct = float(asset.get("change_percent", 0.0))
         trend_status = str(asset.get("trend_status", "")).upper()
@@ -208,23 +222,25 @@ class BinaryOptionsStrategyEngine:
                 "reason": f"Mercado lateral sin dirección en {symbol} (Medias comprimidas {ma_spread*100:.3f}%)."
             }
 
-        # Cálculo de Confluencia para CALL
+        # Cálculo de Confluencia Institucional para CALL
         call_score = 0
-        dist_support_pct = ((price - support) / price) * 100 if support > 0 else 99
-        if 0.0 <= dist_support_pct <= 0.08:
-            call_score += 35
-        elif dist_support_pct <= 0.20:
-            call_score += 20
-        elif dist_support_pct <= 0.40:
-            call_score += 10
+        dist_support_pct = ((price - support) / price) * 100 if support > 0 else 99.0
+        dist_bb_lower_pct = ((price - bb_lower) / price) * 100 if bb_lower > 0 else 99.0
 
-        if rsi <= 40.0:
+        if dist_support_pct <= 0.05 or price <= bb_lower * 1.0003:
+            call_score += 35
+        elif dist_support_pct <= 0.15 or dist_bb_lower_pct <= 0.10:
             call_score += 25
-        elif rsi <= 48.0:
+        elif dist_support_pct <= 0.30:
             call_score += 15
-        elif rsi <= 55.0 and (last_candle_green or change_pct > 0):
-            call_score += 10
-        elif rsi >= 70.0:
+
+        if rsi <= 38.0:
+            call_score += 30
+        elif rsi <= 46.0:
+            call_score += 20
+        elif rsi <= 54.0 and (last_candle_green or change_pct > 0):
+            call_score += 15
+        elif rsi >= 72.0:
             call_score -= 30
 
         if has_bullish_rejection:
@@ -232,40 +248,41 @@ class BinaryOptionsStrategyEngine:
         if last_candle_green:
             call_score += 10
 
-        if "BAJISTA" in trend_status:
-            call_score -= 35
-        elif "ALCISTA" in trend_status or "UP" in regime or change_pct > 0.05:
-            call_score += 15
-
         if price >= ema20 or ema20 >= ema50:
+            call_score += 15
+        if "ALCISTA" in trend_status or "UP" in regime or change_pct > 0.02:
             call_score += 10
+        elif "BAJISTA" in trend_status and not (has_bullish_rejection or dist_support_pct <= 0.05):
+            call_score -= 25
 
         if ai_dec in ["BUY", "CALL"]:
             call_score += 15
-        if ai_conf >= 75:
+        if ai_conf >= 60:
             call_score += 10
 
         # Bonificación si SMC coincide
         if smc_res.get("decision") == "CALL":
             call_score += 20
 
-        # Cálculo de Confluencia para PUT
+        # Cálculo de Confluencia Institucional para PUT
         put_score = 0
-        dist_resistance_pct = ((resistance - price) / price) * 100 if resistance > 0 else 99
-        if 0.0 <= dist_resistance_pct <= 0.08:
-            put_score += 35
-        elif dist_resistance_pct <= 0.20:
-            put_score += 20
-        elif dist_resistance_pct <= 0.40:
-            put_score += 10
+        dist_resistance_pct = ((resistance - price) / price) * 100 if resistance > 0 else 99.0
+        dist_bb_upper_pct = ((bb_upper - price) / price) * 100 if bb_upper > 0 else 99.0
 
-        if rsi >= 60.0:
+        if dist_resistance_pct <= 0.05 or price >= bb_upper * 0.9997:
+            put_score += 35
+        elif dist_resistance_pct <= 0.15 or dist_bb_upper_pct <= 0.10:
             put_score += 25
-        elif rsi >= 52.0:
+        elif dist_resistance_pct <= 0.30:
             put_score += 15
-        elif rsi >= 45.0 and (last_candle_red or change_pct < 0):
-            put_score += 10
-        elif rsi <= 30.0:
+
+        if rsi >= 62.0:
+            put_score += 30
+        elif rsi >= 54.0:
+            put_score += 20
+        elif rsi >= 46.0 and (last_candle_red or change_pct < 0):
+            put_score += 15
+        elif rsi <= 28.0:
             put_score -= 30
 
         if has_bearish_rejection:
@@ -273,17 +290,16 @@ class BinaryOptionsStrategyEngine:
         if last_candle_red:
             put_score += 10
 
-        if "ALCISTA" in trend_status:
-            put_score -= 35
-        elif "BAJISTA" in trend_status or "DOWN" in regime or change_pct < -0.05:
-            put_score += 15
-
         if price <= ema20 or ema20 <= ema50:
+            put_score += 15
+        if "BAJISTA" in trend_status or "DOWN" in regime or change_pct < -0.02:
             put_score += 10
+        elif "ALCISTA" in trend_status and not (has_bearish_rejection or dist_resistance_pct <= 0.05):
+            put_score -= 25
 
         if ai_dec in ["SELL", "PUT"]:
             put_score += 15
-        if ai_conf >= 75:
+        if ai_conf >= 60:
             put_score += 10
 
         # Bonificación si SMC coincide
@@ -296,19 +312,19 @@ class BinaryOptionsStrategyEngine:
                 "decision": "CALL",
                 "confidence": min(98, call_score),
                 "payout": payout,
-                "reason": f"🎯 Confluencia Alcista Sniper ({call_score} pts): Estructura favorable en {symbol}, rebote en soporte y RSI {rsi:.1f} con payout {int(payout*100)}%."
+                "reason": f"🎯 Confluencia Alcista Sniper ({call_score} pts): Soporte/BB ({support:.5f}), RSI {rsi:.1f} y estructura favorable en {symbol} con payout {int(payout*100)}%."
             }
         elif put_score >= self.min_confidence and put_score > call_score:
             return {
                 "decision": "PUT",
                 "confidence": min(98, put_score),
                 "payout": payout,
-                "reason": f"🎯 Confluencia Bajista Sniper ({put_score} pts): Estructura favorable en {symbol}, rechazo en resistencia y RSI {rsi:.1f} con payout {int(payout*100)}%."
+                "reason": f"🎯 Confluencia Bajista Sniper ({put_score} pts): Resistencia/BB ({resistance:.5f}), RSI {rsi:.1f} y estructura favorable en {symbol} con payout {int(payout*100)}%."
             }
 
         return {
             "decision": "HOLD",
-            "confidence": max(call_score, put_score),
+            "confidence": max(call_score, put_score, min(60, int(ai_conf * 0.7))),
             "payout": payout,
             "reason": f"Filtro de Calidad Activo: Confluencia insuficiente (Call: {call_score}p, Put: {put_score}p < {self.min_confidence}p requeridos)."
         }

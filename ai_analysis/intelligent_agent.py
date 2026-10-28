@@ -110,7 +110,6 @@ class IntelligentTradingAgent:
                 confidence = 96
                 action_type = "TOMA_GANANCIA"
                 reason_simple = f"🎯 ¡Meta cumplida en {name}! Cerrando con beneficio de +{pnl_pct:.2f}%."
-                self._add_thought(f"Ganancia asegurada: Vendiendo {symbol} ({name}) a ${price:,.2f} (+{pnl_pct:.2f}%).", "SUCCESS", symbol, "💰")
 
             # B. Salida por Stop Loss o Trailing Stop
             elif price <= current_sl:
@@ -120,10 +119,8 @@ class IntelligentTradingAgent:
                 action_type = "STOP_LOSS"
                 if current_sl >= entry_price:
                     reason_simple = f"🔒 Trailing Stop activado en {name}: Cerramos con beneficio retenido de +{pnl_pct:.2f}%."
-                    self._add_thought(f"Beneficio protegido: Trailing Stop ejecutado en {symbol}.", "SUCCESS", symbol, "🔒")
                 else:
                     reason_simple = f"🛡️ Escudo Stop-Loss en {name}: Pérdida mínima controlada de {pnl_pct:.2f}% para preservar capital."
-                    self._add_thought(f"Escudo activado: Stop-Loss ejecutado en {symbol}.", "WARNING", symbol, "🛡️")
 
             # C. Salida preventiva por sobrecompra extrema (RSI > 82) con ganancia
             elif rsi > 82 and pnl_pct > 1.4:
@@ -132,10 +129,8 @@ class IntelligentTradingAgent:
                 confidence = 90
                 action_type = "CIERRE_PREVENTIVO"
                 reason_simple = f"⚡ Sobrecompra extrema en {name} (RSI {rsi:.1f}). Aseguramos ganancias antes del pullback."
-                self._add_thought(f"Toma preventiva de beneficios en {symbol} (RSI {rsi:.1f}).", "SUCCESS", symbol, "⚡")
 
             # D. Salida por Cosecha Cuantitativa de Beneficios a la Bóveda (Profit Harvesting):
-            # Asegura ganancias sólidas intradía (+0.60% en TradFi / +1.20% en Cripto) y las deposita en la Bóveda protegida
             elif ((pos.get("category") in ["TRADFI_STOCK", "ETF"] and (pnl_pct >= 0.85 or (pnl_pct >= 0.55 and rsi >= 56.0))) or
                   (pos.get("category") not in ["TRADFI_STOCK", "ETF"] and (pnl_pct >= 1.80 or (pnl_pct >= 1.20 and rsi >= 60.0)))):
                 decision = "SELL"
@@ -143,7 +138,6 @@ class IntelligentTradingAgent:
                 confidence = 94
                 action_type = "COSECHA_BOVEDA"
                 reason_simple = f"🏛️ Cosecha a Bóveda en {name}: Asegurando beneficio de +{pnl_pct:.2f}% para blindar en la Bóveda."
-                self._add_thought(f"Ganancia asegurada: Vendiendo {symbol} ({name}) a ${price:,.2f} (+{pnl_pct:.2f}%). Trasladando ganancia a la Bóveda.", "SUCCESS", symbol, "🏛️")
 
             else:
                 decision = "HOLD"

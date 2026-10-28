@@ -116,9 +116,49 @@ AVAILABLE_ASSETS = [
         "name": "EUR / USD (OTC 24/7)",
         "category": "FOREX",
         "type": "Euro / Dólar OTC",
-        "icon": "🇪🇺",
-        "base_price": 1.1143,
+        "icon": "💶",
+        "base_price": 1.1232,
         "volatility": 0.0035,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "EURGBP-OTC",
+        "name": "EUR / GBP (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Euro / Libra OTC",
+        "icon": "🇪🇺",
+        "base_price": 0.8311,
+        "volatility": 0.0028,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "USDCHF-OTC",
+        "name": "USD / CHF (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Dólar / Franco Suizo OTC",
+        "icon": "🇨🇭",
+        "base_price": 0.8242,
+        "volatility": 0.0034,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "EURJPY-OTC",
+        "name": "EUR / JPY (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Euro / Yen OTC",
+        "icon": "🇯🇵",
+        "base_price": 175.74,
+        "volatility": 0.0050,
+        "trend_bias": 0.0001
+    },
+    {
+        "symbol": "NZDUSD-OTC",
+        "name": "NZD / USD (OTC 24/7)",
+        "category": "FOREX",
+        "type": "Dólar Neozelandés OTC",
+        "icon": "🇳🇿",
+        "base_price": 0.5085,
+        "volatility": 0.0040,
         "trend_bias": 0.0001
     },
     {
@@ -142,33 +182,23 @@ AVAILABLE_ASSETS = [
         "trend_bias": 0.0001
     },
     {
-        "symbol": "USDCHF-OTC",
-        "name": "USD / CHF (OTC 24/7)",
+        "symbol": "AUDUSD-OTC",
+        "name": "AUD / USD (OTC 24/7)",
         "category": "FOREX",
-        "type": "Dólar / Franco Suizo OTC",
-        "icon": "🇨🇭",
-        "base_price": 0.8288,
-        "volatility": 0.0034,
+        "type": "Dólar Australiano OTC",
+        "icon": "🇦🇺",
+        "base_price": 0.6550,
+        "volatility": 0.0038,
         "trend_bias": 0.0001
     },
     {
-        "symbol": "EURJPY-OTC",
-        "name": "EUR / JPY (OTC 24/7)",
+        "symbol": "GBPJPY-OTC",
+        "name": "GBP / JPY (OTC 24/7)",
         "category": "FOREX",
-        "type": "Euro / Yen OTC",
-        "icon": "🇯🇵",
-        "base_price": 175.93,
-        "volatility": 0.0050,
-        "trend_bias": 0.0001
-    },
-    {
-        "symbol": "NZDUSD-OTC",
-        "name": "NZD / USD (OTC 24/7)",
-        "category": "FOREX",
-        "type": "Dólar Neozelandés OTC",
-        "icon": "🇳🇿",
-        "base_price": 0.5685,
-        "volatility": 0.0040,
+        "type": "Libra / Yen OTC",
+        "icon": "🇬🇧",
+        "base_price": 210.23,
+        "volatility": 0.0065,
         "trend_bias": 0.0001
     }
 ]
@@ -231,6 +261,16 @@ class MultiAssetMarketFeed:
             sym = item["symbol"]
             price = self.live_cache.get(sym, item["base_price"])
             category = item.get("category", "TRADFI_STOCK")
+            if category == "FOREX":
+                dec_places = 3 if "JPY" in sym else 5
+                band = 0.0015 if "JPY" not in sym else 0.15
+            elif price < 1000:
+                dec_places = 2
+                band = price * 0.01
+            else:
+                dec_places = 1
+                band = price * 0.01
+
             self.assets[sym] = {
                 "symbol": sym,
                 "name": item["name"],
@@ -240,14 +280,14 @@ class MultiAssetMarketFeed:
                 "price": price,
                 "open_price": price,
                 "change_percent": 0.0,
-                "high_24h": round(price * 1.02, 2 if price < 1000 else 1),
-                "low_24h": round(price * 0.98, 2 if price < 1000 else 1),
+                "high_24h": round(price + band * 2, dec_places),
+                "low_24h": round(price - band * 2, dec_places),
                 "volume": random.randint(50000, 450000),
                 "ema20": price,
-                "ema50": price * 0.998,
-                "rsi": round(random.uniform(46, 56), 1),
-                "support": round(price * 0.97, 2 if price < 1000 else 1),
-                "resistance": round(price * 1.03, 2 if price < 1000 else 1),
+                "ema50": round(price - (band * 0.2), dec_places),
+                "rsi": round(random.uniform(48, 52), 1),
+                "support": round(price - band, dec_places),
+                "resistance": round(price + band, dec_places),
                 "volatility": item["volatility"],
                 "trend_bias": item["trend_bias"],
                 "trend_status": "ESTABLE (Consolidación)",
@@ -323,12 +363,7 @@ class MultiAssetMarketFeed:
                     self.live_cache["EURGBP"] = round(float(rates["GBP"]) / float(rates["EUR"]), 5)
                 if "EUR" in rates and "JPY" in rates and float(rates["EUR"]) > 0:
                     self.live_cache["EURJPY"] = round(float(rates["JPY"]) / float(rates["EUR"]), 3)
-                if "GBP" in rates and "JPY" in rates and float(rates["GBP"]) > 0:
-                    self.live_cache["GBPJPY"] = round(float(rates["JPY"]) / float(rates["GBP"]), 3)
-                # Replicar cotizaciones en vivo a los pares OTC para fines de semana
-                for fx_pair in ["EURUSD", "GBPUSD", "USDJPY", "USDCHF", "EURJPY", "NZDUSD"]:
-                    if fx_pair in self.live_cache:
-                        self.live_cache[f"{fx_pair}-OTC"] = self.live_cache[fx_pair]
+                # Los pares OTC conservan sus cotizaciones algorítmicas exclusivas de IQ Option
         except Exception:
             pass
         finally:
@@ -402,9 +437,6 @@ class MultiAssetMarketFeed:
             else:
                 asset["rsi"] = round(asset["rsi"] * 0.98 + 50.0 * 0.02, 1)
 
-            asset["support"] = round(min(asset["support"], new_price * 0.985), dec_places)
-            asset["resistance"] = round(max(asset["resistance"], new_price * 1.015), dec_places)
-
             if asset["price"] > asset["ema20"] and asset["ema20"] > asset["ema50"]:
                 asset["trend_status"] = "ALCISTA (Fuerte Demanda)"
             elif asset["price"] < asset["ema20"] and asset["ema20"] < asset["ema50"]:
@@ -445,8 +477,6 @@ class MultiAssetMarketFeed:
                     asset["low_24h"] = round(new_price * 0.99, dec_places)
                     asset["ema20"] = new_price
                     asset["ema50"] = new_price
-                    asset["support"] = round(new_price * 0.985, dec_places)
-                    asset["resistance"] = round(new_price * 1.015, dec_places)
                     asset["rsi"] = 50.0
                     last_c = self.candles[sym][-1]
 
@@ -469,6 +499,16 @@ class MultiAssetMarketFeed:
                     if len(self.candles[sym]) > 250:
                         self.candles[sym].pop(0)
 
+            # Recálculo dinámico de Soporte y Resistencia basado estrictamente en las últimas 30 velas M1
+            if sym in self.candles and len(self.candles[sym]) >= 3:
+                recent_c = self.candles[sym][-30:]
+                asset["support"] = round(min(float(c.get("low", c.get("close", new_price))) for c in recent_c), dec_places)
+                asset["resistance"] = round(max(float(c.get("high", c.get("close", new_price))) for c in recent_c), dec_places)
+            else:
+                band = 0.0015 if ("JPY" not in sym and category == "FOREX") else (0.15 if category == "FOREX" else price * 0.01)
+                asset["support"] = round(new_price - band, dec_places)
+                asset["resistance"] = round(new_price + band, dec_places)
+
         return self.assets
 
     def _ensure_candles(self, symbol: str):
@@ -484,16 +524,20 @@ class MultiAssetMarketFeed:
         current_p = self.live_cache.get(sym, self.assets.get(sym, {}).get("price", item["base_price"]))
         volat = item.get("volatility", 0.008)
 
-        # 1. Intentar velas reales de IQ Option para activos FOREX CFD
+        # 1. Intentar velas reales de IQ Option para activos FOREX y OTC
         if item.get("category") == "FOREX" and hasattr(self, "iqoption") and getattr(self.iqoption, "is_configured", False) and getattr(self.iqoption, "ssid", None):
             try:
-                iq_candles = self.iqoption.get_candles(sym, interval=60, count=100)
-                if iq_candles and len(iq_candles) > 10:
+                iq_candles = self.iqoption.get_candles(sym, interval=60, count=60)
+                if iq_candles and len(iq_candles) >= 5:
                     self.candles[sym] = iq_candles
                     latest = iq_candles[-1]
                     if sym in self.assets:
                         self.assets[sym]["price"] = latest["close"]
                         self.assets[sym]["source"] = "IQOPTION_REAL_FEED"
+                        dec = 3 if "JPY" in sym else 5
+                        recent_30 = iq_candles[-30:] if len(iq_candles) >= 30 else iq_candles
+                        self.assets[sym]["support"] = round(min(c["low"] for c in recent_30), dec)
+                        self.assets[sym]["resistance"] = round(max(c["high"] for c in recent_30), dec)
                     return
             except Exception:
                 pass

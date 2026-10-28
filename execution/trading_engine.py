@@ -25,8 +25,8 @@ class RealTimeTradingEngine:
     def __init__(self, initial_balance: Optional[float] = None, max_open_positions: int = 5, execution_environment: Optional[str] = None):
         self.broker_config = load_broker_config()
         # Modo exclusivo: IQ Option Forex CFD / Binarias
-        self.operating_mode = self.broker_config.get("operating_mode", "IQ_BINARY")
-        self.iq_mode = self.broker_config.get("iq_mode", "BINARY_OPTIONS")
+        self.operating_mode = self.broker_config.get("operating_mode", "IQ_CFD")
+        self.iq_mode = self.broker_config.get("iq_mode", "FOREX_CFD")
         self.execution_environment = execution_environment or self.broker_config.get("iqoption_environment", "PAPER")
         
         saved_paper = float(self.broker_config.get("paper_initial_balance", 10000.0))
@@ -164,6 +164,10 @@ class RealTimeTradingEngine:
             self.telegram.notify_startup(balance=self.cash_balance, environment=self.execution_environment)
         except Exception:
             pass
+
+        if getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS":
+            self.open_positions.clear()
+            self.clear_cooldown()
 
 
 
@@ -567,17 +571,13 @@ class RealTimeTradingEngine:
 
         if clean_m == "BINARY_OPTIONS":
             self.iqoption_risk_policy.zero_loss_blocks_entries = False
-            # Purgar posiciones CFD no confirmadas por el broker para garantizar aislamiento 0/1
-            broker_pos_ids = set()
-            if hasattr(self.feed, 'iqoption') and hasattr(self.feed.iqoption, 'open_broker_positions'):
-                broker_pos_ids = {str(p.get("id")) for p in self.feed.iqoption.open_broker_positions if p.get("id")}
-            for s in list(self.open_positions.keys()):
-                p = self.open_positions[s]
-                p_id = str(p.get("broker_order_id") or p.get("position_id") or "")
-                if not p_id or p_id not in broker_pos_ids:
-                    del self.open_positions[s]
+            # Purgar al 100% posiciones residuales de CFD y resetear cooldowns para habilitar los 16 pares
+            self.open_positions.clear()
+            self.clear_cooldown()
+            if hasattr(self, "binary_engine"):
+                self.binary_engine.last_trade_time.clear()
             self.agent._add_thought(
-                "⏱️ MODO IQ OPTION CONMUTADO: OPCIONES BINARIAS TURBO (1m-5m). Aislamiento total de Forex CFD activo (Gatekeeper 1 operación, Payout >= 80%).",
+                "⏱️ MODO IQ OPTION CONMUTADO: OPCIONES BINARIAS TURBO (1m). Aislamiento total activo, cooldowns reiniciados y 16 pares habilitados.",
                 "SUCCESS",
                 icon="⚡"
             )
@@ -799,17 +799,25 @@ class RealTimeTradingEngine:
         )
 
     def clear_cooldown(self, symbol: Optional[str] = None):
-        self.agent.learner.clear_cooldown(symbol)
+        if hasattr(self, "agent") and hasattr(self.agent, "learner"):
+            self.agent.learner.clear_cooldown(symbol)
         if symbol:
             self.last_exit_times.pop(symbol, None)
+            self._broker_order_failure_cooldown.pop(symbol, None)
+            if hasattr(self, "binary_engine") and hasattr(self.binary_engine, "last_trade_time"):
+                self.binary_engine.last_trade_time.pop(symbol, None)
         else:
             self.last_exit_times.clear()
+            self._broker_order_failure_cooldown.clear()
+            if hasattr(self, "binary_engine") and hasattr(self.binary_engine, "last_trade_time"):
+                self.binary_engine.last_trade_time.clear()
         if hasattr(self, "risk_manager"):
             self.risk_manager.clear_daily_losses(symbol)
         if hasattr(self.feed, "reset_forex_feed"):
             self.feed.reset_forex_feed()
-        msg = f"Cooldown restaurado para {symbol}" if symbol else "Todos los cooldowns y cotizaciones han sido reiniciados."
-        self.agent._add_thought(f"🔄 {msg}", "INFO", icon="✨")
+        msg = f"Cooldown restaurado para {symbol}" if symbol else "Todos los cooldowns han sido reiniciados."
+        if hasattr(self, "agent") and hasattr(self.agent, "_add_thought"):
+            self.agent._add_thought(f"🔄 {msg}", "INFO", icon="✨")
 
     def step(self):
         if hasattr(self, "risk_manager"):
@@ -1040,6 +1048,16 @@ class RealTimeTradingEngine:
         return decision.allowed
 
     def _evaluate_and_trade(self, market_state: Dict[str, Any]):
+        # Aislamiento absoluto en MODO OPCIONES BINARIAS:
+        if self.active_broker == "IQOPTION" and getattr(self, "iq_mode", "FOREX_CFD") == "BINARY_OPTIONS":
+            # Resolver opción binaria activa si ya expiró
+            if hasattr(self, "binary_engine") and self.binary_engine.has_active_position:
+                pos = self.binary_engine.open_position
+                if pos and time.time() >= pos.get("expiration_timestamp", 0):
+                    self.binary_engine.check_and_resolve_active_trade()
+            self._evaluate_and_trade_binary(market_state)
+            return
+
         # A. Evaluar salidas de posiciones abiertas para TODOS los brokers (incluyendo CFDs existentes)
         for sym, pos in list(self.open_positions.items()):
             pos_b = (pos.get("broker") or "IQOPTION").upper()
@@ -1256,8 +1274,13 @@ class RealTimeTradingEngine:
         trade_amount = 2000.0 if is_cop else 2.0
 
         now_dt = datetime.datetime.now(datetime.timezone.utc)
-        # Horario Forex Institucional: Cierra viernes 21:00 UTC y abre domingo 21:00 UTC
+        # Horario Forex Institucional IQ Option:
+        # 1. Fines de semana: Cierra viernes 21:00 UTC y abre domingo 21:00 UTC
         is_weekend = (now_dt.weekday() == 4 and now_dt.hour >= 21) or (now_dt.weekday() == 5) or (now_dt.weekday() == 6 and now_dt.hour < 21)
+        # 2. Noches entre semana: De 21:00 UTC a 06:00 UTC sólo cotizan pares OTC en IQ Option Binarias
+        is_night_otc = (now_dt.hour >= 21 or now_dt.hour < 6)
+        is_otc_time = is_weekend or is_night_otc
+
         second_in_minute = now_dt.second
         is_timing_window = (54 <= second_in_minute <= 59) or (0 <= second_in_minute <= 2)
         # En tests o llamadas directas de simulación, bypass de ventana de segundos
@@ -1268,9 +1291,14 @@ class RealTimeTradingEngine:
         has_otc_assets = any("-OTC" in s for s in market_state.keys())
         for sym, asset in market_state.items():
             cat = asset.get("category")
-            # Enrutamiento inteligente: En fines de semana dar prioridad absoluta a pares OTC si están disponibles
-            if is_weekend and has_otc_assets and "-OTC" not in sym:
+            # Enrutamiento inteligente: En horario OTC (noches y fines de semana), dar prioridad absoluta a pares OTC
+            if is_otc_time and has_otc_assets and "-OTC" not in sym:
                 continue
+            if not is_otc_time and "-OTC" in sym:
+                # En horario normal de mercado interbancario, preferir pares regulares si existen
+                regular_sym = sym.replace("-OTC", "")
+                if regular_sym in market_state:
+                    continue
             if cat not in ["FOREX", "OPTIONS", "CFD"] and "-OTC" not in sym:
                 continue
 
@@ -1588,6 +1616,10 @@ class RealTimeTradingEngine:
             return
         
         pos = self.open_positions.pop(symbol)
+        if pos.get("is_closing") or pos.get("vault_transferred"):
+            return
+        pos["is_closing"] = True
+        pos["vault_transferred"] = True
         actual_sym = pos.get("symbol", symbol)
         exit_price = asset["price"]
         quantity = pos["quantity"]
@@ -1602,17 +1634,17 @@ class RealTimeTradingEngine:
         if broker_id == "IQOPTION" and is_broker_live:
             pos_id = pos.get("broker_order_id") or pos.get("position_id") or pos.get("id")
             if not pos_id:
-                self.open_positions[symbol] = pos
-                self.agent._add_thought(
-                    f"⚠️ Cierre de {symbol} bloqueado: falta identificador de posición IQ Option. Reconciliación requerida.",
-                    "WARNING",
-                    symbol,
-                    "⚠️",
-                )
+                # Si no tiene ID de broker, es una posición residual sin respaldo real; purgarla definitivamente
                 return
 
             close_res = self.feed.iqoption.close_position(str(pos_id))
             if not close_res.get("success"):
+                err_str = str(close_res.get("error", "")).lower()
+                # Si IQ Option indica que la posición no existe o ya fue cerrada, liberarla inmediatamente
+                if "not found" in err_str or "closed" in err_str or "does not exist" in err_str:
+                    return
+                pos["is_closing"] = False
+                pos["vault_transferred"] = False
                 self.open_positions[symbol] = pos
                 self.agent._add_thought(
                     f"⚠️ Cierre IQ Option no confirmado para {symbol}: {close_res.get('error', 'sin confirmación')}. Posición retenida.",
