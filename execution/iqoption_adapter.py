@@ -1508,8 +1508,9 @@ class IQOptionAdapter:
 
         result = {"success": False, "error": "Tiempo de espera agotado al conectar para opción binaria"}
 
+        ws = None
         try:
-            ws = self._get_persistent_ws(timeout=12.0)
+            ws = websocket.create_connection(ws_url, header=headers, timeout=10.0, sslopt={"cert_reqs": ssl.CERT_NONE})
             now = time.time()
             
             # Handshake y sincronización con servidor IQ Option
@@ -1548,8 +1549,8 @@ class IQOptionAdapter:
                                     if self.environment != "LIVE_REAL":
                                         target_bal_id = self.practice_balance_id
                         break
-                    if d.get("name") == "authenticated":
-                        break
+                    elif d.get("name") in ["authenticated", "front", "timeSync", "heartbeat"]:
+                        continue
                 except Exception:
                     pass
 
@@ -1642,7 +1643,7 @@ class IQOptionAdapter:
                             if should_fallback:
                                 # Fallback 1: Si se intentó activo regular y existe OTC disponible, cambiar a OTC inmediatamente
                                 if not clean_sym.endswith("-OTC") and not clean_sym.endswith("OTC"):
-                                    otc_id = ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC", ACTIVE_ASSET_IDS.get(f"{clean_sym}OTC"))
+                                    otc_id = self.get_active_id(f"{clean_sym}-OTC") or self.get_active_id(f"{clean_sym}OTC")
                                     if otc_id and int(otc_id) != body_payload["msg"]["body"].get("active_id"):
                                         req_id_otc = f"bin_opt_otc_{int(time.time() * 1000)}"
                                         body_payload["request_id"] = req_id_otc
@@ -1700,7 +1701,7 @@ class IQOptionAdapter:
                         should_fallback = any(k in err_lower for k in ["closed", "not available", "not found", "active", "reject", "instrument"])
                         if should_fallback:
                             if not clean_sym.endswith("-OTC") and not clean_sym.endswith("OTC"):
-                                otc_id = ACTIVE_ASSET_IDS.get(f"{clean_sym}-OTC", ACTIVE_ASSET_IDS.get(f"{clean_sym}OTC"))
+                                otc_id = self.get_active_id(f"{clean_sym}-OTC") or self.get_active_id(f"{clean_sym}OTC")
                                 if otc_id and int(otc_id) != body_payload["msg"]["body"].get("active_id"):
                                     req_id_otc = f"bin_opt_otc_{int(time.time() * 1000)}"
                                     body_payload["request_id"] = req_id_otc
@@ -1728,15 +1729,15 @@ class IQOptionAdapter:
                     pass
 
             if not result.get("success") and "Tiempo de espera" in str(result.get("error", "")):
+                result["error"] += f" (Frames recibidos: {', '.join(captured_frames[:6])})"
+        except Exception as e:
+            result = {"success": False, "error": f"Error WebSocket Binarias: {str(e)}"}
+        finally:
+            if ws is not None:
                 try:
                     ws.close()
                 except Exception:
                     pass
-                self._persistent_ws = None
-                result["error"] += f" (Frames recibidos: {', '.join(captured_frames[:6])})"
-        except Exception as e:
-            self._persistent_ws = None
-            result = {"success": False, "error": f"Error WebSocket Binarias: {str(e)}"}
 
         return result
 

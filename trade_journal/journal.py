@@ -57,6 +57,15 @@ class TradeJournal:
         """
         Registra una operación completada y la guarda inmediatamente en el disco.
         """
+        pnl_val = round(float(trade_data.get("pnl", 0.0)), 2)
+        raw_res = trade_data.get("result")
+        if not raw_res:
+            raw_res = "GANANCIA" if pnl_val > 0 else ("EMPATE" if pnl_val == 0 else "PÉRDIDA CONTROLADA")
+
+        entry_raw = float(trade_data.get("entry_price", 0.0))
+        exit_raw = float(trade_data.get("exit_price", 0.0))
+        dec = 5 if abs(entry_raw) < 100 and abs(entry_raw) > 0 else 2
+
         trade = {
             "id": trade_data.get("id", f"TR-{len(self.trades)+1:04d}"),
             "symbol": trade_data.get("symbol"),
@@ -64,11 +73,12 @@ class TradeJournal:
             "icon": trade_data.get("icon", "📈"),
             "type": trade_data.get("type", "COMPRA / VENTA"),
             "quantity": trade_data.get("quantity", 1),
-            "entry_price": round(trade_data.get("entry_price", 0.0), 2),
-            "exit_price": round(trade_data.get("exit_price", 0.0), 2),
-            "invested_amount": round(trade_data.get("invested_amount", 0.0), 2),
-            "pnl": round(trade_data.get("pnl", 0.0), 2),
-            "pnl_percent": round(trade_data.get("pnl_percent", 0.0), 2),
+            "entry_price": round(entry_raw, dec),
+            "exit_price": round(exit_raw, dec),
+            "invested_amount": round(float(trade_data.get("invested_amount", 0.0)), 2),
+            "pnl": pnl_val,
+            "pnl_percent": round(float(trade_data.get("pnl_percent", 0.0)), 2),
+            "result": raw_res,
             "reason": trade_data.get("reason") or trade_data.get("exit_reason", "Cierre por estrategia de IA"),
             "exit_reason": trade_data.get("exit_reason") or trade_data.get("reason", "Cierre por estrategia de IA"),
             "exit_type": trade_data.get("exit_type", "SELL"),

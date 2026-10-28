@@ -1,6 +1,7 @@
 import sys
 import time
 import math
+import datetime
 import logging
 from typing import Dict, Any, List, Optional
 
@@ -625,12 +626,11 @@ class BinaryOptionsStrategyEngine:
         payout = pos.get("payout", 0.85)
 
         # Determinación matemática del resultado oficial
+        is_tie = (cur_p == entry_p) or math.isclose(cur_p, entry_p, abs_tol=1e-6)
         if dir_clean == "CALL":
-            is_win = cur_p > entry_p
-            is_tie = math.isclose(cur_p, entry_p, rel_tol=1e-5)
+            is_win = cur_p > entry_p and not is_tie
         else: # PUT
-            is_win = cur_p < entry_p
-            is_tie = math.isclose(cur_p, entry_p, rel_tol=1e-5)
+            is_win = cur_p < entry_p and not is_tie
 
         if is_tie:
             result_type = "TIE"
@@ -672,18 +672,31 @@ class BinaryOptionsStrategyEngine:
         # Registrar en Journal de transacciones si está disponible
         if self.journal and hasattr(self.journal, "record_trade"):
             try:
+                env = getattr(self.iq, "environment", "PAPER") if self.iq else "PAPER"
+                res_str = "GANANCIA" if is_win else ("EMPATE" if is_tie else "PÉRDIDA CONTROLADA")
+                open_ts = pos.get("entry_timestamp", now - 60)
+                dur_sec = max(1, int(now - open_ts))
                 self.journal.record_trade({
+                    "id": f"BIN-{pos['id']}",
                     "broker": "IQOPTION",
                     "category": "BINARY_OPTIONS",
+                    "environment": env,
                     "symbol": sym,
+                    "name": f"{sym} Turbo {dir_clean}",
+                    "type": f"BINARIA {dir_clean}",
                     "side": dir_clean,
+                    "quantity": 1,
                     "entry_price": entry_p,
                     "exit_price": cur_p,
                     "invested_amount": invested,
                     "pnl": pnl,
                     "pnl_percent": (payout * 100) if is_win else (-100.0 if not is_tie else 0.0),
+                    "result": res_str,
                     "reason": reason,
-                    "exit_reason": reason
+                    "exit_reason": reason,
+                    "opened_at": datetime.datetime.fromtimestamp(open_ts).strftime("%Y-%m-%d %H:%M:%S"),
+                    "closed_at": datetime.datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M:%S"),
+                    "duration": f"{dur_sec}s"
                 })
             except Exception as e:
                 logger.error(f"Error registrando binaria en journal: {e}")
