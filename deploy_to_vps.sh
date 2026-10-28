@@ -28,6 +28,9 @@ rsync -az \
   --exclude='/data/trades_history.json' \
   --exclude='/data/users.db' \
   --exclude='/data/iqoption_risk_state.json' \
+  --exclude='/data/.session_secret' \
+  --exclude='/data/optimal_params.json' \
+  --exclude='/data/security_audit.log' \
   --exclude='/data/ff_calendar.xml' \
   ./ "$VPS_HOST:$REMOTE_STAGE/"
 
