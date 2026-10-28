@@ -17,7 +17,7 @@ AVAILABLE_ASSETS = [
         "category": "FOREX",
         "type": "Euro / Dólar Estadounidense",
         "icon": "💶",
-        "base_price": 1.0850,
+        "base_price": 1.1143,
         "volatility": 0.0035,
         "trend_bias": 0.0001
     },
@@ -27,7 +27,7 @@ AVAILABLE_ASSETS = [
         "category": "FOREX",
         "type": "Libra Esterlina / Dólar",
         "icon": "💷",
-        "base_price": 1.2950,
+        "base_price": 1.3315,
         "volatility": 0.0040,
         "trend_bias": 0.0001
     },
@@ -37,7 +37,7 @@ AVAILABLE_ASSETS = [
         "category": "FOREX",
         "type": "Dólar / Yen Japonés",
         "icon": "💴",
-        "base_price": 152.30,
+        "base_price": 157.89,
         "volatility": 0.0045,
         "trend_bias": 0.0001
     },
@@ -47,7 +47,7 @@ AVAILABLE_ASSETS = [
         "category": "FOREX",
         "type": "Dólar Australiano / USD",
         "icon": "🇦🇺",
-        "base_price": 0.6550,
+        "base_price": 0.7029,
         "volatility": 0.0038,
         "trend_bias": 0.0001
     },
@@ -57,7 +57,7 @@ AVAILABLE_ASSETS = [
         "category": "FOREX",
         "type": "Dólar / Dólar Canadiense",
         "icon": "🇨🇦",
-        "base_price": 1.3850,
+        "base_price": 1.4041,
         "volatility": 0.0035,
         "trend_bias": 0.0001
     },
@@ -67,7 +67,7 @@ AVAILABLE_ASSETS = [
         "category": "FOREX",
         "type": "Dólar / Franco Suizo",
         "icon": "🇨🇭",
-        "base_price": 0.8650,
+        "base_price": 0.8288,
         "volatility": 0.0034,
         "trend_bias": 0.0001
     },
@@ -77,7 +77,7 @@ AVAILABLE_ASSETS = [
         "category": "FOREX",
         "type": "Dólar Neozelandés / USD",
         "icon": "🇳🇿",
-        "base_price": 0.6050,
+        "base_price": 0.5685,
         "volatility": 0.0040,
         "trend_bias": 0.0001
     },
@@ -87,7 +87,7 @@ AVAILABLE_ASSETS = [
         "category": "FOREX",
         "type": "Euro / Libra Esterlina",
         "icon": "🇪🇺",
-        "base_price": 0.8350,
+        "base_price": 0.8369,
         "volatility": 0.0028,
         "trend_bias": 0.0001
     },
@@ -97,7 +97,7 @@ AVAILABLE_ASSETS = [
         "category": "FOREX",
         "type": "Euro / Yen Japonés",
         "icon": "🇯🇵",
-        "base_price": 165.20,
+        "base_price": 175.93,
         "volatility": 0.0050,
         "trend_bias": 0.0001
     },
@@ -107,7 +107,7 @@ AVAILABLE_ASSETS = [
         "category": "FOREX",
         "type": "Libra / Yen Japonés",
         "icon": "🇬🇧",
-        "base_price": 197.80,
+        "base_price": 210.23,
         "volatility": 0.0065,
         "trend_bias": 0.0001
     },
@@ -117,7 +117,7 @@ AVAILABLE_ASSETS = [
         "category": "FOREX",
         "type": "Euro / Dólar OTC",
         "icon": "🇪🇺",
-        "base_price": 1.0850,
+        "base_price": 1.1143,
         "volatility": 0.0035,
         "trend_bias": 0.0001
     },
@@ -127,7 +127,7 @@ AVAILABLE_ASSETS = [
         "category": "FOREX",
         "type": "Libra / Dólar OTC",
         "icon": "💷",
-        "base_price": 1.2950,
+        "base_price": 1.3315,
         "volatility": 0.0040,
         "trend_bias": 0.0001
     },
@@ -137,7 +137,7 @@ AVAILABLE_ASSETS = [
         "category": "FOREX",
         "type": "Dólar / Yen OTC",
         "icon": "💴",
-        "base_price": 152.30,
+        "base_price": 157.89,
         "volatility": 0.0045,
         "trend_bias": 0.0001
     },
@@ -147,7 +147,7 @@ AVAILABLE_ASSETS = [
         "category": "FOREX",
         "type": "Dólar / Franco Suizo OTC",
         "icon": "🇨🇭",
-        "base_price": 0.8650,
+        "base_price": 0.8288,
         "volatility": 0.0034,
         "trend_bias": 0.0001
     },
@@ -157,7 +157,7 @@ AVAILABLE_ASSETS = [
         "category": "FOREX",
         "type": "Euro / Yen OTC",
         "icon": "🇯🇵",
-        "base_price": 165.20,
+        "base_price": 175.93,
         "volatility": 0.0050,
         "trend_bias": 0.0001
     },
@@ -167,7 +167,7 @@ AVAILABLE_ASSETS = [
         "category": "FOREX",
         "type": "Dólar Neozelandés OTC",
         "icon": "🇳🇿",
-        "base_price": 0.6050,
+        "base_price": 0.5685,
         "volatility": 0.0040,
         "trend_bias": 0.0001
     }
@@ -222,9 +222,14 @@ class MultiAssetMarketFeed:
 
     def _initialize_assets(self):
         now = time.time()
+        # Intentar cargar inmediatamente cotizaciones interbancarias reales para evitar saltos
+        try:
+            self._run_fx_fetch_worker()
+        except Exception:
+            pass
         for item in AVAILABLE_ASSETS:
             sym = item["symbol"]
-            price = item["base_price"]
+            price = self.live_cache.get(sym, item["base_price"])
             category = item.get("category", "TRADFI_STOCK")
             self.assets[sym] = {
                 "symbol": sym,
@@ -424,6 +429,27 @@ class MultiAssetMarketFeed:
             if sym in self.candles and len(self.candles[sym]) > 0:
                 current_minute = (int(now) // 60) * 60
                 last_c = self.candles[sym][-1]
+                prev_close = last_c.get("close", new_price)
+
+                # Detección y corrección de salto artificial por cambio de fuente (>1.5% de desviación)
+                if prev_close > 0 and abs(new_price - prev_close) / prev_close > 0.015:
+                    ratio = new_price / prev_close
+                    for c in self.candles[sym]:
+                        c["open"] = round(c["open"] * ratio, dec_places)
+                        c["high"] = round(c["high"] * ratio, dec_places)
+                        c["low"] = round(c["low"] * ratio, dec_places)
+                        c["close"] = round(c["close"] * ratio, dec_places)
+                    # Resincronizar indicadores técnicos para eliminar distorsión
+                    asset["open_price"] = new_price
+                    asset["high_24h"] = round(new_price * 1.01, dec_places)
+                    asset["low_24h"] = round(new_price * 0.99, dec_places)
+                    asset["ema20"] = new_price
+                    asset["ema50"] = new_price
+                    asset["support"] = round(new_price * 0.985, dec_places)
+                    asset["resistance"] = round(new_price * 1.015, dec_places)
+                    asset["rsi"] = 50.0
+                    last_c = self.candles[sym][-1]
+
                 last_c_time = last_c.get("time", current_minute)
                 if last_c_time == current_minute:
                     last_c["high"] = max(last_c.get("high", new_price), new_price)
@@ -455,13 +481,13 @@ class MultiAssetMarketFeed:
             return
 
         now = int(time.time())
-        current_p = self.assets.get(sym, {}).get("price", item["base_price"])
+        current_p = self.live_cache.get(sym, self.assets.get(sym, {}).get("price", item["base_price"]))
         volat = item.get("volatility", 0.008)
 
         # 1. Intentar velas reales de IQ Option para activos FOREX CFD
         if item.get("category") == "FOREX" and hasattr(self, "iqoption") and getattr(self.iqoption, "is_configured", False) and getattr(self.iqoption, "ssid", None):
             try:
-                iq_candles = self.iqoption.get_candles(sym, interval=60, count=60)
+                iq_candles = self.iqoption.get_candles(sym, interval=60, count=100)
                 if iq_candles and len(iq_candles) > 10:
                     self.candles[sym] = iq_candles
                     latest = iq_candles[-1]
@@ -473,7 +499,7 @@ class MultiAssetMarketFeed:
                 pass
 
         # 3. Generador estocástico continuo con mechas y cuerpos de alta resolución
-        num_bars = 90
+        num_bars = 100
         candles = []
         start_time = (now // 60 - num_bars) * 60
         

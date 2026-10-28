@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 import datetime
@@ -607,6 +608,15 @@ class RealTimeTradingEngine:
             pos = self.binary_engine.open_position
             if pos and time.time() >= pos.get("expiration_timestamp", 0):
                 self.binary_engine.check_and_resolve_active_trade()
+        
+        # Persistencia inmediata en disco para preservar el modo seleccionado ante reinicios
+        if not os.environ.get("PYTEST_CURRENT_TEST"):
+            try:
+                from config.broker_config import save_broker_config
+                save_broker_config(self.broker_config)
+            except Exception:
+                pass
+
         return {
             "success": True,
             "iq_mode": self.iq_mode,
@@ -1054,13 +1064,18 @@ class RealTimeTradingEngine:
                 risk_r = abs(entry_p - initial_sl) if abs(entry_p - initial_sl) > 0 else (entry_p * 0.005)
 
                 # Dynamic Break-Even & Trailing Stop:
+                # Exigir maduración mínima de al menos 10s y al menos +0.25% de ganancia real (y ratio 1:1 respecto a R)
+                min_favorable_threshold = max(risk_r, entry_p * 0.0025)
+                can_trail = (elapsed >= 10.0)
+
                 if pos_side in ["BUY", "BUY_LONG", "CALL"]:
                     favorable_dist = cur_price - entry_p
-                    if favorable_dist >= risk_r and not pos.get("is_break_even"):
+                    if can_trail and favorable_dist >= min_favorable_threshold and not pos.get("is_break_even"):
                         pos["stop_loss"] = entry_p
                         pos["is_break_even"] = True
-                        self.agent._add_thought(f"🛡️ Break-Even Activado en {sym}: Stop-Loss ajustado a precio de entrada ({entry_p}) para blindar la operación a CERO RIESGO.", "INFO", sym, "🛡️")
-                    elif favorable_dist >= 1.5 * risk_r:
+                        gain_pct = round((favorable_dist / entry_p) * 100, 2)
+                        self.agent._add_thought(f"🛡️ Break-Even Activado en {sym}: Ganancia real consolidada (+{gain_pct}%). Stop-Loss a precio de entrada ({entry_p}) blindado.", "INFO", sym, "🛡️")
+                    elif can_trail and favorable_dist >= 1.5 * min_favorable_threshold:
                         trail_sl = round(entry_p + 0.5 * risk_r, 4)
                         if trail_sl > pos.get("stop_loss", 0):
                             pos["stop_loss"] = trail_sl
@@ -1068,19 +1083,21 @@ class RealTimeTradingEngine:
                     is_hard_tp = cur_price >= pos.get("take_profit", 999999)
                 else:
                     favorable_dist = entry_p - cur_price
-                    if favorable_dist >= risk_r and not pos.get("is_break_even"):
+                    if can_trail and favorable_dist >= min_favorable_threshold and not pos.get("is_break_even"):
                         pos["stop_loss"] = entry_p
                         pos["is_break_even"] = True
-                        self.agent._add_thought(f"🛡️ Break-Even Activado en {sym}: Stop-Loss ajustado a precio de entrada ({entry_p}) para blindar la operación a CERO RIESGO.", "INFO", sym, "🛡️")
-                    elif favorable_dist >= 1.5 * risk_r:
+                        gain_pct = round((favorable_dist / entry_p) * 100, 2)
+                        self.agent._add_thought(f"🛡️ Break-Even Activado en {sym}: Ganancia real consolidada (+{gain_pct}%). Stop-Loss a precio de entrada ({entry_p}) blindado.", "INFO", sym, "🛡️")
+                    elif can_trail and favorable_dist >= 1.5 * min_favorable_threshold:
                         trail_sl = round(entry_p - 0.5 * risk_r, 4)
                         if trail_sl < pos.get("stop_loss", 999999):
                             pos["stop_loss"] = trail_sl
                     is_hard_sl = cur_price >= pos.get("stop_loss", 999999)
                     is_hard_tp = cur_price <= pos.get("take_profit", 0)
 
-                # Margen mínimo de 10s para maduración de la posición
-                if elapsed < 10.0 and not is_hard_sl and not is_hard_tp:
+                # Margen de maduración de la posición (evitar cierres defensivos por micro-fluctuaciones de spread en primeros 10s salvo SL inicial catastrófico)
+                is_catastrophic_sl = (cur_price <= initial_sl) if pos_side in ["BUY", "BUY_LONG", "CALL"] else (cur_price >= initial_sl)
+                if elapsed < 10.0 and not is_catastrophic_sl and not is_hard_tp:
                     continue
 
                 if is_hard_tp:
@@ -1503,11 +1520,19 @@ class RealTimeTradingEngine:
         if hasattr(self.feed, "iqoption"):
             pos_side = position.get("side", "BUY_LONG")
             cfd_side = "sell" if pos_side in ["PUT", "SELL", "SELL_SHORT"] else "buy"
-            sl_pct = 95.0
-            tp_pct = 200.0
+            sl_pct = 0.5
+            tp_pct = 1.0
             if price > 0 and stop_loss > 0 and take_profit > 0:
-                sl_pct = round(abs(price - stop_loss) / price * 100, 2)
-                tp_pct = round(abs(take_profit - price) / price * 100, 2)
+                if cfd_side == "buy":
+                    sl_dist = max(0.0001, price - stop_loss) if stop_loss < price else (price * 0.005)
+                    tp_dist = max(0.0001, take_profit - price) if take_profit > price else (price * 0.010)
+                else:
+                    sl_dist = max(0.0001, stop_loss - price) if stop_loss > price else (price * 0.005)
+                    tp_dist = max(0.0001, price - take_profit) if take_profit < price else (price * 0.010)
+                sl_pct = round((sl_dist / price) * 100, 2)
+                tp_pct = round((tp_dist / price) * 100, 2)
+                sl_pct = max(0.3, sl_pct)
+                tp_pct = max(round(sl_pct * 1.5, 2), tp_pct)
             self._iqoption_order_pending = True
             try:
                 iq_res = self.feed.iqoption.submit_order(

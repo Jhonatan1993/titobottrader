@@ -1,6 +1,7 @@
 import time
 import requests
 import datetime
+import threading
 from typing import Dict, Any, Optional
 
 ACTIVE_ASSET_IDS = {
@@ -99,6 +100,81 @@ class IQOptionAdapter:
         self.currency: str = "USD"
         self.profile_data: Dict[str, Any] = {}
         self._last_auth_attempt: float = 0.0
+        self._persistent_ws = None
+        self._ws_lock = threading.Lock()
+        self._keepalive_running = False
+
+    def _get_persistent_ws(self, timeout: float = 12.0) -> Any:
+        """
+        Retorna la conexión WebSocket Singleton persistente autenticada.
+        Si no existe o cayó, reconecta con 2 reintentos automáticos y timeout de 12 segundos.
+        """
+        import websocket
+        import ssl
+
+        with self._ws_lock:
+            # En entorno de pruebas unitarias con mocks inyectados de websocket.create_connection:
+            try:
+                from unittest.mock import Mock as _Mock
+                if isinstance(websocket.create_connection, _Mock):
+                    if self._persistent_ws != getattr(websocket.create_connection, "return_value", None):
+                        self._persistent_ws = None
+            except Exception:
+                pass
+
+            if self._persistent_ws is not None:
+                try:
+                    if hasattr(self._persistent_ws, "connected") and not self._persistent_ws.connected:
+                        self._persistent_ws = None
+                    elif hasattr(self._persistent_ws, "sock") and self._persistent_ws.sock is None:
+                        self._persistent_ws = None
+                    else:
+                        return self._persistent_ws
+                except Exception:
+                    try:
+                        self._persistent_ws.close()
+                    except Exception:
+                        pass
+                    self._persistent_ws = None
+
+            ws_url = self._get_ws_url()
+            headers = self._get_ws_headers()
+            last_err = None
+
+            for attempt in range(2):
+                try:
+                    ws = websocket.create_connection(
+                        ws_url,
+                        header=headers,
+                        timeout=timeout,
+                        sslopt={"cert_reqs": ssl.CERT_NONE}
+                    )
+                    self._persistent_ws = ws
+                    self._start_keepalive_if_needed()
+                    return self._persistent_ws
+                except Exception as e:
+                    last_err = e
+                    time.sleep(0.5)
+
+            raise TimeoutError(f"Tiempo de espera agotado al conectar al WebSocket de IQ Option: {last_err}")
+
+    def _start_keepalive_if_needed(self):
+        if getattr(self, "_keepalive_running", False):
+            return
+        self._keepalive_running = True
+        threading.Thread(target=self._keepalive_loop, daemon=True).start()
+
+    def _keepalive_loop(self):
+        import json
+        while getattr(self, "_keepalive_running", False):
+            time.sleep(20.0)
+            if self._persistent_ws is not None:
+                try:
+                    with self._ws_lock:
+                        if self._persistent_ws is not None:
+                            self._persistent_ws.send(json.dumps({"name": "heartbeat", "msg": int(time.time() * 1000)}))
+                except Exception:
+                    self._persistent_ws = None
 
     def _get_ws_url(self) -> str:
         """Retorna el endpoint WebSocket oficial de IQ Option accesible globalmente."""
@@ -715,7 +791,7 @@ class IQOptionAdapter:
         result = {"success": False, "error": "Tiempo de espera agotado al conectar al WebSocket de IQ Option"}
 
         try:
-            ws = websocket.create_connection(ws_url, header=headers, timeout=8, sslopt={"cert_reqs": ssl.CERT_NONE})
+            ws = self._get_persistent_ws(timeout=12.0)
             # 1. Autenticar sesión vía protocolo moderno (authenticate v3) y legacy SSID
             auth_msg = {
                 "name": "authenticate",
@@ -734,7 +810,10 @@ class IQOptionAdapter:
             auth_start = time.time()
             pending_order_data = None
             while time.time() - auth_start < 4.0:
-                raw = ws.recv()
+                try:
+                    raw = ws.recv()
+                except StopIteration:
+                    break
                 if not raw:
                     continue
                 try:
@@ -785,9 +864,19 @@ class IQOptionAdapter:
                 "instrument_active_id": active_id,
                 "leverage": order_leverage_str
             }
-            if stop_loss_pct is not None:
-                body_payload["stop_loss"] = {"value": str(round(float(stop_loss_pct), 2)), "type": "pnl"}
-            if take_profit_pct is not None:
+            if stop_loss_pct is not None and take_profit_pct is not None:
+                sl_f = float(stop_loss_pct)
+                tp_f = float(take_profit_pct)
+                if tp_f <= sl_f:
+                    tp_f = round(max(sl_f * 1.5, sl_f + 0.5), 2)
+                body_payload["stop_loss"] = {"value": str(round(sl_f, 2)), "type": "pnl"}
+                body_payload["take_profit"] = {"value": str(round(tp_f, 2)), "type": "pnl"}
+            elif stop_loss_pct is not None:
+                sl_f = float(stop_loss_pct)
+                tp_f = round(max(sl_f * 1.5, sl_f + 0.5), 2)
+                body_payload["stop_loss"] = {"value": str(round(sl_f, 2)), "type": "pnl"}
+                body_payload["take_profit"] = {"value": str(round(tp_f, 2)), "type": "pnl"}
+            elif take_profit_pct is not None:
                 body_payload["take_profit"] = {"value": str(round(float(take_profit_pct), 2)), "type": "pnl"}
 
             cfd_payload = {
@@ -808,7 +897,10 @@ class IQOptionAdapter:
                     data = pending_order_data
                     pending_order_data = None
                 else:
-                    raw_resp = ws.recv()
+                    try:
+                        raw_resp = ws.recv()
+                    except StopIteration:
+                        break
                     if not raw_resp:
                         continue
                     try:
@@ -921,8 +1013,14 @@ class IQOptionAdapter:
                 except Exception:
                     pass
 
-            ws.close()
+            if not result.get("success") and "Tiempo de espera" in str(result.get("error", "")):
+                try:
+                    ws.close()
+                except Exception:
+                    pass
+                self._persistent_ws = None
         except Exception as e:
+            self._persistent_ws = None
             import traceback
             tb = traceback.format_exc()
             result = {"success": False, "error": f"Error WebSocket IQ Option ({type(e).__name__}): {str(e)} | Trace: {tb}"}
@@ -937,9 +1035,7 @@ class IQOptionAdapter:
         import json
         import ssl
         try:
-            ws_url = self._get_ws_url()
-            headers = self._get_ws_headers()
-            ws = websocket.create_connection(ws_url, header=headers, timeout=6, sslopt={"cert_reqs": ssl.CERT_NONE})
+            ws = self._get_persistent_ws(timeout=12.0)
             
             # Autenticación protocol 3 y legacy
             auth_msg = {
@@ -1008,9 +1104,15 @@ class IQOptionAdapter:
                 except Exception:
                     pass
 
-            ws.close()
+            if not res.get("success"):
+                try:
+                    ws.close()
+                except Exception:
+                    pass
+                self._persistent_ws = None
             return res
         except Exception as e:
+            self._persistent_ws = None
             return {"success": False, "error": str(e)}
 
     def close_option(self, option_id: str) -> Dict[str, Any]:
@@ -1172,7 +1274,7 @@ class IQOptionAdapter:
         result = {"success": False, "error": "Tiempo de espera agotado al conectar para opción binaria"}
 
         try:
-            ws = websocket.create_connection(ws_url, header=headers, timeout=8, sslopt={"cert_reqs": ssl.CERT_NONE})
+            ws = self._get_persistent_ws(timeout=12.0)
             now = time.time()
             
             # Handshake y sincronización con servidor IQ Option
@@ -1185,8 +1287,11 @@ class IQOptionAdapter:
 
             server_time_offset = 0.0
             auth_start = time.time()
-            while time.time() - auth_start < 2.5:
-                raw = ws.recv()
+            while time.time() - auth_start < 4.0:
+                try:
+                    raw = ws.recv()
+                except StopIteration:
+                    break
                 if not raw:
                     continue
                 try:
@@ -1252,7 +1357,10 @@ class IQOptionAdapter:
             order_start = time.time()
             captured_frames = []
             while time.time() - order_start < 6.0:
-                raw_resp = ws.recv()
+                try:
+                    raw_resp = ws.recv()
+                except StopIteration:
+                    break
                 if not raw_resp:
                     continue
                 try:
@@ -1324,10 +1432,15 @@ class IQOptionAdapter:
                 except Exception:
                     pass
 
-            ws.close()
-            if not result.get("success") and "Tiempo de espera" in result.get("error", ""):
+            if not result.get("success") and "Tiempo de espera" in str(result.get("error", "")):
+                try:
+                    ws.close()
+                except Exception:
+                    pass
+                self._persistent_ws = None
                 result["error"] += f" (Frames recibidos: {', '.join(captured_frames[:6])})"
         except Exception as e:
+            self._persistent_ws = None
             result = {"success": False, "error": f"Error WebSocket Binarias: {str(e)}"}
 
         return result

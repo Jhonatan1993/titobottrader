@@ -5,9 +5,9 @@ from typing import Dict, Any
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "broker_config.json")
 
 DEFAULT_CONFIG: Dict[str, Any] = {
-    "operating_mode": "IQ_CFD",       # Único modo válido: Forex CFD de IQ Option
+    "operating_mode": "IQ_BINARY",    # Modo predeterminado: Opciones Binarias Turbo de IQ Option
     "active_broker": "IQOPTION",      # Broker único exclusivo
-    "iq_mode": "FOREX_CFD",
+    "iq_mode": "BINARY_OPTIONS",
     "iqoption_environment": "PAPER",  # PAPER por defecto; LIVE_REAL requiere armado explícito
     "iqoption_paper_initial_balance": 10000.0,
     "iqoption_initial_balance": 10000.0,
