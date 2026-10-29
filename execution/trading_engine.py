@@ -61,11 +61,9 @@ class RealTimeTradingEngine:
 
         # Configuración persistente de Circuit Breakers (Meta Ganancia & Límite Pérdida)
         target_val = float(self.broker_config.get("iqoption_profit_target_amount", self.broker_config.get("profit_target_amount", 50000.0)))
-        if target_val < 5000.0:
-            target_val = 50000.0
         loss_val = float(self.broker_config.get("iqoption_max_loss_amount", self.broker_config.get("max_loss_amount", 10000.0)))
-        if loss_val > 0 and loss_val < 2000.0:
-            loss_val = 10000.0
+        # Preserve the user's configured limits. The previous minimum silently
+        # raised small stop limits (for example $500) to $10,000 on every restart.
 
         self.profit_target_enabled = bool(self.broker_config.get("iqoption_profit_target_enabled", self.broker_config.get("profit_target_enabled", True)))
         self.profit_target_amount = target_val
@@ -1218,9 +1216,17 @@ class RealTimeTradingEngine:
 
             # GESTIÓN EXCLUSIVA IQ OPTION: FOREX CFD CON STOP-LOSS Y TAKE-PROFIT AUTOMÁTICOS
             if pos_b == "IQOPTION":
-                decision_data = self.agent.evaluate_asset(asset, self.open_positions)
+                snapshot = self.feed.get_verified_iq_market_snapshot(sym)
+                if not snapshot:
+                    continue
+                try:
+                    decision_asset = self.feed.enrich_asset_from_iq_snapshot(asset, snapshot)
+                except (TypeError, ValueError, KeyError):
+                    continue
+
+                decision_data = self.agent.evaluate_asset(decision_asset, self.open_positions)
                 pos_side = pos.get("side", "BUY_LONG").upper()
-                cur_price = asset["price"]
+                cur_price = snapshot["current_price"]
                 entry_p = pos.get("entry_price", cur_price)
                 initial_sl = pos.get("initial_stop_loss", pos.get("stop_loss", entry_p))
                 risk_r = abs(entry_p - initial_sl) if abs(entry_p - initial_sl) > 0 else (entry_p * 0.005)
@@ -1263,16 +1269,16 @@ class RealTimeTradingEngine:
                     continue
 
                 if is_hard_tp:
-                    self._execute_sell(sym, asset, {"decision": "SELL_TAKE_PROFIT", "reason_simple": f"🎯 Take-Profit alcanzado en {sym}: Objetivo de beneficio cumplido."})
+                    self._execute_sell(sym, decision_asset, {"decision": "SELL_TAKE_PROFIT", "reason_simple": f"🎯 Take-Profit alcanzado en {sym}: Objetivo de beneficio cumplido."})
                     continue
                 elif is_hard_sl:
-                    self._execute_sell(sym, asset, {"decision": "SELL_STOP_LOSS", "reason_simple": f"🛡️ Stop-Loss defensivo en {sym}: Preservando capital."})
+                    self._execute_sell(sym, decision_asset, {"decision": "SELL_STOP_LOSS", "reason_simple": f"🛡️ Stop-Loss defensivo en {sym}: Preservando capital."})
                     continue
                 elif decision_data.get("decision") in ["SELL", "PUT"] and pos_side in ["BUY", "BUY_LONG", "CALL"] and decision_data.get("confidence", 0) >= 85:
-                    self._execute_sell(sym, asset, {"decision": "SELL_REVERSAL", "reason_simple": f"⚡ Reversión técnica en {sym}: Asegurando rendimiento."})
+                    self._execute_sell(sym, decision_asset, {"decision": "SELL_REVERSAL", "reason_simple": f"⚡ Reversión técnica en {sym}: Asegurando rendimiento."})
                     continue
                 elif decision_data.get("decision") in ["BUY", "CALL"] and pos_side in ["SELL", "PUT"] and decision_data.get("confidence", 0) >= 85:
-                    self._execute_sell(sym, asset, {"decision": "SELL_REVERSAL", "reason_simple": f"⚡ Reversión técnica en {sym}: Asegurando rendimiento."})
+                    self._execute_sell(sym, decision_asset, {"decision": "SELL_REVERSAL", "reason_simple": f"⚡ Reversión técnica en {sym}: Asegurando rendimiento."})
                     continue
             else:
                 cur_price = asset["price"]
@@ -1363,7 +1369,17 @@ class RealTimeTradingEngine:
                 if (time.time() - self.last_exit_times.get(sym, 0)) < cooldown_dur:
                     continue
 
-                decision_data = self.agent.evaluate_asset(asset, self.open_positions)
+                decision_asset = asset
+                if b_id == "IQOPTION":
+                    snapshot = self.feed.get_verified_iq_market_snapshot(sym)
+                    if not snapshot:
+                        continue
+                    try:
+                        decision_asset = self.feed.enrich_asset_from_iq_snapshot(asset, snapshot)
+                    except (TypeError, ValueError, KeyError):
+                        continue
+
+                decision_data = self.agent.evaluate_asset(decision_asset, self.open_positions)
                 is_buy = (decision_data["decision"] == "BUY" and decision_data["confidence"] >= 75)
                 is_put = (b_id == "IQOPTION" and decision_data["decision"] in ["SELL", "PUT"] and decision_data["confidence"] >= 75)
 
@@ -1372,7 +1388,7 @@ class RealTimeTradingEngine:
                     exp_boost = self.agent.learner.get_asset_confidence_boost(sym)
                     priority_score = decision_data["confidence"] * exp_boost * (1.0 + volatility_weight * 0.5)
                     decision_data["op_trade_type"] = op_trade_type
-                    candidates.append((priority_score, sym, asset, decision_data))
+                    candidates.append((priority_score, sym, decision_asset, decision_data))
 
             if candidates:
                 candidates.sort(key=lambda x: x[0], reverse=True)
@@ -1394,9 +1410,10 @@ class RealTimeTradingEngine:
         """
         Lógica 100% aislada para Opciones Binarias Turbo / Blitz:
         - Gatekeeper estricto: máximo 1 sola posición activa a la vez.
-        - Filtro matemático de Payout >= 80%.
-        - Confluencia A+ (confianza >= 85%) con análisis de mecha y RSI.
-        - Cooldown forzado de 180s en el activo tras cierre.
+        - Payout mínimo de 85% y score técnico mínimo de 85/100.
+        - Sólo velas cerradas y cotización actual recientes de IQ Option.
+        - El score técnico es una heurística, no una probabilidad de acierto.
+        - Pausas globales y por activo/dirección después del cierre o rachas negativas.
         """
         if not hasattr(self, "binary_engine"):
             return
@@ -1415,6 +1432,10 @@ class RealTimeTradingEngine:
 
         # Gatekeeper único compartido por binarias y CFD.
         if not self._iqoption_can_open():
+            return
+
+        now = time.time()
+        if now < self.binary_engine.global_cooldown_until:
             return
 
         wallet = self.broker_wallets.get("IQOPTION", {})
@@ -1444,6 +1465,7 @@ class RealTimeTradingEngine:
 
         candidates = []
         scanned_evals = []
+        feed_blocked = 0
         has_otc_assets = any("-OTC" in s for s in market_state.keys())
         now_ts = time.time()
         for sym, asset in market_state.items():
@@ -1476,34 +1498,51 @@ class RealTimeTradingEngine:
             if cat not in ["FOREX", "OPTIONS", "CFD"] and "-OTC" not in sym:
                 continue
 
-            if self.execution_environment == "LIVE_REAL" and not self.feed.is_live_data_quality_ok(sym, interval_seconds=60):
+            snapshot = self.feed.get_verified_iq_market_snapshot(sym, interval_seconds=60)
+            if not snapshot:
+                feed_blocked += 1
                 continue
 
-            candles = getattr(self.feed, "candles", {}).get(sym, [])
-            eval_res = self.binary_engine.evaluate_asset(asset, candles)
+            try:
+                decision_asset = self.feed.enrich_asset_from_iq_snapshot(asset, snapshot)
+            except (TypeError, ValueError, KeyError):
+                feed_blocked += 1
+                continue
+
+            candles = snapshot["closed_candles"]
+            eval_res = self.binary_engine.evaluate_asset(decision_asset, candles)
             dec = eval_res.get("decision")
             conf = eval_res.get("confidence", 0)
+            if dec in ["CALL", "PUT"] and self.binary_engine.is_asset_direction_paused(sym, dec):
+                eval_res = dict(eval_res)
+                eval_res.update({
+                    "decision": "HOLD",
+                    "confidence": 0,
+                    "reason": f"{sym} {dec} pausado hasta mañana tras tres pérdidas verificadas consecutivas hoy.",
+                })
+                dec = "HOLD"
+                conf = 0
             scanned_evals.append((conf, sym, dec, eval_res))
 
             if dec in ["CALL", "PUT"] and conf >= self.binary_engine.min_confidence:
                 payout = eval_res.get("payout", 0.85)
                 score = conf * payout
-                candidates.append((score, sym, dec, asset, eval_res))
+                candidates.append((score, sym, dec, decision_asset, eval_res, snapshot))
 
         if candidates:
             candidates.sort(key=lambda x: x[0], reverse=True)
-            best_score, best_sym, best_dir, best_asset, best_eval = candidates[0]
+            best_score, best_sym, best_dir, best_asset, best_eval, best_snapshot = candidates[0]
 
             # Sincronización en Segundo 58: Abrir contrato al cierre de la vela actual (o inmediato en test)
             if is_timing_window or is_test_env:
                 trade_executed = False
-                for idx, (c_score, c_sym, c_dir, c_asset, c_eval) in enumerate(candidates):
-                    # 2. FILTRO DE CONFLUENCIA MÍNIMA ESTRICTA PARA DISPARO (>= 65%)
+                for idx, (c_score, c_sym, c_dir, c_asset, c_eval, c_snapshot) in enumerate(candidates):
+                    # 2. Umbral mínimo sobre puntuación heurística, no probabilidad calibrada.
                     c_conf = c_eval.get("confidence", 0)
                     if c_conf < self.binary_engine.min_confidence:
                         continue
 
-                    c_price = c_asset.get("price", 1.0)
+                    c_price = c_snapshot["current_price"]
                     c_thesis = c_eval.get("reason", "Confluencia Institucional SMC")
 
                     order_res = self.binary_engine.execute_binary_option(
@@ -1512,7 +1551,13 @@ class RealTimeTradingEngine:
                         amount=trade_amount,
                         duration_minutes=1,
                         entry_price=c_price,
-                        thesis_reason=c_thesis
+                        thesis_reason=c_thesis,
+                        signal_score=c_conf,
+                        signal_strategy=c_eval.get("signal_strategy", "CONFLUENCE"),
+                        signal_reason=c_thesis,
+                        entry_source="IQOPTION_REAL_FEED",
+                        entry_data_age_seconds=max(0.0, time.time() - float(c_snapshot["refreshed_at"])),
+                        entry_candle_time=int(c_snapshot["current_candle"]["time"]),
                     )
                     if order_res.get("success"):
                         real_oid = order_res.get("order_id", "EN_CURSO")
@@ -1548,7 +1593,7 @@ class RealTimeTradingEngine:
                             if iq_ad and hasattr(iq_ad, "_active_status_cache"):
                                 iq_ad._active_status_cache[c_sym] = False
 
-                            # Comprobar si hay un siguiente candidato calificado (>= 65%)
+                            # Comprobar si hay un siguiente candidato que supere el umbral técnico.
                             remaining = [
                                 other for other in candidates[idx+1:]
                                 if other[4].get("confidence", 0) >= self.binary_engine.min_confidence
@@ -1556,7 +1601,7 @@ class RealTimeTradingEngine:
                             if remaining:
                                 next_c = remaining[0]
                                 self.agent._add_thought(
-                                    f"⚠️ Activo {c_sym} suspendido en IQ Option ({err_msg}). Bloqueado 30m. Saltando de inmediato a respaldo #{idx+2}: {next_c[1]} ({next_c[2]} {next_c[4].get('confidence', 0)}%)...",
+                                    f"⚠️ Activo {c_sym} suspendido en IQ Option ({err_msg}). Bloqueado 30m. Saltando a respaldo #{idx+2}: {next_c[1]} ({next_c[2]}, score {next_c[4].get('confidence', 0)}/100)...",
                                     "WARNING",
                                     c_sym,
                                     "⚠️"
@@ -1586,7 +1631,7 @@ class RealTimeTradingEngine:
                 if (now_scan - self._last_timing_thought_ts) >= 6.0:
                     self._last_timing_thought_ts = now_scan
                     self.agent._add_thought(
-                        f"⏱️ [Sincronización Segundo 58] Confluencia detectada en {best_sym} ({best_dir} {best_eval.get('confidence',0)}%). "
+                        f"⏱️ [Sincronización Segundo 58] Confluencia detectada en {best_sym} ({best_dir}, score técnico {best_eval.get('confidence',0)}/100). "
                         f"Alineando al segundo 58 de la vela de 1m (segundo actual: {second_in_minute}).",
                         "INFO",
                         best_sym,
@@ -1603,10 +1648,16 @@ class RealTimeTradingEngine:
                     scanned_evals.sort(key=lambda x: x[0], reverse=True)
                     top_conf, top_sym, top_dec, top_res = scanned_evals[0]
                     self.agent._add_thought(
-                        f"⏱️ [Binarias Turbo] Escaneando {len(scanned_evals)} pares en vivo. Mejor activo: {top_sym} ({top_dec} {top_conf}% - Req: >= {self.binary_engine.min_confidence}%). Cartera 0/1 disponible.",
+                        f"⏱️ [Binarias Turbo] {len(scanned_evals)} activos con feed verificado; {feed_blocked} bloqueados por datos ausentes/obsoletos. Mejor: {top_sym} ({top_dec}, score {top_conf}/100; mínimo {self.binary_engine.min_confidence}/100). Cartera 0/1 disponible.",
                         "INFO",
                         top_sym,
                         "⏱️"
+                    )
+                elif feed_blocked:
+                    self.agent._add_thought(
+                        f"🛑 Entradas binarias bloqueadas: IQ Option no entrega velas cerradas y cotización actual verificables en {feed_blocked} activos. No se usan velas simuladas.",
+                        "WARNING",
+                        icon="🛑",
                     )
 
     def trigger_test_binary_trade(
@@ -2120,8 +2171,23 @@ class RealTimeTradingEngine:
             total_equity = self.get_broker_equity(active_b)
         initial_bal = wallet["initial_balance"]
         active_env = wallet.get("environment", self.execution_environment)
-        realized_stats = self.journal.get_statistics(broker=active_b, environment=active_env)
-        completed_trades = self.journal.get_trades(35, broker=active_b, environment=active_env)
+        if active_b == "IQOPTION" and is_binary:
+            realized_stats = self.journal.get_statistics(
+                broker=active_b,
+                environment=active_env,
+                category="BINARY_OPTIONS",
+                verified_only=True,
+            )
+            completed_trades = self.journal.get_trades(
+                35,
+                broker=active_b,
+                environment=active_env,
+                category="BINARY_OPTIONS",
+                verified_only=True,
+            )
+        else:
+            realized_stats = self.journal.get_statistics(broker=active_b, environment=active_env)
+            completed_trades = self.journal.get_trades(35, broker=active_b, environment=active_env)
         
         if active_b == "IQOPTION":
             # Para IQ Option (Cero bóveda artificial): El rendimiento real acumulado es la diferencia neta entre la equity actual y el capital base

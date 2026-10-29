@@ -18,12 +18,14 @@ class SorosRiskManager:
         base_stake: float = 10.0,
         soros_enabled: bool = False,
         max_soros_level: int = 1,
-        max_consecutive_losses: int = 3
+        max_consecutive_losses: int = 3,
+        max_daily_loss: float = 0.0
     ):
         self.base_stake = max(1.0, float(base_stake))
         self.soros_enabled = bool(soros_enabled)
         self.max_soros_level = max(0, int(max_soros_level))
         self.max_consecutive_losses = max(1, int(max_consecutive_losses))
+        self.max_daily_loss = max(0.0, float(max_daily_loss))
 
         self.current_date = self._get_today_str()
         self.daily_pnl = 0.0
@@ -63,6 +65,12 @@ class SorosRiskManager:
     def can_open_trade(self) -> Tuple[bool, str]:
         """Verifica si la gestión de riesgo autoriza una nueva operación."""
         self.check_day_rollover()
+
+        if self.max_daily_loss > 0 and self.daily_pnl <= -self.max_daily_loss:
+            return False, (
+                f"Límite diario de pérdida alcanzado ({self.daily_pnl:+.2f} <= "
+                f"-{self.max_daily_loss:.2f}); entradas bloqueadas hasta el siguiente día UTC."
+            )
 
         if self.consecutive_losses >= self.max_consecutive_losses:
             import time

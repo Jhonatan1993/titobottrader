@@ -3377,7 +3377,7 @@
                 if (resEl) resEl.innerText = `$${(data.resistance || 0).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })}`;
                 if (rsiEl) rsiEl.innerText = (data.rsi || 50.0).toFixed(1);
                 if (decEl) {
-                    decEl.innerText = `${data.ai_decision} (${data.ai_confidence || 50}%)`;
+                    decEl.innerText = `${data.ai_decision} (score ${data.ai_confidence || 50}/100)`;
                     decEl.style.color = (data.ai_decision === 'BUY') ? 'var(--emerald-win)' : ((data.ai_decision === 'SELL') ? 'var(--neon-rose)' : 'var(--theme-gold)');
                 }
 
@@ -4318,7 +4318,7 @@
                                 <div class="confidence-bar" style="flex:1; max-width:50px; height:4px; background:rgba(255,255,255,0.1); border-radius:2px; overflow:hidden;">
                                     <div class="confidence-fill" style="width:${item.ai_confidence || 50}%; height:100%; background:var(--emerald-win);"></div>
                                 </div>
-                                <span class="mono" style="font-size:9px; color:var(--text-muted);">${item.ai_confidence || 50}% conf.</span>
+                                <span class="mono" style="font-size:9px; color:var(--text-muted);">score ${item.ai_confidence || 50}/100</span>
                             </div>
                         </td>
                         <td>

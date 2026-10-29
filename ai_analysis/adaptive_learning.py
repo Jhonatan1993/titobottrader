@@ -53,8 +53,12 @@ class AdaptiveLearningEngine:
             and trade.get("category") in expected_categories
             and str(trade.get("environment", "")).upper() in {"PAPER", "LIVE_REAL"}
             and (
-                trade.get("learning_eligible") is True
-                or trade.get("settlement_verified") is True
+                trade.get("settlement_verified") is True
+                if self.product_mode == "BINARY_OPTIONS"
+                else (
+                    trade.get("learning_eligible") is True
+                    or trade.get("settlement_verified") is True
+                )
             )
             and trade.get("symbol")
             and isinstance(trade.get("pnl"), (int, float))
@@ -70,6 +74,10 @@ class AdaptiveLearningEngine:
             self.portfolio_max_drawdown = 0.0
             self.mastery_level = "🌱 Cadete Algorítmico"
             return {"status": f"Sin registros confiables para {self.product_mode}"}
+
+        # The journal inserts newest trades at index 0. Sort chronologically so the
+        # lookback below really selects the latest outcomes instead of the oldest ones.
+        trades.sort(key=lambda trade: str(trade.get("closed_at") or trade.get("opened_at") or ""))
 
         if len(trades) != self.total_patterns_learned:
             self._cleared_cooldown_syms.clear()
@@ -100,7 +108,8 @@ class AdaptiveLearningEngine:
             n_wins = len(wins)
             n_losses = len(losses)
             n_total = len(sym_trades)
-            win_rate = (n_wins / n_total) if n_total > 0 else 0.5
+            n_decisive = n_wins + n_losses
+            win_rate = (n_wins / n_decisive) if n_decisive > 0 else 0.5
 
             gross_profit = sum(t.get("pnl", 0.0) for t in wins)
             gross_loss = abs(sum(t.get("pnl", 0.0) for t in losses))
@@ -122,7 +131,7 @@ class AdaptiveLearningEngine:
 
             # Expectativa Matemática ($/trade y R)
             loss_rate = 1.0 - win_rate
-            expectancy = round((win_rate * avg_win) - (loss_rate * avg_loss), 2)
+            expectancy = round(sum(float(t.get("pnl", 0.0)) for t in sym_trades) / n_total, 2) if n_total else 0.0
             expectancy_r = round(expectancy / avg_loss, 2) if avg_loss > 0 else 0.0
 
             # Criterio de Kelly Fraccional (Quarter-Kelly con amortiguador defensivo)

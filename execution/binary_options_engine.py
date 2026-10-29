@@ -41,8 +41,10 @@ class BinaryOptionsStrategyEngine:
         self.open_position: Optional[Dict[str, Any]] = None
         self.last_trade_time: Dict[str, float] = {}
         self.cooldown_duration: float = 120.0 # 2 minutos de descanso post-operación
-        self.min_payout: float = 0.80 # 80% payout mínimo garantizado
-        self.min_confidence: int = 65 # Confluencia Institucional A+
+        self.global_cooldown_until: float = 0.0
+        self.asset_cooldown_until: Dict[str, float] = {}
+        self.min_payout: float = 0.85 # Exigir retorno favorable antes de admitir una señal
+        self.min_confidence: int = 85 # Puntuación heurística mínima; no es una probabilidad
         self.default_duration_min: int = 1 # 1 minuto (Turbo 60s)
         self.total_wins: int = 0
         self.total_losses: int = 0
@@ -52,14 +54,91 @@ class BinaryOptionsStrategyEngine:
         # Módulos Cuantitativos Institucionales
         self.smc_engine = SMCEngine()
         self.calendar_filter = EconomicCalendarFilter(window_minutes=15)
+        currency = str(getattr(iqoption_adapter, "currency", "USD")).upper()
+        base_stake = 2000.0 if currency == "COP" else 2.0
+        self.max_daily_loss = base_stake * 3.0
         self.soros_manager = SorosRiskManager(
-            base_stake=2.0,
+            base_stake=base_stake,
             soros_enabled=False,
             max_soros_level=0,
-            max_consecutive_losses=3
+            max_consecutive_losses=3,
+            max_daily_loss=self.max_daily_loss,
         )
         self.telegram = TelegramService.get_instance()
         self.disabled_assets: Dict[str, float] = {}
+        self._restore_daily_risk_state()
+
+    @staticmethod
+    def _parse_journal_time(value: Any) -> Optional[datetime.datetime]:
+        try:
+            parsed = datetime.datetime.fromisoformat(str(value))
+        except (TypeError, ValueError):
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+        return parsed.astimezone(datetime.timezone.utc)
+
+    def _verified_binary_history(self) -> List[Dict[str, Any]]:
+        trades = getattr(self.journal, "trades", []) if self.journal else []
+        verified = [
+            trade for trade in trades
+            if isinstance(trade, dict)
+            and trade.get("category") == "BINARY_OPTIONS"
+            and trade.get("settlement_verified") is True
+            and str(trade.get("environment", "")).upper() in {"PAPER", "LIVE_REAL"}
+        ]
+        verified.sort(key=lambda trade: self._parse_journal_time(trade.get("closed_at")) or datetime.datetime.min.replace(tzinfo=datetime.timezone.utc))
+        return verified
+
+    def is_asset_direction_paused(self, symbol: str, direction: str, loss_streak_limit: int = 3) -> bool:
+        """Pause a direction for the UTC day after three consecutive verified losses on it."""
+        today = datetime.datetime.now(datetime.timezone.utc).date()
+        target = str(direction).upper()
+        matching = []
+        for trade in self._verified_binary_history():
+            closed_at = self._parse_journal_time(trade.get("closed_at"))
+            raw_side = str(trade.get("type") or trade.get("direction") or "").upper()
+            if (
+                closed_at
+                and closed_at.date() == today
+                and str(trade.get("symbol", "")).upper() == str(symbol).upper()
+                and raw_side.endswith(target)
+            ):
+                matching.append(trade)
+        streak = 0
+        for trade in reversed(matching):
+            pnl = float(trade.get("pnl", 0.0) or 0.0)
+            if pnl < 0:
+                streak += 1
+            elif pnl > 0:
+                break
+        return streak >= max(1, int(loss_streak_limit))
+
+    def _restore_daily_risk_state(self) -> None:
+        """Rebuild today's binary risk counters from broker-settled journal rows on restart."""
+        today = datetime.datetime.now(datetime.timezone.utc).date()
+        todays = [
+            (trade, self._parse_journal_time(trade.get("closed_at")))
+            for trade in self._verified_binary_history()
+        ]
+        todays = [(trade, closed_at) for trade, closed_at in todays if closed_at and closed_at.date() == today]
+        self.soros_manager.daily_pnl = round(sum(float(trade.get("pnl", 0.0) or 0.0) for trade, _ in todays), 2)
+        self.soros_manager.daily_wins = sum(1 for trade, _ in todays if float(trade.get("pnl", 0.0) or 0.0) > 0)
+        self.soros_manager.daily_losses = sum(1 for trade, _ in todays if float(trade.get("pnl", 0.0) or 0.0) < 0)
+
+        loss_streak = 0
+        for trade, _ in reversed(todays):
+            pnl = float(trade.get("pnl", 0.0) or 0.0)
+            if pnl < 0:
+                loss_streak += 1
+            elif pnl > 0:
+                break
+        self.soros_manager.consecutive_losses = loss_streak
+
+        if todays:
+            last_trade, last_closed = todays[-1]
+            cooldown = 240.0 if float(last_trade.get("pnl", 0.0) or 0.0) < 0 else self.cooldown_duration
+            self.global_cooldown_until = max(0.0, last_closed.timestamp() + cooldown)
 
     def disable_asset(self, symbol: str, duration_seconds: float = 1800.0):
         """Deshabilita un activo temporalmente (ej. 30 min) si el broker reporta que no está disponible o suspendido."""
@@ -110,6 +189,8 @@ class BinaryOptionsStrategyEngine:
             "soros_enabled": self.soros_manager.soros_enabled,
             "consecutive_losses": self.soros_manager.consecutive_losses,
             "daily_pnl": round(self.soros_manager.daily_pnl, 2),
+            "max_daily_loss": round(self.max_daily_loss, 2),
+            "confidence_semantics": "heuristic_score_0_100",
             "economic_calendar": "ONLINE (ForexFactory XML)",
             "smc_engine": "ACTIVE (FVG + Order Blocks)"
         }
@@ -137,6 +218,15 @@ class BinaryOptionsStrategyEngine:
                 "payout": payout,
                 "reason": f"Activo {symbol} en lista de exclusión temporal (no disponible en IQ Option)."
             }
+
+        if self.learner and hasattr(self.learner, "is_asset_in_cooldown"):
+            if self.learner.is_asset_in_cooldown(symbol):
+                return {
+                    "decision": "HOLD",
+                    "confidence": 0,
+                    "payout": payout,
+                    "reason": f"Activo {symbol} pausado por racha reciente de pérdidas verificadas."
+                }
 
         # 0.05 Validación previa de disponibilidad en vivo (Evitar active is suspended)
         if hasattr(self, "iq") and self.iq and hasattr(self.iq, "is_asset_open"):
@@ -207,6 +297,15 @@ class BinaryOptionsStrategyEngine:
 
         # 4. Filtro de Cooldown por Activo
         time_since_last = now - self.last_trade_time.get(symbol, 0.0)
+        cooldown_until = self.asset_cooldown_until.get(symbol, 0.0)
+        if now < cooldown_until:
+            rem = int(cooldown_until - now)
+            return {
+                "decision": "HOLD",
+                "confidence": 20,
+                "payout": payout,
+                "reason": f"Pausa defensiva en {symbol} tras la liquidación reciente ({rem}s restantes)."
+            }
         if time_since_last < self.cooldown_duration:
             rem = int(self.cooldown_duration - time_since_last)
             return {
@@ -226,6 +325,8 @@ class BinaryOptionsStrategyEngine:
                     "decision": smc_res["decision"],
                     "confidence": smc_res["confidence"],
                     "payout": payout,
+                    "signal_strategy": "SMC",
+                    "confidence_semantics": "heuristic_score_0_100",
                     "reason": f"🏛️ [SMC Institucional] {smc_res['reason']}"
                 }
 
@@ -435,6 +536,8 @@ class BinaryOptionsStrategyEngine:
                 "decision": "CALL",
                 "confidence": min(98, final_call_score),
                 "payout": payout,
+                "signal_strategy": "REVERSAL_SNIPER" if reversal_call_score >= trend_call_score else "TREND_CONTINUATION",
+                "confidence_semantics": "heuristic_score_0_100",
                 "reason": final_call_reason or f"🎯 Confluencia Alcista ({final_call_score} pts) en {symbol}."
             }
         elif final_put_score >= self.min_confidence and final_put_score > final_call_score:
@@ -442,6 +545,8 @@ class BinaryOptionsStrategyEngine:
                 "decision": "PUT",
                 "confidence": min(98, final_put_score),
                 "payout": payout,
+                "signal_strategy": "REVERSAL_SNIPER" if reversal_put_score >= trend_put_score else "TREND_CONTINUATION",
+                "confidence_semantics": "heuristic_score_0_100",
                 "reason": final_put_reason or f"🎯 Confluencia Bajista ({final_put_score} pts) en {symbol}."
             }
 
@@ -449,6 +554,7 @@ class BinaryOptionsStrategyEngine:
             "decision": "HOLD",
             "confidence": max(0, final_call_score, final_put_score),
             "payout": payout,
+            "confidence_semantics": "heuristic_score_0_100",
             "reason": f"Filtro de Calidad Activo: Confluencia insuficiente (Call: {final_call_score}p, Put: {final_put_score}p < {self.min_confidence}p requeridos)."
         }
 
@@ -477,7 +583,13 @@ class BinaryOptionsStrategyEngine:
         duration_minutes: int = 1,
         entry_price: float = 0.0,
         thesis_reason: str = "Confluencia Cuantitativa Institucional",
-        is_manual_test: bool = False
+        is_manual_test: bool = False,
+        signal_score: Optional[int] = None,
+        signal_strategy: Optional[str] = None,
+        signal_reason: Optional[str] = None,
+        entry_source: Optional[str] = None,
+        entry_data_age_seconds: Optional[float] = None,
+        entry_candle_time: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Dispara una opción binaria en IQ Option aplicando gestión de riesgo Soros y filtro de correlación.
@@ -487,6 +599,10 @@ class BinaryOptionsStrategyEngine:
                 "success": False,
                 "error": "GATEKEEPER ACTIVO: Ya existe 1 opción binaria en curso. Operaciones múltiples estrictamente bloqueadas."
             }
+
+        can_open, risk_reason = self.soros_manager.can_open_trade()
+        if not can_open:
+            return {"success": False, "error": risk_reason}
 
         dir_clean = direction.upper()
         if dir_clean not in ["CALL", "PUT"]:
@@ -504,6 +620,16 @@ class BinaryOptionsStrategyEngine:
 
         payout = self.iq.get_payout(symbol) if hasattr(self.iq, "get_payout") else 0.85
         now = time.time()
+        if payout < self.min_payout:
+            return {
+                "success": False,
+                "error": f"Orden bloqueada: payout {payout:.0%} por debajo del mínimo {self.min_payout:.0%}."
+            }
+        if now < self.global_cooldown_until:
+            return {
+                "success": False,
+                "error": f"Pausa global de riesgo activa ({int(self.global_cooldown_until - now)}s restantes)."
+            }
         
         # Sincronización precisa a expiración respetando el dead-time de 30s de IQ Option:
         # Si cur_sec < 29: expira al cierre del minuto actual (+60s)
@@ -586,7 +712,13 @@ class BinaryOptionsStrategyEngine:
             "expiration_timestamp": int(exec_res.get("expiration_timestamp") or expiration_ts),
             "duration_minutes": duration_minutes,
             "status": "OPEN",
-            "thesis": thesis_reason
+            "thesis": thesis_reason,
+            "signal_score": signal_score,
+            "signal_strategy": signal_strategy,
+            "signal_reason": signal_reason or thesis_reason,
+            "entry_source": entry_source,
+            "entry_data_age_seconds": entry_data_age_seconds,
+            "entry_candle_time": entry_candle_time,
         }
         self.last_trade_time[symbol] = now
         self.soros_manager.register_currency_exposure(symbol, dir_clean)
@@ -704,7 +836,14 @@ class BinaryOptionsStrategyEngine:
             "timestamp": now,
             "settlement_verified": True,
             "soros_step": soros_res.get("soros_step", 0),
-            "daily_pnl": soros_res.get("daily_pnl", 0.0)
+            "daily_pnl": soros_res.get("daily_pnl", 0.0),
+            "signal_score": pos.get("signal_score"),
+            "signal_strategy": pos.get("signal_strategy"),
+            "signal_reason": pos.get("signal_reason"),
+            "payout": pos.get("payout"),
+            "entry_source": pos.get("entry_source"),
+            "entry_data_age_seconds": pos.get("entry_data_age_seconds"),
+            "entry_candle_time": pos.get("entry_candle_time"),
         }
 
         # Registrar en Journal de transacciones si está disponible
@@ -723,6 +862,7 @@ class BinaryOptionsStrategyEngine:
                     "name": f"{sym} Turbo {dir_clean}",
                     "type": f"BINARIA {dir_clean}",
                     "side": dir_clean,
+                    "direction": dir_clean,
                     "quantity": 1,
                     "entry_price": entry_p,
                     "exit_price": exit_price,
@@ -734,6 +874,13 @@ class BinaryOptionsStrategyEngine:
                     "exit_reason": reason,
                     "learning_eligible": True,
                     "settlement_verified": True,
+                    "signal_score": pos.get("signal_score"),
+                    "signal_strategy": pos.get("signal_strategy"),
+                    "signal_reason": pos.get("signal_reason"),
+                    "payout": pos.get("payout"),
+                    "entry_source": pos.get("entry_source"),
+                    "entry_data_age_seconds": pos.get("entry_data_age_seconds"),
+                    "entry_candle_time": pos.get("entry_candle_time"),
                     "opened_at": datetime.datetime.fromtimestamp(open_ts).strftime("%Y-%m-%d %H:%M:%S"),
                     "closed_at": datetime.datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M:%S"),
                     "duration": f"{dur_sec}s"
@@ -764,6 +911,8 @@ class BinaryOptionsStrategyEngine:
         # LIBERAR EL GATEKEEPER DE CUPO
         self.open_position = None
         cooldown_add = 240.0 if result_type == "LOSS" else self.cooldown_duration
-        self.last_trade_time[sym] = now + cooldown_add
+        self.last_trade_time[sym] = now
+        self.asset_cooldown_until[sym] = now + cooldown_add
+        self.global_cooldown_until = now + cooldown_add
         logger.info(f"🏁 RESOLUCIÓN BINARIA: {resolution_data['reason']}")
         return resolution_data

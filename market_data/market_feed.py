@@ -492,7 +492,7 @@ class MultiAssetMarketFeed:
                 for sym, asset in self.assets.items():
                     if asset.get("category") == "FOREX":
                         try:
-                            iq_c = self.iqoption.get_candles(sym, interval=60, count=30)
+                            iq_c = self.iqoption.get_candles(sym, interval=60, count=60)
                             if iq_c and len(iq_c) >= 5:
                                 for candle in iq_c:
                                     candle["source"] = "IQOPTION_REAL_FEED"
@@ -539,7 +539,7 @@ class MultiAssetMarketFeed:
                     # Prohibir precios sintéticos o random walk: si hay velas de IQ Option, usar su close real
                     if sym in self.candles and len(self.candles[sym]) > 0:
                         new_price = round(float(self.candles[sym][-1].get("close", asset.get("base_price", 1.0))), dec_places)
-                        asset["source"] = "IQOPTION_REAL_FEED"
+                        asset["source"] = str(self.candles[sym][-1].get("source", "UNKNOWN"))
                     else:
                         base_p = asset.get("base_price", asset.get("open_price", 1.0))
                         new_price = round(base_p, dec_places)
@@ -611,7 +611,9 @@ class MultiAssetMarketFeed:
                         "high": max(last_c["close"], new_price),
                         "low": min(last_c["close"], new_price),
                         "close": new_price,
-                        "volume": float(vol_delta)
+                        "volume": float(vol_delta),
+                        # A locally carried bar is not a broker candle.
+                        "source": "SIMULATION"
                     }
                     self.candles[sym].append(new_c)
                     if len(self.candles[sym]) > 250:
@@ -746,6 +748,125 @@ class MultiAssetMarketFeed:
             except (TypeError, ValueError):
                 continue
         return bool(closed and 0 <= now - (max(closed) + interval_seconds) <= max_age_seconds)
+
+    @staticmethod
+    def _candle_time_seconds(candle: Dict[str, Any]) -> Optional[int]:
+        try:
+            stamp = float(candle.get("time", 0))
+        except (TypeError, ValueError):
+            return None
+        if stamp > 10_000_000_000:
+            stamp /= 1000.0
+        return int(stamp) if stamp > 0 else None
+
+    def get_verified_iq_market_snapshot(
+        self,
+        symbol: str,
+        interval_seconds: int = 60,
+        min_closed_candles: int = 50,
+        max_quote_age_seconds: int = 20,
+        max_closed_age_seconds: int = 75,
+    ) -> Optional[Dict[str, Any]]:
+        """Return only a fresh IQ Option candle, a current-minute quote and closed history."""
+        sym = str(symbol).upper()
+        now = time.time()
+        refreshed_at = float(self._last_iq_candle_refresh.get(sym, 0.0))
+        quote_age = now - refreshed_at
+        if refreshed_at <= 0 or quote_age < 0 or quote_age > max_quote_age_seconds:
+            return None
+
+        broker_candles: List[Dict[str, Any]] = []
+        for raw in list(self.candles.get(sym, [])):
+            if str(raw.get("source", "")).upper() != "IQOPTION_REAL_FEED":
+                continue
+            stamp = self._candle_time_seconds(raw)
+            if stamp is None or stamp > now + 1:
+                continue
+            try:
+                candle = {
+                    "time": stamp,
+                    "open": float(raw["open"]),
+                    "high": float(raw["high"]),
+                    "low": float(raw["low"]),
+                    "close": float(raw["close"]),
+                    "volume": float(raw.get("volume", 0.0)),
+                    "source": "IQOPTION_REAL_FEED",
+                }
+            except (KeyError, TypeError, ValueError):
+                continue
+            if min(candle["open"], candle["high"], candle["low"], candle["close"]) <= 0:
+                continue
+            if candle["high"] < max(candle["open"], candle["close"]):
+                continue
+            if candle["low"] > min(candle["open"], candle["close"]):
+                continue
+            broker_candles.append(candle)
+
+        broker_candles.sort(key=lambda candle: candle["time"])
+        current_minute = (int(now) // interval_seconds) * interval_seconds
+        current = [c for c in broker_candles if c["time"] == current_minute]
+        closed = [c for c in broker_candles if c["time"] + interval_seconds <= now]
+        if not current or len(closed) < min_closed_candles:
+            return None
+        if now - (closed[-1]["time"] + interval_seconds) > max_closed_age_seconds:
+            return None
+
+        current_candle = current[-1]
+        return {
+            "symbol": sym,
+            "interval_seconds": interval_seconds,
+            "closed_candles": closed[-100:],
+            "current_candle": current_candle,
+            "current_price": current_candle["close"],
+            "refreshed_at": refreshed_at,
+            "quote_age_seconds": round(quote_age, 2),
+            "latest_closed_at": closed[-1]["time"] + interval_seconds,
+        }
+
+    @staticmethod
+    def enrich_asset_from_iq_snapshot(asset: Dict[str, Any], snapshot: Dict[str, Any]) -> Dict[str, Any]:
+        """Calculate strategy inputs from closed IQ Option candles rather than tick heuristics."""
+        closed = list(snapshot.get("closed_candles", []))
+        closes = [float(c["close"]) for c in closed]
+        if len(closes) < 50:
+            raise ValueError("Se requieren 50 velas IQ Option cerradas para calcular indicadores.")
+
+        def ema(values: List[float], period: int) -> float:
+            alpha = 2.0 / (period + 1.0)
+            value = values[0]
+            for item in values[1:]:
+                value = alpha * item + (1.0 - alpha) * value
+            return value
+
+        deltas = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
+        gains = [max(0.0, delta) for delta in deltas]
+        losses = [max(0.0, -delta) for delta in deltas]
+        period = 14
+        avg_gain = sum(gains[:period]) / period
+        avg_loss = sum(losses[:period]) / period
+        for gain, loss in zip(gains[period:], losses[period:]):
+            avg_gain = ((period - 1) * avg_gain + gain) / period
+            avg_loss = ((period - 1) * avg_loss + loss) / period
+        rsi = 100.0 if avg_loss == 0 else 100.0 - (100.0 / (1.0 + avg_gain / avg_loss))
+
+        recent = closed[-30:]
+        price = float(snapshot["current_price"])
+        ema20 = ema(closes, 20)
+        ema50 = ema(closes, 50)
+        result = dict(asset)
+        result.update({
+            "price": price,
+            "ema20": ema20,
+            "ema50": ema50,
+            "rsi": round(rsi, 2),
+            "support": min(float(c["low"]) for c in recent),
+            "resistance": max(float(c["high"]) for c in recent),
+            "change_percent": round((price - closes[-1]) / closes[-1] * 100.0, 5) if closes[-1] else 0.0,
+            "trend_status": "ALCISTA" if price > ema20 > ema50 else ("BAJISTA" if price < ema20 < ema50 else "ESTABLE"),
+            "source": "IQOPTION_REAL_FEED",
+            "last_update": snapshot.get("refreshed_at", time.time()),
+        })
+        return result
 
     def get_candles(self, symbol: str, timeframe: str = "1m", limit: int = 100) -> List[Dict[str, Any]]:
         sym = symbol.upper()

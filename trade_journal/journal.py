@@ -37,8 +37,10 @@ class TradeJournal:
             
             # 2. Guardar en CSV para abrir en Excel o Google Sheets
             if self.trades:
-                keys = ["id", "broker", "category", "environment", "symbol", "name", "type", "quantity", "entry_price", "exit_price", 
-                        "invested_amount", "pnl", "pnl_percent", "result", "reason", "opened_at", "closed_at", "duration"]
+                keys = ["id", "broker", "category", "environment", "symbol", "name", "type", "direction", "quantity", "entry_price", "exit_price",
+                        "invested_amount", "pnl", "pnl_percent", "result", "reason", "opened_at", "closed_at", "duration",
+                        "settlement_verified", "learning_eligible", "signal_score", "signal_strategy", "signal_reason", "payout",
+                        "entry_source", "entry_data_age_seconds", "entry_candle_time"]
                 with open(self.csv_file, "w", newline="", encoding="utf-8") as f:
                     writer = csv.DictWriter(f, fieldnames=keys, extrasaction='ignore')
                     writer.writeheader()
@@ -73,6 +75,7 @@ class TradeJournal:
             "name": trade_data.get("name", trade_data.get("symbol")),
             "icon": trade_data.get("icon", "📈"),
             "type": trade_data.get("type", "COMPRA / VENTA"),
+            "direction": trade_data.get("direction", trade_data.get("side")),
             "quantity": trade_data.get("quantity", 1),
             "entry_price": round(entry_raw, dec),
             "exit_price": round(exit_raw, dec) if exit_raw is not None else None,
@@ -88,6 +91,13 @@ class TradeJournal:
             "environment": trade_data.get("environment", "PAPER"),
             "learning_eligible": bool(trade_data.get("learning_eligible", False)),
             "settlement_verified": bool(trade_data.get("settlement_verified", False)),
+            "signal_score": trade_data.get("signal_score"),
+            "signal_strategy": trade_data.get("signal_strategy"),
+            "signal_reason": trade_data.get("signal_reason"),
+            "payout": trade_data.get("payout"),
+            "entry_source": trade_data.get("entry_source"),
+            "entry_data_age_seconds": trade_data.get("entry_data_age_seconds"),
+            "entry_candle_time": trade_data.get("entry_candle_time"),
             "opened_at": trade_data.get("opened_at", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
             "closed_at": trade_data.get("closed_at", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
             "duration": trade_data.get("duration", "2 min")
@@ -100,7 +110,14 @@ class TradeJournal:
         self._save_to_disk()
         return trade
 
-    def get_trades(self, limit: int = 50, broker: Optional[str] = None, environment: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_trades(
+        self,
+        limit: int = 50,
+        broker: Optional[str] = None,
+        environment: Optional[str] = None,
+        category: Optional[str] = None,
+        verified_only: bool = False,
+    ) -> List[Dict[str, Any]]:
         filtered = self.trades
         if broker and broker != "ALL":
             b_norm = broker.upper()
@@ -108,9 +125,20 @@ class TradeJournal:
         if environment:
             env_norm = environment.upper()
             filtered = [t for t in filtered if t.get("environment", "PAPER").upper() == env_norm]
+        if category:
+            category_norm = category.upper()
+            filtered = [t for t in filtered if str(t.get("category", "")).upper() == category_norm]
+        if verified_only:
+            filtered = [t for t in filtered if t.get("settlement_verified") is True]
         return filtered[:limit]
 
-    def get_statistics(self, broker: Optional[str] = None, environment: Optional[str] = None) -> Dict[str, Any]:
+    def get_statistics(
+        self,
+        broker: Optional[str] = None,
+        environment: Optional[str] = None,
+        category: Optional[str] = None,
+        verified_only: bool = False,
+    ) -> Dict[str, Any]:
         trades_pool = self.trades
         if broker and broker != "ALL":
             b_norm = broker.upper()
@@ -124,6 +152,14 @@ class TradeJournal:
                 t for t in trades_pool
                 if t.get("environment", "PAPER").upper() == env_norm
             ]
+        if category:
+            category_norm = category.upper()
+            trades_pool = [
+                t for t in trades_pool
+                if str(t.get("category", "")).upper() == category_norm
+            ]
+        if verified_only:
+            trades_pool = [t for t in trades_pool if t.get("settlement_verified") is True]
 
         if not trades_pool:
             return {
@@ -146,7 +182,8 @@ class TradeJournal:
         gross_profit = sum(t.get("pnl", 0.0) for t in wins)
         gross_loss = abs(sum(t.get("pnl", 0.0) for t in losses))
         
-        win_rate = round((len(wins) / total) * 100, 1) if total > 0 else 0.0
+        decisive_total = len(wins) + len(losses)
+        win_rate = round((len(wins) / decisive_total) * 100, 1) if decisive_total > 0 else 0.0
         profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else (gross_profit if gross_profit > 0 else 1.0)
         
         best_trade = max([t.get("pnl", 0.0) for t in trades_pool], default=0.0)
@@ -157,6 +194,7 @@ class TradeJournal:
             "winning_trades": len(wins),
             "losing_trades": len(losses),
             "tie_trades": len(ties),
+            "decisive_trades": decisive_total,
             "win_rate": win_rate,
             "total_realized_pnl": round(total_pnl, 2),
             "best_trade": round(best_trade, 2),
