@@ -213,7 +213,7 @@ class TelegramService:
                 "🔹 /status - Estado del bot, balance, PnL y operaciones en curso\n"
                 "🔹 /pause - Pausar temporalmente el escaneo de operaciones\n"
                 "🔹 /resume - Reanudar el escaneo y operativa automática\n"
-                "🔹 /reset - Reiniciar contadores diarios de PnL y rachas a cero\n"
+                "🔹 /reset - Deshabilitado: los límites diarios no se borran\n"
                 "🔹 /report - Generar y descargar el reporte CSV de operaciones\n"
                 "🔹 /stop - Parada de emergencia inmediata\n"
             )
@@ -226,43 +226,57 @@ class TelegramService:
             state = self.engine.get_state()
             wallet = state.get("wallets", {}).get("IQOPTION", {})
             bin_stat = state.get("binary_options", {})
+            iq_mode = getattr(self.engine, "iq_mode", "FOREX_CFD")
             is_running = self.engine.is_running
             run_status = "🟢 OPERANDO" if is_running else "⏸️ EN PAUSA"
             
+            open_positions = self.engine.open_positions
+            pos_info = "Ninguna"
+            if open_positions:
+                p_items = []
+                for p_sym, p_data in open_positions.items():
+                    side_icon = "🟢 LONG" if p_data.get("side", "BUY") in ["BUY", "BUY_LONG", "CALL"] else "🔻 SHORT"
+                    p_items.append(f"{p_sym} {side_icon} (PnL: {p_data.get('current_pnl', 0.0):+,.2f} USD)")
+                pos_info = " | ".join(p_items)
+
             msg = (
                 f"📊 <b>ESTADO EN VIVO DEL SISTEMA</b>\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"🌐 <b>Modalidad:</b> <code>{iq_mode}</code>\n"
                 f"⚡ <b>Estado Motor:</b> <code>{run_status}</code>\n"
                 f"💰 <b>Balance:</b> <code>${wallet.get('cash', 0.0):,.2f} USD</code>\n"
                 f"📈 <b>PnL Realizado:</b> <code>{wallet.get('realized_pnl', 0.0):+,.2f} USD</code>\n"
-                f"🎯 <b>Win Rate:</b> <code>{bin_stat.get('win_rate', 0)}%</code> "
-                f"({bin_stat.get('total_wins', 0)}W / {bin_stat.get('total_losses', 0)}L)\n"
-                f"⏱ <b>Operación Activa:</b> <code>{bin_stat.get('has_active_trade', False)}</code>"
+                f"💼 <b>Posiciones CFD:</b> <code>{pos_info}</code>\n"
             )
+            if iq_mode == "BINARY_OPTIONS":
+                msg += (
+                    f"🎯 <b>Win Rate Binarias:</b> <code>{bin_stat.get('win_rate', 0)}%</code> "
+                    f"({bin_stat.get('total_wins', 0)}W / {bin_stat.get('total_losses', 0)}L)\n"
+                )
             self.send_message(msg)
 
         elif cmd == "/pause":
             if self.engine:
-                self.engine.is_running = False
-                self.send_message("⏸️ <b>MOTOR PAUSADO</b>: No se abrirán nuevas operaciones hasta reanudar con /resume.")
+                self.engine.pause_trading()
+                self.send_message("⏸️ <b>MOTOR PAUSADO</b>: No se abrirán nuevas operaciones. Una posición abierta no se cierra automáticamente.")
 
         elif cmd == "/resume":
             if self.engine:
-                self.engine.is_running = True
-                self.send_message("▶️ <b>MOTOR REANUDADO</b>: Escaneo institucional activo.")
+                if self.engine.resume_trading():
+                    self.send_message("▶️ <b>MOTOR REANUDADO</b>: Entradas sujetas al control de riesgo.")
+                else:
+                    self.send_message("🛑 <b>REANUDACIÓN BLOQUEADA</b>: Revise los límites y la conciliación pendiente.")
 
         elif cmd == "/reset":
-            if self.engine and hasattr(self.engine, "binary_engine") and hasattr(self.engine.binary_engine, "soros_manager"):
-                self.engine.binary_engine.soros_manager.manual_reset()
-            self.send_message("🔄 <b>CONTADORES REINICIADOS</b>: PnL diario y rachas negativas restablecidos a cero.")
+            self.send_message("🛑 <b>REINICIO DESHABILITADO</b>: No se borran pérdidas ni rachas diarias.")
 
         elif cmd == "/report":
             self.send_daily_audit_report("Solicitud Manual de Usuario vía /report")
 
         elif cmd == "/stop":
             if self.engine:
-                self.engine.is_running = False
-                self.send_message("🛑 <b>PARADA DE EMERGENCIA</b>: Motor detenido preventivamente.")
+                self.engine.pause_trading()
+                self.send_message("🛑 <b>ENTRADAS PAUSADAS</b>: Las posiciones abiertas no se cierran automáticamente; verifíquelas en IQ Option.")
 
     # -------------------------------------------------------------
     # Programador Diario (23:55 Reporte)

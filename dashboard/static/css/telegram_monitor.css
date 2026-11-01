@@ -1,0 +1,76 @@
+:root {
+    color-scheme: dark;
+    font-family: system-ui, sans-serif;
+    background: #070b14;
+    color: #f8fafc;
+}
+
+body {
+    margin: 0;
+    padding: 24px;
+}
+
+main {
+    max-width: 680px;
+    margin: 0 auto;
+}
+
+a {
+    color: #38bdf8;
+}
+
+p {
+    color: #b6c4d7;
+    line-height: 1.5;
+}
+
+form {
+    background: #0d1424;
+    border: 1px solid #26344a;
+    border-radius: 12px;
+    padding: 22px;
+}
+
+label {
+    display: block;
+    margin: 16px 0 7px;
+    font-weight: 600;
+}
+
+input,
+select,
+button {
+    box-sizing: border-box;
+    font: inherit;
+    border: 1px solid #40516c;
+    border-radius: 7px;
+    padding: 10px;
+}
+
+input,
+select {
+    width: 100%;
+    color: #f8fafc;
+    background: #070b14;
+}
+
+button {
+    margin-top: 16px;
+    background: #0369a1;
+    color: white;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #075985;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+    outline: 2px solid #38bdf8;
+}
+
+#result {
+    overflow-wrap: anywhere;
+}

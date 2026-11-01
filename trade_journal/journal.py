@@ -2,6 +2,7 @@ import os
 import json
 import csv
 import datetime
+import tempfile
 from typing import List, Dict, Any, Optional
 
 class TradeJournal:
@@ -23,17 +24,34 @@ class TradeJournal:
         if os.path.exists(self.json_file):
             try:
                 with open(self.json_file, "r", encoding="utf-8") as f:
-                    self.trades = json.load(f)
-            except Exception as e:
-                print(f"Nota: No se pudo cargar historial previo: {e}")
-                self.trades = []
+                    trades = json.load(f)
+                if not isinstance(trades, list):
+                    raise ValueError("El historial debe ser una lista")
+                self.trades = trades
+            except (OSError, ValueError, TypeError) as e:
+                raise RuntimeError("Historial ilegible; se requiere revisión antes de iniciar") from e
 
     def _save_to_disk(self):
         """Guarda todas las operaciones en JSON y CSV de forma permanente."""
         try:
-            # 1. Guardar en JSON
-            with open(self.json_file, "w", encoding="utf-8") as f:
-                json.dump(self.trades, f, indent=2, ensure_ascii=False)
+            # Write the authoritative JSON through a temporary file in the
+            # same directory; never truncate the existing history on failure.
+            temp_path = None
+            try:
+                fd, temp_path = tempfile.mkstemp(prefix=".trades-", dir=self.storage_dir)
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    os.fchmod(f.fileno(), 0o600)
+                    json.dump(self.trades, f, indent=2, ensure_ascii=False, allow_nan=False)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(temp_path, self.json_file)
+                temp_path = None
+            finally:
+                if temp_path is not None:
+                    try:
+                        os.unlink(temp_path)
+                    except FileNotFoundError:
+                        pass
             
             # 2. Guardar en CSV para abrir en Excel o Google Sheets
             if self.trades:
@@ -45,8 +63,10 @@ class TradeJournal:
                     writer = csv.DictWriter(f, fieldnames=keys, extrasaction='ignore')
                     writer.writeheader()
                     writer.writerows(self.trades)
+            return True
         except Exception as e:
             print(f"Error guardando historial en disco: {e}")
+            return False
 
     @staticmethod
     def resolve_trade_broker(trade: Dict[str, Any]) -> str:
@@ -55,7 +75,7 @@ class TradeJournal:
             return str(b).upper()
         return "IQOPTION"
 
-    def record_trade(self, trade_data: Dict[str, Any]) -> Dict[str, Any]:
+    def record_trade(self, trade_data: Dict[str, Any], strict: bool = False) -> Dict[str, Any]:
         """
         Registra una operación completada y la guarda inmediatamente en el disco.
         """
@@ -107,7 +127,9 @@ class TradeJournal:
         if len(self.trades) > 50000:
             self.trades.pop()
             
-        self._save_to_disk()
+        saved = self._save_to_disk()
+        if strict and not saved:
+            raise OSError("No se pudo guardar el historial de operaciones")
         return trade
 
     def get_trades(

@@ -37,6 +37,9 @@ app.config['SESSION_COOKIE_SECURE'] = os.environ.get("SESSION_COOKIE_SECURE", "f
 app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(days=7)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 
+from dashboard.telegram_monitor_web import telegram_monitor_web
+app.register_blueprint(telegram_monitor_web)
+
 def get_client_ip():
     """Obtiene la IP resuelta por el proxy inverso de confianza, si está configurado."""
     return request.remote_addr or "127.0.0.1"
@@ -51,14 +54,20 @@ def add_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
-    response.headers['Content-Security-Policy'] = (
-        "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com data:; "
-        "img-src 'self' data: https:; "
-        "connect-src 'self';"
-    )
+    if request.endpoint == "telegram_monitor_web.page":
+        response.headers['Content-Security-Policy'] = (
+            "default-src 'none'; script-src 'self'; style-src 'self'; "
+            "connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+        )
+    else:
+        response.headers['Content-Security-Policy'] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com data:; "
+            "img-src 'self' data: https:; "
+            "connect-src 'self';"
+        )
     return response
 
 @app.before_request

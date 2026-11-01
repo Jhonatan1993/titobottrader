@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh IQ Option Demo balance snapshot
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=60s
+AccuracySec=1s
+Unit=titobot-demo-balance.service
+
+[Install]
+WantedBy=timers.target

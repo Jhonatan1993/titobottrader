@@ -2041,6 +2041,11 @@
                     title="Acceder al Panel de Control de Usuarios">
                     🛡️ Panel Admin
                 </a>
+                <a href="/admin/telegram" class="btn-action btn-ghost"
+                    style="border: 1px solid rgba(56, 189, 248, 0.35); color: var(--accent-cyan); text-decoration: none; display: inline-flex; align-items: center; gap: 5px; font-weight: 700;"
+                    title="Configurar alertas del monitor de Telegram">
+                    ✈️ Alertas Telegram
+                </a>
                 {% endif %}
 
                 <div
@@ -4698,7 +4703,7 @@
                 const data = await res.json();
                 if (data.success) {
                     if (data.connected) {
-                        alert("✅ ¡Conexión Exitosa con IQ Option!\n\nUsuario: " + (data.user || email) + "\nSaldo sincronizado en vivo: $" + Number(data.balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2}) + " USD\n\nEl bot ahora está sincronizado directamente con tu cuenta.");
+                        alert("✅ ¡Conexión Exitosa con IQ Option!\n\nUsuario: " + (data.user || email) + "\nSaldo sincronizado en vivo: $" + Number(data.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }) + " USD\n\nEl bot ahora está sincronizado directamente con tu cuenta.");
                     } else if (data.error) {
                         alert("⚠️ Credenciales guardadas, pero IQ Option respondió:\n" + data.error + "\n\nTip: Si IQ Option bloquea la IP del VPS o requiere 2FA, ingresa tu Token SSID de sesión para conectar directamente sin restricciones.");
                     } else {

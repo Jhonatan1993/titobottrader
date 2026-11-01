@@ -18,7 +18,12 @@ ASSET_RISK_PROFILES = {
     "NZDUSD": {"sl_pct": 0.0040, "tp_pct": 0.0080, "vol_type": "Forex Mayor - Oceanía"},
     "EURGBP": {"sl_pct": 0.0030, "tp_pct": 0.0060, "vol_type": "Cruce Forex - Europeo"},
     "EURJPY": {"sl_pct": 0.0045, "tp_pct": 0.0090, "vol_type": "Cruce Forex - Volatilidad Media"},
-    "GBPJPY": {"sl_pct": 0.0055, "tp_pct": 0.0110, "vol_type": "Cruce Forex - Alta Volatilidad"}
+    "GBPJPY": {"sl_pct": 0.0055, "tp_pct": 0.0110, "vol_type": "Cruce Forex - Alta Volatilidad"},
+    # === COMMODITIES & WALL STREET (R:R mínimo 2.0:1) ===
+    "XAUUSD": {"sl_pct": 0.0060, "tp_pct": 0.0120, "vol_type": "Commodity - Oro Spot"},
+    "AAPL": {"sl_pct": 0.0080, "tp_pct": 0.0160, "vol_type": "Wall Street - Apple CFD"},
+    "TSLA": {"sl_pct": 0.0120, "tp_pct": 0.0240, "vol_type": "Wall Street - Tesla CFD"},
+    "NVDA": {"sl_pct": 0.0120, "tp_pct": 0.0240, "vol_type": "Wall Street - Nvidia CFD"}
 }
 
 class IntelligentTradingAgent:
@@ -75,6 +80,8 @@ class IntelligentTradingAgent:
         rsi = float(asset.get("rsi", 50.0))
         ema20 = float(asset.get("ema20", price))
         ema50 = float(asset.get("ema50", price))
+        ema200 = float(asset.get("ema200", asset.get("ema_trend", 0.0)))
+        atr = float(asset.get("atr", 0.0))
         support = float(asset.get("support", price * 0.98))
         resistance = float(asset.get("resistance", price * 1.02))
         name = asset.get("name", symbol)
@@ -249,6 +256,13 @@ class IntelligentTradingAgent:
         elif ema20 >= ema50 * 0.996:
             trend_score += 7
 
+        # Filtro Institucional Macro EMA 200:
+        if ema200 > 0:
+            if price < ema200:
+                trend_score = max(0, trend_score - 15)  # Penalizar compra bajo la media de 200
+            elif price >= ema200 and ema20 >= ema50:
+                trend_score = min(30, trend_score + 5)   # Bonificación por tendencia macro alcista
+
         # 2. Impulso y Momentum RSI (0 - 30 pts): Rango óptimo de impulso 45-62
         rsi_score = 0
         if 46.0 <= rsi <= 60.0:
@@ -296,6 +310,13 @@ class IntelligentTradingAgent:
             bear_trend_score += 15
         elif ema20 <= ema50 * 1.004:
             bear_trend_score += 7
+
+        # Filtro Institucional Macro EMA 200:
+        if ema200 > 0:
+            if price > ema200:
+                bear_trend_score = max(0, bear_trend_score - 15)  # Penalizar venta sobre la media de 200
+            elif price <= ema200 and ema20 <= ema50:
+                bear_trend_score = min(30, bear_trend_score + 5)   # Bonificación por tendencia macro bajista
 
         # 2. Impulso y Momentum Bajista (0 - 30 pts)
         bear_rsi_score = 0
@@ -363,6 +384,33 @@ class IntelligentTradingAgent:
         final_conf = adjusted_conf_bear if decision == "SELL" else adjusted_conf
         final_score = adjusted_conf_bear if decision == "SELL" else adjusted_conf
 
+        # Cálculo dinámico institucional de SL y TP con Ratio R:R mínimo 1:2.0
+        decimals = 4 if price < 10.0 else (2 if price < 1000 else 1)
+        if decision == "SELL":
+            if atr > 0:
+                final_sl = round(price + (1.5 * atr), decimals)
+                final_tp = round(price - (3.0 * atr), decimals)
+            else:
+                sl_p = adaptive_levels.get("sl_pct", profile.get("sl_pct", 0.005))
+                tp_p = max(sl_p * 2.0, adaptive_levels.get("tp_pct", profile.get("tp_pct", 0.010)))
+                final_sl = round(price * (1.0 + sl_p), decimals)
+                final_tp = round(price * (1.0 - tp_p), decimals)
+            if support and support < price:
+                capped_tp = round(support * 1.002, decimals)
+                if capped_tp < price * 0.995:
+                    final_tp = max(final_tp, capped_tp)
+        else:
+            if atr > 0:
+                final_sl = round(price - (1.5 * atr), decimals)
+                final_tp = round(price + (3.0 * atr), decimals)
+            else:
+                final_sl = suggested_sl
+                final_tp = suggested_tp
+            if resistance and resistance > price:
+                capped_tp = round(resistance * 0.998, decimals)
+                if capped_tp > price * 1.005:
+                    final_tp = min(final_tp, capped_tp)
+
         return {
             "symbol": symbol,
             "name": name,
@@ -373,8 +421,8 @@ class IntelligentTradingAgent:
             "score": final_score,
             "reason_simple": reason_simple,
             "price": price,
-            "take_profit": suggested_tp,
-            "stop_loss": suggested_sl,
+            "take_profit": final_tp,
+            "stop_loss": final_sl,
             "budget_percent": kelly_budget,
             "regime": regime_info["regime"],
             "regime_tag": regime_info["tag"]

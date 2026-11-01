@@ -4,6 +4,7 @@ import datetime
 import threading
 from typing import Dict, Any, Optional
 from config.broker_config import live_trading_armed, live_cfd_execution_verified
+from execution.practice_balance_capture import capture_practice_balance
 
 ACTIVE_ASSET_IDS = {
     # Forex Turbo / Binarias (Lunes a Viernes)
@@ -92,6 +93,7 @@ CFD_ALLOWED_SYMBOLS = frozenset({
     "EURUSD", "EURGBP", "EURJPY", "USDJPY", "GBPJPY", "GBPUSD", "AUDCAD",
     "AUDJPY", "AUDUSD", "GBPAUD", "GBPNZD", "NZDCAD", "AUDCHF", "NZDUSD",
     "GBPCAD", "AUDNZD", "EURNZD", "USDCHF", "USDCAD", "CHFJPY", "CADCHF", "EURAUD",
+    "XAUUSD", "GOLD", "AAPL", "TSLA", "NVDA", "AMZN", "MSFT", "BTCUSD", "ETHUSD",
 })
 
 class IQOptionAdapter:
@@ -267,6 +269,11 @@ class IQOptionAdapter:
                         msg = data.get("msg", {})
                         if isinstance(msg, dict):
                             self.profile_data.update(msg)
+                            try:
+                                capture_practice_balance(msg)
+                            except Exception:
+                                # Optional monitoring must never affect trading.
+                                pass
                             self.currency = msg.get("currency", self.currency)
                             balances = msg.get("balances", [])
                             for b in balances:
@@ -352,6 +359,11 @@ class IQOptionAdapter:
                     if msg_name == "profile" and not found_profile:
                         if isinstance(msg_body, dict):
                             self.profile_data.update(msg_body)
+                            try:
+                                capture_practice_balance(msg_body)
+                            except Exception:
+                                # Optional monitoring must never affect trading.
+                                pass
                             self.currency = msg_body.get("currency", self.currency)
                             balances = msg_body.get("balances", [])
                             for b in balances:
@@ -878,9 +890,12 @@ class IQOptionAdapter:
                             msg = data.get("msg", {})
                             turbo_actives = msg.get("turbo", {}).get("actives", {})
                             binary_actives = msg.get("binary", {}).get("actives", {})
+                            forex_actives = msg.get("forex", {}).get("actives", {})
+                            cfd_actives = msg.get("cfd", {}).get("actives", {})
+                            crypto_actives = msg.get("crypto", {}).get("actives", {})
 
-                            # 1. Procesar primero binary, y LUEGO turbo para que las opciones Turbo tengan prioridad absoluta
-                            for cat_actives in [binary_actives, turbo_actives]:
+                            # Procesar catálogos para mapeo completo de activos CFD (Forex, Wall Street, Oro) y Opciones
+                            for cat_actives in [forex_actives, cfd_actives, crypto_actives, binary_actives, turbo_actives]:
                                 if not isinstance(cat_actives, dict):
                                     continue
                                 for aid_str, act in cat_actives.items():
@@ -1133,13 +1148,13 @@ class IQOptionAdapter:
             if stop_loss_pct is not None and take_profit_pct is not None:
                 sl_f = float(stop_loss_pct)
                 tp_f = float(take_profit_pct)
-                if tp_f <= sl_f:
-                    tp_f = round(max(sl_f * 1.5, sl_f + 0.5), 2)
+                if tp_f < sl_f * 2.0:
+                    tp_f = round(max(sl_f * 2.0, sl_f + 0.5), 2)
                 body_payload["stop_loss"] = {"value": str(round(sl_f, 2)), "type": "pnl"}
                 body_payload["take_profit"] = {"value": str(round(tp_f, 2)), "type": "pnl"}
             elif stop_loss_pct is not None:
                 sl_f = float(stop_loss_pct)
-                tp_f = round(max(sl_f * 1.5, sl_f + 0.5), 2)
+                tp_f = round(max(sl_f * 2.0, sl_f + 0.5), 2)
                 body_payload["stop_loss"] = {"value": str(round(sl_f, 2)), "type": "pnl"}
                 body_payload["take_profit"] = {"value": str(round(tp_f, 2)), "type": "pnl"}
             elif take_profit_pct is not None:
@@ -1304,8 +1319,18 @@ class IQOptionAdapter:
         """Solicita cierre CFD; en LIVE_REAL nunca convierte desconexión en éxito simulado."""
         if self.environment == "LIVE_REAL" and (not self.ssid or not position_id or str(position_id).startswith("IQ_PAPER")):
             return {"success": False, "error": "Cierre LIVE_REAL rechazado: faltan sesión o identificador válido del broker."}
-        if not self.ssid or not position_id or str(position_id).startswith("IQ_PAPER"):
+        if not position_id:
+            return {"success": False, "error": "No se proporcionó un identificador de posición."}
+        if str(position_id).startswith("IQ_PAPER"):
             return {"success": True, "status": "CLOSED_SIMULATED", "position_id": str(position_id)}
+        if not self.ssid:
+            return {
+                "success": False,
+                "unknown": True,
+                "status": "UNKNOWN_RECONCILIATION",
+                "position_id": str(position_id),
+                "error": "No hay sesión para confirmar el cierre de la posición del broker.",
+            }
         import websocket
         import json
         import ssl
@@ -1351,7 +1376,8 @@ class IQOptionAdapter:
             }
             ws.send(json.dumps(close_msg))
             
-            res = {"success": True, "status": "CLOSED", "position_id": str(pos_val)}
+            res = {"success": False, "unknown": True, "status": "UNKNOWN_RECONCILIATION",
+                   "position_id": str(pos_val), "error": "No se confirmó la solicitud de cierre."}
             closed_ok = False
             start_wait = time.time()
             while time.time() - start_wait < 3.0:
@@ -1361,20 +1387,24 @@ class IQOptionAdapter:
                 try:
                     data = json.loads(raw_resp)
                     msg_name = data.get("name", "")
-                    if msg_name in ["position-closed", "close-position", "position-changed"] or data.get("status") == 2000:
-                        res = {"success": True, "status": "CLOSED", "position_id": str(pos_val)}
+                    body = data.get("msg", {})
+                    response_id = data.get("request_id")
+                    position_id_in_event = (
+                        body.get("position_id") or body.get("id")
+                        if isinstance(body, dict) else None
+                    )
+                    if (msg_name == "position-closed"
+                            and position_id_in_event is not None
+                            and str(position_id_in_event) == str(pos_val)):
+                        res = {"success": True, "status": "CLOSE_ACKNOWLEDGED", "position_id": str(pos_val)}
                         closed_ok = True
                         break
-                    elif data.get("name") == "result" and data.get("request_id") == req_id and data.get("msg", {}).get("success") is True:
-                        res = {"success": True, "status": "CLOSED", "position_id": str(pos_val)}
+                    elif msg_name == "result" and response_id == req_id and isinstance(body, dict) and body.get("success") is True:
+                        res = {"success": True, "status": "CLOSE_ACKNOWLEDGED", "position_id": str(pos_val)}
                         closed_ok = True
                         break
-                    elif "error" in data:
-                        err_text = str(data.get("error", ""))
-                        if "already" in err_text.lower() or "not found" in err_text.lower():
-                            res = {"success": True, "status": "ALREADY_CLOSED", "position_id": str(pos_val)}
-                            closed_ok = True
-                            break
+                    elif "error" in data and response_id == req_id:
+                        res["error"] = "El broker reportó un error; estado del cierre pendiente de conciliación."
                         break
                 except Exception:
                     pass
@@ -1488,9 +1518,9 @@ class IQOptionAdapter:
             }
 
         if not self.connected or not self.ssid:
-            return {"success": False, "error": "IQ Option Demo no está conectado; no se envió la orden."}
+            return {"success": False, "order_not_sent": True, "error": "IQ Option Demo no está conectado; no se envió la orden."}
         if self.practice_balance_id is None:
-            return {"success": False, "error": "No se identificó el balance Demo de IQ Option; no se envió la orden."}
+            return {"success": False, "order_not_sent": True, "error": "No se identificó el balance Demo de IQ Option; no se envió la orden."}
         if not self.change_balance(self.practice_balance_id):
             return {"success": False, "error": "No se pudo seleccionar el balance Demo de IQ Option; no se envió la orden."}
 

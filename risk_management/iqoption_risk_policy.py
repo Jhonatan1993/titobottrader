@@ -11,6 +11,7 @@ import datetime as dt
 import json
 import math
 import os
+import tempfile
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,6 +52,7 @@ class IQOptionRiskPolicy:
         self._closed_trade_ids: set[str] = set()
         self._state_persistence_error = False
         self._reconciliation_required = False
+        self._binary_order_pending = False
         self._state_lock = threading.RLock()
         self._load_state()
         if self.state_path and not self.state_path.exists():
@@ -81,6 +83,12 @@ class IQOptionRiskPolicy:
             state = json.loads(self.state_path.read_text(encoding="utf-8"))
             if not isinstance(state, dict) or not {"date_utc", "realized_pnl"}.issubset(state):
                 raise ValueError("Invalid risk-state schema")
+            if not isinstance(state.get("reconciliation_required", False), bool):
+                raise ValueError("Invalid reconciliation state")
+            self._reconciliation_required = state.get("reconciliation_required", False)
+            if not isinstance(state.get("binary_order_pending", False), bool):
+                raise ValueError("Invalid pending-order state")
+            self._binary_order_pending = state.get("binary_order_pending", False)
             if state.get("date_utc") == self._day:
                 self.realized_pnl = float(state.get("realized_pnl", 0.0))
                 if not math.isfinite(self.realized_pnl):
@@ -88,9 +96,9 @@ class IQOptionRiskPolicy:
                 self._closed_trade_ids = {
                     str(value) for value in state.get("closed_trade_ids", []) if value
                 }
-                self._reconciliation_required = bool(state.get("reconciliation_required", False))
                 self._refresh_halt()
             else:
+                self._refresh_halt()
                 self._persist_state()
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             # A corrupt risk snapshot must not silently authorize trading.
@@ -102,27 +110,46 @@ class IQOptionRiskPolicy:
             return
         if self._state_persistence_error:
             return
+        temp_path = None
         try:
             self.state_path.parent.mkdir(parents=True, exist_ok=True)
-            temp_path = self.state_path.with_suffix(self.state_path.suffix + ".tmp")
-            temp_path.write_text(
-                json.dumps(
+            fd, temp_path = tempfile.mkstemp(prefix=".risk-", dir=str(self.state_path.parent))
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                os.fchmod(stream.fileno(), 0o600)
+                json.dump(
                     {
                         "date_utc": self._day,
                         "realized_pnl": round(self.realized_pnl, 8),
                         "closed_trade_ids": sorted(self._closed_trade_ids)[-5000:],
                         "reconciliation_required": self._reconciliation_required,
+                        "binary_order_pending": self._binary_order_pending,
                     },
+                    stream,
                     separators=(",", ":"),
-                ),
-                encoding="utf-8",
-            )
-            os.chmod(temp_path, 0o600)
+                    allow_nan=False,
+                )
+                stream.flush()
+                os.fsync(stream.fileno())
             os.replace(temp_path, self.state_path)
+            temp_path = None
+            directory_fd = os.open(str(self.state_path.parent), os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
             self._state_persistence_error = False
-        except OSError:
+        except (OSError, ValueError, TypeError):
             self._state_persistence_error = True
             self.halted_reason = "ESTADO_RIESGO_NO_PERSISTIDO"
+        finally:
+            if temp_path is not None:
+                try:
+                    os.unlink(temp_path)
+                except FileNotFoundError:
+                    pass
+                except OSError:
+                    self._state_persistence_error = True
+                    self.halted_reason = "ESTADO_RIESGO_NO_PERSISTIDO"
 
     def configure(
         self,
@@ -163,7 +190,7 @@ class IQOptionRiskPolicy:
             and self.realized_pnl <= -self.max_loss_amount
         ):
             self.halted_reason = "LIMITE_PERDIDA_DIARIA_ALCANZADO"
-        elif self._reconciliation_required:
+        elif self._reconciliation_required or self._binary_order_pending:
             self.halted_reason = "RECONCILIACION_BROKER_REQUERIDA"
         else:
             self.halted_reason = None
@@ -193,6 +220,28 @@ class IQOptionRiskPolicy:
             self._reconciliation_required = True
             self._refresh_halt()
             self._persist_state()
+
+    def begin_binary_order(self) -> bool:
+        """Persist intent before sending; retain it after an interrupted process."""
+        with self._state_lock:
+            self._roll_day()
+            self._refresh_halt()
+            if self.halted_reason or not self.state_path:
+                return False
+            self._binary_order_pending = True
+            self._persist_state()
+            self._refresh_halt()
+            return not self._state_persistence_error
+
+    def finish_binary_order(self) -> bool:
+        """Clear intent only after a definitive rejection or completed settlement."""
+        with self._state_lock:
+            self._binary_order_pending = False
+            self._persist_state()
+            if self._state_persistence_error:
+                self._binary_order_pending = True
+            self._refresh_halt()
+            return not self._state_persistence_error
 
     def record_closed_trade(self, pnl: float, trade_id: Optional[str] = None) -> None:
         with self._state_lock:
@@ -227,4 +276,6 @@ class IQOptionRiskPolicy:
                 "halted": bool(self.halted_reason),
                 "halted_reason": self.halted_reason,
                 "reconciliation_required": self._reconciliation_required,
+                "binary_order_pending": self._binary_order_pending,
+                "persistence_error": self._state_persistence_error,
             }

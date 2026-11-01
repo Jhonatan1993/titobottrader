@@ -33,8 +33,9 @@ class BinaryOptionsStrategyEngine:
     6. Alertas y Control Bidireccional por Telegram en tiempo real.
     """
 
-    def __init__(self, iqoption_adapter, journal=None, learner=None, initial_balance: float = 10000.0):
+    def __init__(self, iqoption_adapter, journal=None, learner=None, initial_balance: float = 10000.0, risk_policy=None):
         self.iq = iqoption_adapter
+        self.risk_policy = risk_policy
         self.journal = journal
         self.learner = learner
         self.initial_balance = initial_balance
@@ -80,12 +81,16 @@ class BinaryOptionsStrategyEngine:
 
     def _verified_binary_history(self) -> List[Dict[str, Any]]:
         trades = getattr(self.journal, "trades", []) if self.journal else []
+        environment = str(getattr(self.iq, "environment", "")).upper()
+        if environment not in {"PAPER", "LIVE_REAL"}:
+            return []
         verified = [
             trade for trade in trades
             if isinstance(trade, dict)
+            and trade.get("broker") == "IQOPTION"
             and trade.get("category") == "BINARY_OPTIONS"
             and trade.get("settlement_verified") is True
-            and str(trade.get("environment", "")).upper() in {"PAPER", "LIVE_REAL"}
+            and str(trade.get("environment", "")).upper() == environment
         ]
         verified.sort(key=lambda trade: self._parse_journal_time(trade.get("closed_at")) or datetime.datetime.min.replace(tzinfo=datetime.timezone.utc))
         return verified
@@ -640,6 +645,17 @@ class BinaryOptionsStrategyEngine:
         else:
             expiration_ts = int(now - cur_sec + 60 + (60 * max(1, duration_minutes)))
 
+        # Keep a persisted intent until a verified settlement has been recorded.
+        # A crash after sending must not silently permit another order.
+        risk_policy = getattr(self, "risk_policy", None)
+        if risk_policy is not None and not risk_policy.begin_binary_order():
+            return {
+                "success": False,
+                "execution_blocked": True,
+                "status": "BLOCKED",
+                "error": "No se pudo registrar la intención de orden; no se envió.",
+            }
+
         # Ejecución en IQ Option vía Adaptador
         if hasattr(self.iq, "submit_binary_option"):
             try:
@@ -650,19 +666,53 @@ class BinaryOptionsStrategyEngine:
                     duration_minutes=duration_minutes,
                     expiration_timestamp=expiration_ts
                 )
-            except TypeError:
-                exec_res = self.iq.submit_binary_option(
-                    symbol=symbol,
-                    direction=dir_clean,
-                    amount=final_stake,
-                    duration_minutes=duration_minutes
-                )
+            except Exception as exc:
+                # The adapter may have sent the order before raising. Never retry.
+                exec_res = {
+                    "success": False,
+                    "unknown": True,
+                    "status": "UNKNOWN_RECONCILIATION",
+                    "error": f"Resultado del envío desconocido ({type(exc).__name__}); no se reenvió la orden.",
+                }
         else:
             exec_res = {
                 "success": False,
                 "execution_blocked": True,
                 "status": "BLOCKED",
                 "error": "Ejecución binaria bloqueada: el adaptador no ofrece envío y conciliación oficial de IQ Option.",
+            }
+
+        if (
+            risk_policy is not None
+            and exec_res.get("success") is False
+            and exec_res.get("order_not_sent") is True
+            and not exec_res.get("unknown")
+        ):
+            if not risk_policy.finish_binary_order():
+                return {
+                    "success": False,
+                    "unknown": True,
+                    "status": "UNKNOWN_RECONCILIATION",
+                    "error": "No se pudo persistir el fin de la intención; conciliación requerida.",
+                }
+            return exec_res
+
+        if risk_policy is not None and not exec_res.get("success") and not exec_res.get("unknown"):
+            # A plain failure is not evidence that no order was sent.
+            exec_res = {
+                **exec_res,
+                "unknown": True,
+                "status": "UNKNOWN_RECONCILIATION",
+            }
+
+        if exec_res.get("success") and (
+            not exec_res.get("broker_confirmed") or not str(exec_res.get("order_id") or "").strip()
+        ):
+            exec_res = {
+                "success": False,
+                "unknown": True,
+                "status": "UNKNOWN_RECONCILIATION",
+                "error": "Respuesta sin confirmación e identificador verificables; conciliación requerida.",
             }
 
         if not exec_res.get("success"):
@@ -796,10 +846,31 @@ class BinaryOptionsStrategyEngine:
             pos["status"] = "UNKNOWN_RECONCILIATION"
             pos["reconciliation_required"] = True
             return None
-        if (result_type == "WIN" and pnl <= 0) or (result_type == "LOSS" and pnl >= 0) or (result_type == "TIE" and pnl != 0):
+        if not math.isfinite(pnl) or (result_type == "WIN" and pnl <= 0) or (result_type == "LOSS" and pnl >= 0) or (result_type == "TIE" and pnl != 0):
             pos["status"] = "UNKNOWN_RECONCILIATION"
             pos["reconciliation_required"] = True
             return None
+
+        # All settlement entry points pass through this barrier before the
+        # position is released. Risk accounting is idempotent by broker ID.
+        risk_policy = getattr(self, "risk_policy", None)
+        if risk_policy is not None:
+            try:
+                order_id = str(pos.get("id") or "").strip()
+                if not order_id:
+                    raise ValueError("Missing broker order ID")
+                risk_policy.record_closed_trade(pnl, trade_id=order_id)
+                if risk_policy.snapshot().get("persistence_error"):
+                    raise OSError("Risk state could not be persisted")
+            except Exception:
+                logger.exception("Binary settlement risk accounting failed")
+                pos["status"] = "UNKNOWN_RECONCILIATION"
+                pos["reconciliation_required"] = True
+                try:
+                    risk_policy.require_reconciliation()
+                except Exception:
+                    logger.exception("Unable to persist reconciliation halt")
+                return None
 
         exit_price = settlement.get("exit_price")
         try:
@@ -809,42 +880,11 @@ class BinaryOptionsStrategyEngine:
         is_win = result_type == "WIN"
         is_tie = result_type == "TIE"
         if is_tie:
-            self.total_ties += 1
             reason = f"IQ Option confirmó empate en {sym}; inversión reembolsada."
         elif is_win:
-            self.total_wins += 1
             reason = f"IQ Option confirmó ganancia en {sym} {dir_clean}: +${pnl:.2f}."
         else:
-            self.total_losses += 1
             reason = f"IQ Option confirmó pérdida en {sym} {dir_clean}: -${abs(pnl):.2f}."
-        self.net_profit += pnl
-
-        # Registrar resultado en SorosRiskManager y liberar exposición
-        soros_res = self.soros_manager.register_trade_result(pnl, invested)
-        self.soros_manager.release_currency_exposure(sym, dir_clean)
-
-        resolution_data = {
-            "order_id": pos["id"],
-            "symbol": sym,
-            "direction": dir_clean,
-            "entry_price": entry_p,
-            "exit_price": exit_price,
-            "amount": invested,
-            "pnl": pnl,
-            "result": result_type,
-            "reason": reason,
-            "timestamp": now,
-            "settlement_verified": True,
-            "soros_step": soros_res.get("soros_step", 0),
-            "daily_pnl": soros_res.get("daily_pnl", 0.0),
-            "signal_score": pos.get("signal_score"),
-            "signal_strategy": pos.get("signal_strategy"),
-            "signal_reason": pos.get("signal_reason"),
-            "payout": pos.get("payout"),
-            "entry_source": pos.get("entry_source"),
-            "entry_data_age_seconds": pos.get("entry_data_age_seconds"),
-            "entry_candle_time": pos.get("entry_candle_time"),
-        }
 
         # Registrar en Journal de transacciones si está disponible
         if self.journal and hasattr(self.journal, "record_trade"):
@@ -881,12 +921,59 @@ class BinaryOptionsStrategyEngine:
                     "entry_source": pos.get("entry_source"),
                     "entry_data_age_seconds": pos.get("entry_data_age_seconds"),
                     "entry_candle_time": pos.get("entry_candle_time"),
-                    "opened_at": datetime.datetime.fromtimestamp(open_ts).strftime("%Y-%m-%d %H:%M:%S"),
-                    "closed_at": datetime.datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M:%S"),
+                    "opened_at": datetime.datetime.fromtimestamp(open_ts, datetime.timezone.utc).isoformat(),
+                    "closed_at": datetime.datetime.fromtimestamp(now, datetime.timezone.utc).isoformat(),
                     "duration": f"{dur_sec}s"
-                })
-            except Exception as e:
-                logger.error(f"Error registrando binaria en journal: {e}")
+                }, strict=True)
+            except Exception:
+                logger.exception("Error registrando binaria en journal")
+                pos["status"] = "UNKNOWN_RECONCILIATION"
+                pos["reconciliation_required"] = True
+                if risk_policy is not None:
+                    try:
+                        risk_policy.require_reconciliation()
+                    except Exception:
+                        logger.exception("No se pudo persistir el bloqueo de conciliación")
+                return None
+
+        # Only update in-memory counters once the risk and journal writes succeeded.
+        if is_tie:
+            self.total_ties += 1
+        elif is_win:
+            self.total_wins += 1
+        else:
+            self.total_losses += 1
+        self.net_profit += pnl
+        soros_res = self.soros_manager.register_trade_result(pnl, invested)
+        self.soros_manager.release_currency_exposure(sym, dir_clean)
+
+        resolution_data = {
+            "order_id": pos["id"],
+            "symbol": sym,
+            "direction": dir_clean,
+            "entry_price": entry_p,
+            "exit_price": exit_price,
+            "amount": invested,
+            "pnl": pnl,
+            "result": result_type,
+            "reason": reason,
+            "timestamp": now,
+            "settlement_verified": True,
+            "soros_step": soros_res.get("soros_step", 0),
+            "daily_pnl": soros_res.get("daily_pnl", 0.0),
+            "signal_score": pos.get("signal_score"),
+            "signal_strategy": pos.get("signal_strategy"),
+            "signal_reason": pos.get("signal_reason"),
+            "payout": pos.get("payout"),
+            "entry_source": pos.get("entry_source"),
+            "entry_data_age_seconds": pos.get("entry_data_age_seconds"),
+            "entry_candle_time": pos.get("entry_candle_time"),
+        }
+
+        if risk_policy is not None and not risk_policy.finish_binary_order():
+            pos["status"] = "UNKNOWN_RECONCILIATION"
+            pos["reconciliation_required"] = True
+            return None
 
         forget_result = getattr(self.iq, "forget_binary_option_result", None)
         if callable(forget_result):

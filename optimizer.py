@@ -21,11 +21,9 @@ logger = logging.getLogger("GridOptimizer")
 
 class GridSearchOptimizer:
     """
-    Optimizador Cuantitativo Multivariado (Grid Search):
-    Descarga velas históricas reales de IQ Option y evalúa miles de combinaciones
-    de parámetros (ADX, RSI sobrecompra/sobreventa, ratio de mechas Pinbar)
-    para encontrar la configuración con la esperanza matemática más alta por activo.
-    Exporta los resultados a data/optimal_params.json para recarga en caliente (Hot-Reload).
+    Exploración histórica en muestra, no validada para operación.
+    No representa ejecución real ni debe promoverse automáticamente.
+    Guarda candidatos en experimental_optimizer_results.json.
     """
     def __init__(self, payout_pct: float = 85.0):
         self.payout = payout_pct / 100.0
@@ -36,7 +34,8 @@ class GridSearchOptimizer:
         base_dir = os.path.abspath(os.path.dirname(__file__))
         self.data_dir = os.path.join(base_dir, "data")
         os.makedirs(self.data_dir, exist_ok=True)
-        self.output_file = os.path.join(self.data_dir, "optimal_params.json")
+        # Research candidates are never loaded automatically by the trading engine.
+        self.output_file = os.path.join(self.data_dir, "experimental_optimizer_results.json")
 
         self.param_grid = {
             "min_adx": [20.0, 24.0, 28.0],
@@ -147,8 +146,9 @@ class GridSearchOptimizer:
                 "rsi_oversold": 30.0,
                 "rsi_overbought": 70.0,
                 "pinbar_wick_ratio": 1.8,
-                "win_rate": 65.0,
-                "sample_size": 0
+                "win_rate": None,
+                "sample_size": 0,
+                "validation_status": "insufficient_data"
             }
 
         df = SMCEngine.prepare_indicators(candles)
@@ -162,13 +162,13 @@ class GridSearchOptimizer:
             params = dict(zip(keys, combo))
             res = self.evaluate_combination(df, params)
 
-            # Filtro de significancia estadística mínima (al menos 15 trades)
+            # Umbral exploratorio; 15 operaciones no demuestran significancia.
             if res["trades"] >= 15:
                 # Puntuación balanceada: Win Rate y Profit Factor
                 score = (res["win_rate"] * 0.7) + (min(3.0, res["profit_factor"]) * 10.0)
                 if score > best_score:
                     best_score = score
-                    best_cfg = {**params, "win_rate": res["win_rate"], "profit_factor": res["profit_factor"], "sample_size": res["trades"]}
+                    best_cfg = {**params, "win_rate": res["win_rate"], "profit_factor": res["profit_factor"], "sample_size": res["trades"], "validation_status": "in_sample_unvalidated"}
 
         if not best_cfg:
             best_cfg = {
@@ -177,11 +177,12 @@ class GridSearchOptimizer:
                 "rsi_oversold": 30.0,
                 "rsi_overbought": 70.0,
                 "pinbar_wick_ratio": 1.8,
-                "win_rate": 62.0,
-                "sample_size": 0
+                "win_rate": None,
+                "sample_size": 0,
+                "validation_status": "insufficient_trades"
             }
 
-        logger.info(f"🎯 [{asset}] Parámetros óptimos encontrados: Win Rate={best_cfg.get('win_rate')}% ({best_cfg.get('sample_size')} trades)")
+        logger.info(f"[{asset}] Candidato exploratorio: win_rate={best_cfg.get('win_rate')}, n={best_cfg.get('sample_size')}, estado={best_cfg.get('validation_status')}")
         return best_cfg
 
     def run(self, assets: list = None, total_candles: int = 2500):

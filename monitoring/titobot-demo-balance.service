@@ -1,0 +1,18 @@
+[Unit]
+Description=Read-only IQ Option Demo balance snapshot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=titomonitor
+ExecStart=/root/titobot/venv/bin/python3 /opt/titobot-monitor/demo_balance_snapshot.py --config /root/titobot/data/broker_config.json --destination /var/lib/titobot-monitor/snapshot/demo_balance.json
+TimeoutStartSec=45
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/titobot-monitor/snapshot
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

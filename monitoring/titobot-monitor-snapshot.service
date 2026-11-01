@@ -1,0 +1,15 @@
+[Unit]
+Description=TitoBot restricted read-only history snapshot
+
+[Service]
+Type=oneshot
+User=root
+Group=titomonitor
+ExecStart=/usr/bin/python3 /opt/titobot-monitor/monitor_snapshot.py --source /root/titobot/data/trades_history.json --destination /var/lib/titobot-monitor/snapshot/trades.json
+ExecStartPost=/usr/bin/python3 /opt/titobot-monitor/practice_balance_copy.py --source /root/titobot/data/practice_balance.json --destination /var/lib/titobot-monitor/snapshot/practice_balance.json
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateNetwork=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/titobot-monitor/snapshot

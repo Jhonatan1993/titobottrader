@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,7 +8,9 @@
     <link rel="icon" type="image/png" href="/static/img/favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
     <style>
         :root {
             --bg-base: #070B14;
@@ -113,6 +116,7 @@
             border-color: var(--border-subtle);
             color: var(--text-primary);
         }
+
         .btn-nav-terminal:hover {
             background: rgba(255, 255, 255, 0.1);
             border-color: var(--cyber-cyan);
@@ -124,6 +128,7 @@
             border-color: rgba(244, 63, 94, 0.25);
             color: #FDA4AF;
         }
+
         .btn-nav-logout:hover {
             background: rgba(244, 63, 94, 0.2);
             border-color: var(--rose-loss);
@@ -176,6 +181,7 @@
             box-shadow: 0 4px 16px rgba(2, 132, 199, 0.35);
             transition: all 0.2s ease;
         }
+
         .btn-primary-action:hover {
             background: linear-gradient(135deg, #0369A1 0%, #075985 100%);
             border-color: var(--cyber-cyan);
@@ -201,6 +207,7 @@
             overflow: hidden;
             transition: transform 0.2s, border-color 0.2s;
         }
+
         .metric-card:hover {
             border-color: var(--border-focus);
             transform: translateY(-2px);
@@ -290,10 +297,12 @@
             cursor: pointer;
             transition: all 0.15s ease;
         }
+
         .filter-pill:hover {
             color: #FFFFFF;
             background: rgba(255, 255, 255, 0.08);
         }
+
         .filter-pill.active {
             background: rgba(56, 189, 248, 0.15);
             border-color: rgba(56, 189, 248, 0.35);
@@ -455,6 +464,7 @@
             border-color: rgba(244, 63, 94, 0.3);
             color: #FDA4AF;
         }
+
         .btn-act-restrict:hover {
             background: rgba(244, 63, 94, 0.25);
             border-color: var(--rose-loss);
@@ -466,6 +476,7 @@
             border-color: rgba(16, 185, 129, 0.3);
             color: #6EE7B7;
         }
+
         .btn-act-activate:hover {
             background: rgba(16, 185, 129, 0.25);
             border-color: var(--emerald-win);
@@ -477,6 +488,7 @@
             border-color: var(--border-subtle);
             color: var(--text-secondary);
         }
+
         .btn-act-edit:hover {
             background: rgba(255, 255, 255, 0.1);
             color: #FFFFFF;
@@ -488,6 +500,7 @@
             border-color: rgba(240, 185, 11, 0.2);
             color: var(--accent-gold);
         }
+
         .btn-act-pwd:hover {
             background: rgba(240, 185, 11, 0.18);
             color: #FFFFFF;
@@ -498,6 +511,7 @@
             border-color: transparent;
             color: var(--text-muted);
         }
+
         .btn-act-delete:hover {
             background: rgba(244, 63, 94, 0.15);
             color: var(--rose-loss);
@@ -519,6 +533,7 @@
             z-index: 100;
             padding: 20px;
         }
+
         .modal-overlay.active {
             display: flex;
             animation: fadeIn 0.2s ease;
@@ -559,6 +574,7 @@
             padding: 4px;
             transition: color 0.15s;
         }
+
         .btn-close-modal:hover {
             color: #FFFFFF;
         }
@@ -583,7 +599,8 @@
             letter-spacing: 0.04em;
         }
 
-        .modal-input, .modal-select {
+        .modal-input,
+        .modal-select {
             width: 100%;
             background: rgba(3, 7, 18, 0.6);
             border: 1px solid var(--border-subtle);
@@ -594,7 +611,9 @@
             outline: none;
             transition: border-color 0.2s;
         }
-        .modal-input:focus, .modal-select:focus {
+
+        .modal-input:focus,
+        .modal-select:focus {
             border-color: var(--cyber-cyan);
             box-shadow: 0 0 12px var(--cyber-cyan-glow);
         }
@@ -618,6 +637,7 @@
             font-weight: 600;
             cursor: pointer;
         }
+
         .btn-modal-cancel:hover {
             background: rgba(255, 255, 255, 0.1);
             color: #FFFFFF;
@@ -634,6 +654,7 @@
             cursor: pointer;
             box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
         }
+
         .btn-modal-submit:hover {
             border-color: var(--cyber-cyan);
             box-shadow: 0 6px 18px rgba(56, 189, 248, 0.45);
@@ -663,20 +684,35 @@
             gap: 10px;
             animation: slideInRight 0.3s ease;
         }
+
         .toast-success {
             border-left: 4px solid var(--emerald-win);
         }
+
         .toast-error {
             border-left: 4px solid var(--rose-loss);
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
         }
+
         @keyframes slideInRight {
-            from { transform: translateX(50px); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
+            from {
+                transform: translateX(50px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
         }
 
         /* Media Queries Responsivas Panel Admin */
@@ -684,6 +720,7 @@
             .admin-container {
                 padding: 20px 16px;
             }
+
             .metrics-grid {
                 grid-template-columns: repeat(2, 1fr) !important;
             }
@@ -696,59 +733,74 @@
                 gap: 12px;
                 padding: 12px 14px;
             }
+
             .nav-brand {
                 justify-content: space-between;
                 width: 100%;
             }
+
             .nav-actions {
                 width: 100%;
                 justify-content: space-between;
             }
+
             .btn-nav {
                 padding: 7px 12px;
                 font-size: 12px;
             }
+
             .admin-container {
                 padding: 14px 10px;
             }
+
             .metrics-grid {
                 grid-template-columns: 1fr !important;
                 gap: 10px;
             }
+
             .cloud-db-card {
                 padding: 14px !important;
             }
+
             .cloud-db-form {
                 flex-direction: column !important;
                 align-items: stretch !important;
             }
+
             .cloud-db-form input {
                 width: 100% !important;
             }
+
             .cloud-db-form button {
                 width: 100% !important;
                 justify-content: center;
             }
+
             .table-card {
                 padding: 14px !important;
             }
+
             .table-controls {
                 flex-direction: column !important;
                 align-items: stretch !important;
                 gap: 10px !important;
             }
-            .table-controls > div {
+
+            .table-controls>div {
                 width: 100% !important;
             }
+
             .table-responsive {
                 overflow-x: auto !important;
                 -webkit-overflow-scrolling: touch !important;
                 width: 100%;
                 display: block;
             }
+
             .users-table {
                 min-width: 650px;
             }
+
             .modal-content {
                 width: 95% !important;
                 max-width: 100% !important;
@@ -757,16 +809,21 @@
         }
     </style>
 </head>
+
 <body>
 
     <!-- Top Navigation -->
     <nav class="admin-nav">
         <div class="nav-brand">
-            <img src="/static/img/titobot_logo.png" alt="TitoBotTrader" style="width:38px; height:38px; border-radius:50%; object-fit:cover; border:2px solid var(--cyber-cyan); box-shadow:0 0 10px rgba(56, 189, 248, 0.4);">
+            <img src="/static/img/titobot_logo.png" alt="TitoBotTrader"
+                style="width:38px; height:38px; border-radius:50%; object-fit:cover; border:2px solid var(--cyber-cyan); box-shadow:0 0 10px rgba(56, 189, 248, 0.4);">
             <span class="brand-badge">🛡️ ADMIN PORTAL</span>
-            <span class="brand-title">TitoBot<span style="color:var(--cyber-cyan);">Trader</span> · Panel de Control</span>
+            <span class="brand-title">TitoBot<span style="color:var(--cyber-cyan);">Trader</span> · Panel de
+                Control</span>
         </div>
         <div class="nav-actions">
+            <a href="/admin/telegram" class="btn-nav btn-nav-terminal"
+                title="Configurar las alertas del monitor independiente">Alertas Telegram</a>
             <a href="/" class="btn-nav btn-nav-terminal" title="Volver al panel operativo de trading">
                 <span>←</span>
                 <span>Terminal de Trading</span>
@@ -788,7 +845,8 @@
         <div class="page-header">
             <div>
                 <h1 class="page-title">Gestión de Usuarios & Accesos</h1>
-                <p class="page-subtitle">Crea cuentas, modifica datos y restringe el acceso inmediato a usuarios por falta de pago.</p>
+                <p class="page-subtitle">Crea cuentas, modifica datos y restringe el acceso inmediato a usuarios por
+                    falta de pago.</p>
             </div>
             <button class="btn-primary-action" onclick="openCreateUserModal()">
                 <span>➕</span>
@@ -832,23 +890,32 @@
                 </div>
                 <div class="metric-value mono" id="metric-admins" style="color:var(--accent-gold);">0</div>
                 <span class="metric-badge" style="color:var(--accent-gold);">Control total del sistema</span>
+            </div>
         </div>
 
         <!-- Cloud Database & Disaster Recovery Banner -->
-        <div style="background: rgba(13, 20, 36, 0.8); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 18px 24px; margin-bottom: 24px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px;">
+        <div
+            style="background: rgba(13, 20, 36, 0.8); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 18px 24px; margin-bottom: 24px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px;">
             <div>
                 <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
                     <span style="font-size:18px;">☁️</span>
-                    <span style="font-weight:700; font-size:15px; color:#F8FAFC;">Persistencia y Escalabilidad Cloud (PostgreSQL / Supabase)</span>
-                    <span id="storage-type-badge" class="brand-badge" style="font-size:10.5px;">Cargando estado...</span>
+                    <span style="font-weight:700; font-size:15px; color:#F8FAFC;">Persistencia y Escalabilidad Cloud
+                        (PostgreSQL / Supabase)</span>
+                    <span id="storage-type-badge" class="brand-badge" style="font-size:10.5px;">Cargando
+                        estado...</span>
                 </div>
                 <p style="font-size:12px; color:var(--text-secondary); line-height:1.4;">
-                    Garantiza tolerancia a fallos total: Si el servidor VPS se reinstala o migra, tus usuarios y contraseñas quedan 100% seguros e intactos en la nube.
+                    Garantiza tolerancia a fallos total: Si el servidor VPS se reinstala o migra, tus usuarios y
+                    contraseñas quedan 100% seguros e intactos en la nube.
                 </p>
             </div>
             <div style="display:flex; align-items:center; gap:10px; min-width:320px; flex:1; max-width:540px;">
-                <input type="text" id="cloud-db-url" placeholder="postgresql://postgres:pass@db.supabase.co:5432/postgres" style="background:#070B14; border:1px solid var(--border-subtle); color:#F8FAFC; border-radius:8px; padding:8px 12px; font-size:12px; font-family:monospace; width:100%;">
-                <button class="btn-primary" onclick="connectCloudDB()" style="white-space:nowrap; padding:8px 16px; font-size:12px; border:none; border-radius:6px; cursor:pointer;">Conectar & Migrar</button>
+                <input type="text" id="cloud-db-url"
+                    placeholder="postgresql://postgres:pass@db.supabase.co:5432/postgres"
+                    style="background:#070B14; border:1px solid var(--border-subtle); color:#F8FAFC; border-radius:8px; padding:8px 12px; font-size:12px; font-family:monospace; width:100%;">
+                <button class="btn-primary" onclick="connectCloudDB()"
+                    style="white-space:nowrap; padding:8px 16px; font-size:12px; border:none; border-radius:6px; cursor:pointer;">Conectar
+                    & Migrar</button>
             </div>
         </div>
 
@@ -857,14 +924,19 @@
         <div class="filter-bar">
             <div class="search-box">
                 <span>🔍</span>
-                <input type="text" id="search-input" placeholder="Buscar por nombre, usuario o email..." oninput="handleSearch()">
+                <input type="text" id="search-input" placeholder="Buscar por nombre, usuario o email..."
+                    oninput="handleSearch()">
             </div>
 
             <div class="filter-group">
-                <button class="filter-pill active" data-status="all" onclick="setStatusFilter('all', this)">Todos</button>
-                <button class="filter-pill" data-status="active" onclick="setStatusFilter('active', this)">🟢 Activos</button>
-                <button class="filter-pill" data-status="restricted" onclick="setStatusFilter('restricted', this)">🔴 Restringidos (Mora)</button>
-                <button class="filter-pill" data-status="suspended" onclick="setStatusFilter('suspended', this)">🟡 Suspendidos</button>
+                <button class="filter-pill active" data-status="all"
+                    onclick="setStatusFilter('all', this)">Todos</button>
+                <button class="filter-pill" data-status="active" onclick="setStatusFilter('active', this)">🟢
+                    Activos</button>
+                <button class="filter-pill" data-status="restricted" onclick="setStatusFilter('restricted', this)">🔴
+                    Restringidos (Mora)</button>
+                <button class="filter-pill" data-status="suspended" onclick="setStatusFilter('suspended', this)">🟡
+                    Suspendidos</button>
             </div>
         </div>
 
@@ -907,7 +979,8 @@
                 <div class="form-grid">
                     <div>
                         <label class="modal-label">Nombre Completo *</label>
-                        <input type="text" id="create-fullname" class="modal-input" placeholder="Ej: Carlos Mendoza" required>
+                        <input type="text" id="create-fullname" class="modal-input" placeholder="Ej: Carlos Mendoza"
+                            required>
                     </div>
                     <div>
                         <label class="modal-label">Nombre de Usuario *</label>
@@ -920,7 +993,8 @@
                     </div>
                     <div>
                         <label class="modal-label">Contraseña Inicial *</label>
-                        <input type="password" id="create-password" class="modal-input" placeholder="Mínimo 4 caracteres" required>
+                        <input type="password" id="create-password" class="modal-input"
+                            placeholder="Mínimo 4 caracteres" required>
                     </div>
 
                     <div>
@@ -957,12 +1031,14 @@
 
                     <div class="form-group-full">
                         <label class="modal-label">Notas Administrativas</label>
-                        <textarea id="create-notes" class="modal-input" style="height:65px; resize:none;" placeholder="Observaciones de pago, WhatsApp, método de pago, etc."></textarea>
+                        <textarea id="create-notes" class="modal-input" style="height:65px; resize:none;"
+                            placeholder="Observaciones de pago, WhatsApp, método de pago, etc."></textarea>
                     </div>
                 </div>
 
                 <div class="modal-footer">
-                    <button type="button" class="btn-modal-cancel" onclick="closeModal('modal-create-user')">Cancelar</button>
+                    <button type="button" class="btn-modal-cancel"
+                        onclick="closeModal('modal-create-user')">Cancelar</button>
                     <button type="submit" class="btn-modal-submit">Crear Usuario</button>
                 </div>
             </form>
@@ -1027,8 +1103,10 @@
 
                     <div class="form-group-full">
                         <label class="modal-label">Restablecer Contraseña (Opcional)</label>
-                        <input type="text" id="edit-password" class="modal-input mono" placeholder="Dejar en blanco para mantener la contraseña actual">
-                        <span style="font-size:11px; color:var(--text-muted); margin-top:3px; display:block;">Si escribes una clave aquí, se actualizará al guardar los cambios.</span>
+                        <input type="text" id="edit-password" class="modal-input mono"
+                            placeholder="Dejar en blanco para mantener la contraseña actual">
+                        <span style="font-size:11px; color:var(--text-muted); margin-top:3px; display:block;">Si
+                            escribes una clave aquí, se actualizará al guardar los cambios.</span>
                     </div>
 
                     <div class="form-group-full">
@@ -1038,7 +1116,8 @@
                 </div>
 
                 <div class="modal-footer">
-                    <button type="button" class="btn-modal-cancel" onclick="closeModal('modal-edit-user')">Cancelar</button>
+                    <button type="button" class="btn-modal-cancel"
+                        onclick="closeModal('modal-edit-user')">Cancelar</button>
                     <button type="submit" class="btn-modal-submit">Guardar Cambios</button>
                 </div>
             </form>
@@ -1055,20 +1134,27 @@
             <form onsubmit="submitChangePassword(event)">
                 <input type="hidden" id="pwd-userid">
                 <div style="margin-bottom:16px;">
-                    <div style="font-size:13px; color:var(--text-secondary); margin-bottom:14px; background:rgba(255,255,255,0.03); padding:10px 14px; border-radius:8px; border:1px solid var(--border-subtle);">
-                        Restableciendo clave para: <strong id="pwd-username-display" style="color:var(--cyber-cyan-bright); font-family:'JetBrains Mono',monospace;"></strong>
+                    <div
+                        style="font-size:13px; color:var(--text-secondary); margin-bottom:14px; background:rgba(255,255,255,0.03); padding:10px 14px; border-radius:8px; border:1px solid var(--border-subtle);">
+                        Restableciendo clave para: <strong id="pwd-username-display"
+                            style="color:var(--cyber-cyan-bright); font-family:'JetBrains Mono',monospace;"></strong>
                     </div>
 
                     <label class="modal-label">Nueva Contraseña de Acceso *</label>
                     <div style="position:relative; display:flex; align-items:center;">
-                        <input type="text" id="new-password" class="modal-input mono" placeholder="Ingresa o genera una contraseña..." required style="padding-right:90px; letter-spacing:0.04em;">
-                        <button type="button" onclick="copyPasswordToClipboard()" style="position:absolute; right:10px; background:rgba(56,189,248,0.15); border:1px solid rgba(56,189,248,0.3); color:var(--cyber-cyan); border-radius:6px; font-size:11px; font-weight:700; padding:5px 8px; cursor:pointer;" title="Copiar al portapapeles para enviar al cliente">
+                        <input type="text" id="new-password" class="modal-input mono"
+                            placeholder="Ingresa o genera una contraseña..." required
+                            style="padding-right:90px; letter-spacing:0.04em;">
+                        <button type="button" onclick="copyPasswordToClipboard()"
+                            style="position:absolute; right:10px; background:rgba(56,189,248,0.15); border:1px solid rgba(56,189,248,0.3); color:var(--cyber-cyan); border-radius:6px; font-size:11px; font-weight:700; padding:5px 8px; cursor:pointer;"
+                            title="Copiar al portapapeles para enviar al cliente">
                             📋 Copiar
                         </button>
                     </div>
 
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
-                        <button type="button" onclick="generateRandomPassword()" style="background:transparent; border:none; color:var(--accent-gold); font-size:12px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:5px; padding:0;">
+                        <button type="button" onclick="generateRandomPassword()"
+                            style="background:transparent; border:none; color:var(--accent-gold); font-size:12px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:5px; padding:0;">
                             <span>🎲</span> <span>Generar clave aleatoria segura</span>
                         </button>
                         <span style="font-size:11px; color:var(--text-muted);">Mínimo 4 caracteres</span>
@@ -1076,7 +1162,8 @@
                 </div>
 
                 <div class="modal-footer">
-                    <button type="button" class="btn-modal-cancel" onclick="closeModal('modal-change-password')">Cancelar</button>
+                    <button type="button" class="btn-modal-cancel"
+                        onclick="closeModal('modal-change-password')">Cancelar</button>
                     <button type="submit" class="btn-modal-submit">Guardar y Asignar Clave</button>
                 </div>
             </form>
@@ -1106,10 +1193,10 @@
             try {
                 let url = `/api/admin/users?status=${currentStatusFilter}`;
                 if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`;
-                
+
                 const res = await fetch(url);
                 const data = await res.json();
-                
+
                 if (data.success) {
                     usersData = data.users || [];
                     renderUsersTable(usersData);
@@ -1183,7 +1270,8 @@
 
             let html = '';
             users.forEach(u => {
-                const initials = (u.full_name || u.username).substring(0, 2).toUpperCase();
+                if (!Number.isSafeInteger(u.id) || u.id < 1) return;
+                const initials = (u.full_name || u.username || '').substring(0, 2).toUpperCase();
                 const isRestricted = u.status === 'restricted';
                 const isActive = u.status === 'active';
                 const isSuspended = u.status === 'suspended';
@@ -1222,7 +1310,7 @@
                     <tr>
                         <td>
                             <div class="user-meta-cell">
-                                <div class="user-avatar">${initials}</div>
+                                <div class="user-avatar">${escapeHtml(initials)}</div>
                                 <div class="user-info">
                                     <span class="user-full-name">${escapeHtml(u.full_name)}</span>
                                     <span class="user-username mono">@${escapeHtml(u.username)}</span>
@@ -1238,23 +1326,23 @@
                         </td>
                         <td>
                             <span class="mono" style="font-size:12px; color: ${isExpired(u.expires_at) ? 'var(--rose-loss)' : 'var(--text-secondary)'};">
-                                ${u.expires_at || 'Vitalicio'}
+                                ${escapeHtml(u.expires_at || 'Vitalicio')}
                             </span>
                         </td>
                         <td>${statusBadge}</td>
                         <td>
-                            <span class="mono" style="font-size:11.5px; color:var(--text-muted);">${u.last_login ? u.last_login.split(' ')[0] : 'Nunca'}</span>
+                            <span class="mono" style="font-size:11.5px; color:var(--text-muted);">${escapeHtml(u.last_login ? u.last_login.split(' ')[0] : 'Nunca')}</span>
                         </td>
                         <td style="text-align: right;">
                             <div class="action-btns-group" style="justify-content: flex-end;">
                                 ${toggleStatusBtn}
-                                <button class="btn-act btn-act-pwd" onclick="openChangePasswordModal(${u.id}, '${escapeHtml(u.username)}')" title="Restablecer o cambiar la contraseña del usuario">
+                                <button class="btn-act btn-act-pwd" onclick="openChangePasswordModal(${u.id})" title="Restablecer o cambiar la contraseña del usuario">
                                     <span>🔑</span> <span>Restablecer Clave</span>
                                 </button>
                                 <button class="btn-act btn-act-edit" onclick="openEditUserModal(${u.id})" title="Modificar datos del usuario">
                                     <span>✏️</span> <span>Editar</span>
                                 </button>
-                                <button class="btn-act btn-act-delete" onclick="confirmDeleteUser(${u.id}, '${escapeHtml(u.username)}')" title="Eliminar usuario">
+                                <button class="btn-act btn-act-delete" onclick="confirmDeleteUser(${u.id})" title="Eliminar usuario">
                                     <span>🗑️</span>
                                 </button>
                             </div>
@@ -1271,7 +1359,7 @@
             try {
                 const expDate = new Date(expiresStr);
                 const today = new Date();
-                today.setHours(0,0,0,0);
+                today.setHours(0, 0, 0, 0);
                 return expDate < today;
             } catch (e) {
                 return false;
@@ -1446,7 +1534,10 @@
             }
         }
 
-        function openChangePasswordModal(userId, username) {
+        function openChangePasswordModal(userId) {
+            const user = usersData.find(u => u.id === userId);
+            if (!user) return;
+            const username = user.username || '';
             document.getElementById('pwd-userid').value = userId;
             document.getElementById('pwd-username-display').innerText = '@' + username;
             document.getElementById('new-password').value = '';
@@ -1511,7 +1602,10 @@
             }
         }
 
-        async function confirmDeleteUser(userId, username) {
+        async function confirmDeleteUser(userId) {
+            const user = usersData.find(u => u.id === userId);
+            if (!user) return;
+            const username = user.username || '';
             if (!confirm(`⚠️ ATENCIÓN: ¿Estás seguro de eliminar permanentemente al usuario '@${username}'? Esta acción no se puede deshacer.`)) return;
 
             try {
@@ -1555,4 +1649,5 @@
         }
     </script>
 </body>
+
 </html>

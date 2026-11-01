@@ -320,6 +320,48 @@ AVAILABLE_ASSETS = [
         "base_price": 1.7150,
         "volatility": 0.0040,
         "trend_bias": 0.0001
+    },
+    # === COMMODITIES & MINERALES ===
+    {
+        "symbol": "XAUUSD",
+        "name": "Oro / USD (Gold)",
+        "category": "FOREX",
+        "type": "Oro Spot CFD",
+        "icon": "🥇",
+        "base_price": 2735.50,
+        "volatility": 0.0075,
+        "trend_bias": 0.0002
+    },
+    # === WALL STREET (STOCKS CFD) ===
+    {
+        "symbol": "AAPL",
+        "name": "Apple Inc.",
+        "category": "FOREX",
+        "type": "Acción Wall Street CFD",
+        "icon": "🍎",
+        "base_price": 230.50,
+        "volatility": 0.0090,
+        "trend_bias": 0.0002
+    },
+    {
+        "symbol": "TSLA",
+        "name": "Tesla Inc.",
+        "category": "FOREX",
+        "type": "Acción Wall Street CFD",
+        "icon": "⚡",
+        "base_price": 260.00,
+        "volatility": 0.0150,
+        "trend_bias": 0.0003
+    },
+    {
+        "symbol": "NVDA",
+        "name": "NVIDIA Corp.",
+        "category": "FOREX",
+        "type": "Acción Wall Street CFD",
+        "icon": "🟢",
+        "base_price": 140.00,
+        "volatility": 0.0140,
+        "trend_bias": 0.0003
     }
 ]
 
@@ -853,11 +895,24 @@ class MultiAssetMarketFeed:
         price = float(snapshot["current_price"])
         ema20 = ema(closes, 20)
         ema50 = ema(closes, 50)
+        ema200 = ema(closes, min(200, len(closes)))
+
+        # ATR 14 para cálculo dinámico institucional de Stop-Loss y Take-Profit
+        trs = []
+        for i in range(1, len(closed)):
+            h = float(closed[i]["high"])
+            l = float(closed[i]["low"])
+            prev_c = float(closed[i - 1]["close"])
+            trs.append(max(h - l, abs(h - prev_c), abs(l - prev_c)))
+        atr14 = sum(trs[-14:]) / 14.0 if len(trs) >= 14 else (price * 0.005)
+
         result = dict(asset)
         result.update({
             "price": price,
             "ema20": ema20,
             "ema50": ema50,
+            "ema200": ema200,
+            "atr": round(atr14, 5),
             "rsi": round(rsi, 2),
             "support": min(float(c["low"]) for c in recent),
             "resistance": max(float(c["high"]) for c in recent),

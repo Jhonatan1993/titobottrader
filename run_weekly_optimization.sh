@@ -20,5 +20,5 @@ echo "=========================================================="
 
 "$PYTHON_BIN" optimizer.py --candles 2500
 
-echo "✅ Optimización finalizada exitosamente."
-echo "Los nuevos parámetros han sido recargados automáticamente en caliente por el bot."
+echo "✅ Exploración finalizada."
+echo "Los candidatos son experimentales y no se aplican al bot automáticamente."

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <title>Alertas Telegram · TitoBotTrader</title>
+    <link rel="stylesheet" href="/static/css/telegram_monitor.css">
+    <script src="/static/js/telegram_monitor.js?v=2" defer></script>
+</head>
+
+<body>
+    <main>
+        <a href="/admin">← Volver a administración</a>
+        <h1>Alertas por Telegram</h1>
+        <p>Configura el monitor independiente de solo lectura. No puede abrir ni cerrar operaciones.</p>
+        <p id="status" role="status">Consultando estado del monitor…</p>
+        <form id="telegram-form" autocomplete="off">
+            <label for="token">Token nuevo de BotFather</label>
+            <input id="token" type="password" required autocomplete="off" spellcheck="false">
+            <p>El token guardado nunca se muestra. No pegues tokens en el chat de soporte.</p>
+            <label for="password">Contraseña de administrador</label>
+            <input id="password" type="password" required autocomplete="current-password">
+            <button id="discover" type="button">Buscar chats privados</button>
+            <label for="chat">Chat privado</label>
+            <select id="chat">
+                <option value="">Selecciona un chat</option>
+            </select>
+            <details id="manual-chat-options">
+                <summary>No aparece mi chat: introducir ID manualmente</summary>
+                <label for="manual-chat">ID numérico del chat privado (no es un mensaje)</label>
+                <input id="manual-chat" inputmode="numeric" pattern="[0-9]*" autocomplete="off" disabled>
+            </details>
+            <p>Envía primero un mensaje privado a tu bot. La prueba debe llegar antes de considerar configuradas las
+                alertas.</p>
+            <button id="save" type="submit">Enviar prueba y conectar</button>
+            <p id="result" role="status" aria-live="polite"></p>
+        </form>
+    </main>
+</body>
+
+</html>

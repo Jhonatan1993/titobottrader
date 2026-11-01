@@ -82,8 +82,8 @@ def test_disabled_limits_do_not_block_entries():
     assert policy.can_open(active_positions=0).allowed is True
 
 
-def test_reset_halt_allows_manual_resume():
-    """Garantiza que la acción manual del usuario ('Reanudar') limpia el bloqueo de pérdida diaria y reactiva el bot."""
+def test_reset_halt_preserves_daily_loss_limit():
+    """Reanudar no elimina el PnL ni permite eludir el límite diario."""
     policy = IQOptionRiskPolicy(
         profit_target_amount=100.0,
         max_loss_amount=50.0,
@@ -100,6 +100,6 @@ def test_reset_halt_allows_manual_resume():
     # El usuario presiona "Reanudar"
     policy.reset_halt()
 
-    assert policy.snapshot()["halted"] is False
-    assert policy.can_open(active_positions=0).allowed is True
-
+    assert policy.snapshot()["halted"] is True
+    assert policy.snapshot()["realized_pnl"] == -60.0
+    assert policy.can_open(active_positions=0).reason == "LIMITE_PERDIDA_DIARIA_ALCANZADO"
