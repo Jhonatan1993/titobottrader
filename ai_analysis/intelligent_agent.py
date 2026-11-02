@@ -380,13 +380,13 @@ class IntelligentTradingAgent:
         adjusted_conf_bear = min(98, max(20, int(bear_confluence * confidence_boost_bear)))
 
         # Condición Cuantitativa Estricta de COMPRA (CALL / Largo):
-        if can_buy_regime and total_confluence >= 72 and adjusted_conf >= 75 and rsi < 68 and (runway_atr >= 0.2 or dist_to_resistance >= 0.04):
+        if can_buy_regime and total_confluence >= 70 and adjusted_conf >= 75 and rsi < 68:
             decision = "BUY"
             score = adjusted_conf
             action_type = "COMPRA_ALCISTA_CONFIRMADA"
             reason_simple = f"🌟 Confluencia Alcista A+ ({total_confluence}/100): {name} ({profile['vol_type']}) - Tendencia {trend_score}p, RSI {rsi:.1f} {rsi_score}p, Margen a ${resistance:,.2f} {runway_score}p."
         # Condición Cuantitativa Estricta de VENTA / BAJA (PUT / Corto):
-        elif can_sell_regime and bear_confluence >= 72 and adjusted_conf_bear >= 75 and rsi > 32 and (bear_runway_atr >= 0.2 or dist_to_support >= 0.04):
+        elif can_sell_regime and bear_confluence >= 70 and adjusted_conf_bear >= 75 and rsi > 32:
             decision = "SELL"
             score = adjusted_conf_bear
             action_type = "VENTA_BAJISTA_CONFIRMADA"
