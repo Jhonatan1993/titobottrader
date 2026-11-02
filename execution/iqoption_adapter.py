@@ -7,30 +7,29 @@ from config.broker_config import live_trading_armed, live_cfd_execution_verified
 from execution.practice_balance_capture import capture_practice_balance
 
 ACTIVE_ASSET_IDS = {
-    # Forex Turbo / Binarias (Lunes a Viernes)
-    "EURUSD": 1861,
-    "EURGBP": 1862,
-    "EURJPY": 1864,
-    "USDJPY": 1865,
-    "GBPJPY": 1866,
-    "GBPUSD": 1867,
-    "AUDCAD": 1868,
-    "AUDJPY": 1869,
-    "AUDUSD": 1870,
-    "GBPAUD": 1877,
-    "GBPNZD": 1880,
-    "NZDCAD": 1881,
-    "AUDCHF": 1884,
-    "NZDUSD": 1896,
-    "GBPCAD": 1897,
-    "AUDNZD": 1900,
-    "EURNZD": 1901,
-    "BTCUSD": 1916,
+    # Forex CFD Estándar (Lunes a Viernes)
+    "EURUSD": 1,
+    "EURGBP": 2,
+    "GBPJPY": 3,
+    "EURJPY": 4,
+    "GBPUSD": 5,
+    "USDJPY": 6,
+    "AUDCAD": 7,
+    "NZDUSD": 8,
     "USDCHF": 72,
+    "AUDUSD": 99,
     "USDCAD": 100,
+    "AUDJPY": 101,
+    "GBPCAD": 102,
+    "GBPCHF": 103,
+    "GBPAUD": 104,
+    "EURCAD": 105,
     "CHFJPY": 106,
     "CADCHF": 107,
     "EURAUD": 108,
+    "AUDNZD": 1900,
+    "EURNZD": 1901,
+    "BTCUSD": 1916,
     # Forex OTC (Operación 24/7)
     "EURUSD-OTC": 76,
     "EURUSDOTC": 76,
@@ -86,7 +85,10 @@ ACTIVE_ID_TO_SYMBOL: Dict[int, str] = {
     88: "AUDCAD-OTC", 89: "USDCAD-OTC", 90: "AUDUSD-OTC", 91: "GBPAUD-OTC",
     92: "EURCAD-OTC", 93: "CHFJPY-OTC", 94: "CADCHF-OTC", 95: "EURAUD-OTC",
     2124: "USDTRY-OTC", 2299: "USDCOP-OTC", 2298: "USDBRL-OTC", 2300: "USDMXN-OTC",
-    1: "EURUSD", 2: "EURGBP", 3: "GBPJPY", 4: "EURJPY", 5: "GBPUSD", 6: "USDJPY", 7: "AUDCAD"
+    1: "EURUSD", 2: "EURGBP", 3: "GBPJPY", 4: "EURJPY", 5: "GBPUSD", 6: "USDJPY",
+    7: "AUDCAD", 8: "NZDUSD", 72: "USDCHF", 99: "AUDUSD", 100: "USDCAD",
+    101: "AUDJPY", 102: "GBPCAD", 103: "GBPCHF", 104: "GBPAUD", 105: "EURCAD",
+    106: "CHFJPY", 107: "CADCHF", 108: "EURAUD"
 }
 
 CFD_ALLOWED_SYMBOLS = frozenset({
@@ -1046,7 +1048,7 @@ class IQOptionAdapter:
         if clean_sym not in CFD_ALLOWED_SYMBOLS:
             return {"success": False, "error": f"Símbolo CFD no autorizado: {clean_sym or '(vacío)'}"}
         # CFD requires an active id confirmed by the broker; never substitute EURUSD.
-        active_id = self._symbol_to_active_id.get(clean_sym)
+        active_id = self.get_active_id(clean_sym)
         if active_id is None:
             return {"success": False, "error": f"IQ Option no confirmó el instrumento CFD {clean_sym}. Orden rechazada."}
 
@@ -1396,11 +1398,11 @@ class IQOptionAdapter:
                     if (msg_name == "position-closed"
                             and position_id_in_event is not None
                             and str(position_id_in_event) == str(pos_val)):
-                        res = {"success": True, "status": "CLOSE_ACKNOWLEDGED", "position_id": str(pos_val)}
+                        res = {"success": True, "status": "CLOSED", "position_id": str(pos_val)}
                         closed_ok = True
                         break
                     elif msg_name == "result" and response_id == req_id and isinstance(body, dict) and body.get("success") is True:
-                        res = {"success": True, "status": "CLOSE_ACKNOWLEDGED", "position_id": str(pos_val)}
+                        res = {"success": True, "status": "CLOSED", "position_id": str(pos_val)}
                         closed_ok = True
                         break
                     elif "error" in data and response_id == req_id:
