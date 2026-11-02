@@ -50,7 +50,7 @@ class MarketRegimeDetector:
             }
 
         # 2. RÉGIMEN DE TENDENCIA ALCISTA ESTRUCTURADA (BULL)
-        if ema20 > ema50 * 1.002 and price >= ema20 * 0.995 and (46.0 <= rsi <= 72.0):
+        if ema20 > ema50 * 1.0001 and price >= ema20 * 0.998 and (46.0 <= rsi <= 72.0):
             return {
                 "regime": "TRENDING_BULL",
                 "tag": "🚀 Tendencia Alcista Estructurada",
@@ -64,7 +64,7 @@ class MarketRegimeDetector:
             }
 
         # 3. RÉGIMEN DE TENDENCIA BAJISTA (BEAR)
-        if ema20 < ema50 * 0.998 and price <= ema20 * 1.005 and rsi < 44.0:
+        if ema20 < ema50 * 0.9999 and price <= ema20 * 1.002 and rsi < 46.0:
             return {
                 "regime": "TRENDING_BEAR",
                 "tag": "📉 Presión Bajista Dominante",

@@ -86,3 +86,4 @@ def test_forex_cfd_neutral_ranging_holds():
     res = agent.evaluate_asset(asset, {})
     assert res["decision"] == "HOLD"
     assert res["confidence"] < 75
+
