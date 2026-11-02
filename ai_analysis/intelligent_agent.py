@@ -215,17 +215,19 @@ class IntelligentTradingAgent:
                 "regime_tag": regime_info["tag"]
             }
 
-        # 4. FILTRO DE RÉGIMEN DE MERCADO (PERMISIVIDAD DE COMPRA)
-        if not regime_info["allow_buy"]:
+        # 4. FILTRO DE RÉGIMEN DE MERCADO (VOLATILIDAD CAÓTICA / SHOCK GLOBAL)
+        can_buy_regime = regime_info.get("allow_buy", True)
+        can_sell_regime = regime_info.get("allow_sell", True)
+        if not can_buy_regime and not can_sell_regime:
             return {
                 "symbol": symbol,
                 "name": name,
                 "icon": icon,
                 "decision": "HOLD",
                 "action_type": "REGIME_FILTER",
-                "confidence": int(40 * regime_info["confidence_mod"]),
-                "score": 35,
-                "reason_simple": f"{regime_info['tag']}: Compras pausadas ({regime_info['reason']}).",
+                "confidence": int(35 * regime_info.get("confidence_mod", 1.0)),
+                "score": 30,
+                "reason_simple": f"{regime_info['tag']}: Operaciones pausadas ({regime_info['reason']}).",
                 "price": price,
                 "take_profit": suggested_tp,
                 "stop_loss": suggested_sl,
@@ -234,27 +236,45 @@ class IntelligentTradingAgent:
                 "regime_tag": regime_info["tag"]
             }
 
-        # 5. EVALUACIÓN DE ENTRADAS CON CRITERIO CUANTITATIVO Y CONFLUENCIA
-        dist_to_resistance = ((resistance - price) / price) * 100
-        confidence_boost = self.learner.get_asset_confidence_boost(symbol) * regime_info["confidence_mod"]
+        # 5. EVALUACIÓN DE ENTRADAS CON CRITERIO CUANTITATIVO Y CONFLUENCIA MULTIVARIABLE
         base_kelly = self.learner.get_optimal_kelly_budget(symbol, base_budget_pct=22.0)
-        kelly_budget = round(max(5.0, min(35.0, base_kelly * regime_info["kelly_mod"])), 1)
+        kelly_budget = round(max(5.0, min(35.0, base_kelly * regime_info.get("kelly_mod", 1.0))), 1)
+
+        # Normalización adaptativa de margen de resistencia y soporte (ATR + %):
+        atr_eff = atr if atr > 0 else (price * 0.003)
+        runway_atr = max(0.0, (resistance - price) / atr_eff) if resistance > price else 0.0
+        bear_runway_atr = max(0.0, (price - support) / atr_eff) if price > support else 0.0
+        dist_to_resistance = ((resistance - price) / price) * 100 if price > 0 else 0.0
+        dist_to_support = ((price - support) / price) * 100 if price > 0 else 0.0
+
+        # Moduladores de confianza diferenciados para compras y ventas según régimen
+        bull_regime_mod = regime_info.get("confidence_mod", 1.0)
+        bear_regime_mod = regime_info.get("confidence_mod", 1.0)
+        if regime_info.get("regime") == "TRENDING_BEAR":
+            bull_regime_mod = regime_info.get("confidence_mod_buy", 0.50)
+            bear_regime_mod = regime_info.get("confidence_mod", 1.20)
+        elif regime_info.get("regime") == "TRENDING_BULL":
+            bull_regime_mod = regime_info.get("confidence_mod", 1.20)
+            bear_regime_mod = 0.50
+
+        confidence_boost_bull = self.learner.get_asset_confidence_boost(symbol) * bull_regime_mod
+        confidence_boost_bear = self.learner.get_asset_confidence_boost(symbol) * bear_regime_mod
 
         # Ajuste dinámico de TP según régimen
-        if regime_info["tp_multiplier"] != 1.0:
+        if regime_info.get("tp_multiplier", 1.0) != 1.0:
             suggested_tp = round(price * (1.0 + (adaptive_levels["tp_pct"] * regime_info["tp_multiplier"])), 2 if price < 1000 else 1)
 
-        # Matriz Cuantitativa Determinística de Confluencia Multivariable:
+        # Matriz Cuantitativa Determinística de Confluencia Multivariable (Alcista):
         # 1. Alineación de Tendencia y Medias Móviles (0 - 30 pts)
         trend_score = 0
-        if price >= ema20:
-            trend_score += 15
-        elif price >= ema20 * 0.995:
-            trend_score += 8
-        if ema20 >= ema50:
-            trend_score += 15
-        elif ema20 >= ema50 * 0.996:
-            trend_score += 7
+        if price >= ema20 and ema20 >= ema50:
+            trend_score = 25
+        elif price >= ema20:
+            trend_score = 12
+        elif ema20 >= ema50:
+            trend_score = 8
+        else:
+            trend_score = 0
 
         # Filtro Institucional Macro EMA 200:
         if ema200 > 0:
@@ -263,53 +283,55 @@ class IntelligentTradingAgent:
             elif price >= ema200 and ema20 >= ema50:
                 trend_score = min(30, trend_score + 5)   # Bonificación por tendencia macro alcista
 
-        # 2. Impulso y Momentum RSI (0 - 30 pts): Rango óptimo de impulso 45-62
+        # 2. Impulso y Momentum RSI (0 - 30 pts): Rango óptimo de impulso alcista 46-62
         rsi_score = 0
-        if 46.0 <= rsi <= 60.0:
+        if 46.0 <= rsi <= 62.0:
             rsi_score = 30
         elif 42.0 <= rsi < 46.0:
             rsi_score = 22
-        elif 60.0 < rsi <= 65.0:
+        elif 62.0 < rsi <= 66.0:
             rsi_score = 20
         elif 36.0 <= rsi < 42.0:
             rsi_score = 12
         else:
             rsi_score = 0
 
-        # 3. Margen Libre hacia Resistencia / Runway (0 - 20 pts)
+        # 3. Margen Libre hacia Resistencia / Runway Alcista (0 - 20 pts)
         runway_score = 0
-        if dist_to_resistance >= 2.0:
+        if runway_atr >= 1.5 or dist_to_resistance >= 1.2:
             runway_score = 20
-        elif dist_to_resistance >= 1.2:
+        elif runway_atr >= 1.0 or dist_to_resistance >= 0.8:
             runway_score = 15
-        elif dist_to_resistance >= 0.8:
+        elif runway_atr >= 0.5 or dist_to_resistance >= 0.3:
             runway_score = 10
+        elif runway_atr >= 0.2 or dist_to_resistance >= 0.08:
+            runway_score = 5
         else:
             runway_score = 0
 
         # 4. Soporte y Dinámica de Cambio 24h (0 - 20 pts)
         change_24h = asset.get("change_24h", 0.0)
-        dist_to_support = ((price - support) / price) * 100 if support > 0 else 1.0
+        support_atr = max(0.0, (price - support) / atr_eff) if price > support else 0.0
         support_score = 0
-        if 0.4 <= dist_to_support <= 3.8:
+        if support_atr >= 0.4 or dist_to_support >= 0.04:
             support_score += 10
-        if -1.5 <= change_24h <= 5.0:
+        if -3.0 <= change_24h <= 5.0:
             support_score += 10
 
         total_confluence = trend_score + rsi_score + runway_score + support_score
-        adjusted_conf = min(98, max(20, int(total_confluence * confidence_boost)))
+        adjusted_conf = min(98, max(20, int(total_confluence * confidence_boost_bull)))
 
-        # Matriz Cuantitativa para Operaciones Bajistas (PUT / Baja):
+        # Matriz Cuantitativa para Operaciones Bajistas (PUT / Venta en Corto):
         # 1. Alineación de Tendencia Bajista (0 - 30 pts)
         bear_trend_score = 0
-        if price <= ema20:
-            bear_trend_score += 15
-        elif price <= ema20 * 1.005:
-            bear_trend_score += 8
-        if ema20 <= ema50:
-            bear_trend_score += 15
-        elif ema20 <= ema50 * 1.004:
-            bear_trend_score += 7
+        if price <= ema20 and ema20 <= ema50:
+            bear_trend_score = 25
+        elif price <= ema20:
+            bear_trend_score = 12
+        elif ema20 <= ema50:
+            bear_trend_score = 8
+        else:
+            bear_trend_score = 0
 
         # Filtro Institucional Macro EMA 200:
         if ema200 > 0:
@@ -318,51 +340,53 @@ class IntelligentTradingAgent:
             elif price <= ema200 and ema20 <= ema50:
                 bear_trend_score = min(30, bear_trend_score + 5)   # Bonificación por tendencia macro bajista
 
-        # 2. Impulso y Momentum Bajista (0 - 30 pts)
+        # 2. Impulso y Momentum Bajista (0 - 30 pts): Rango óptimo 38-54
         bear_rsi_score = 0
-        if 40.0 <= rsi <= 54.0:
+        if 38.0 <= rsi <= 54.0:
             bear_rsi_score = 30
-        elif 35.0 <= rsi < 40.0:
+        elif 34.0 <= rsi < 38.0:
             bear_rsi_score = 22
         elif 54.0 < rsi <= 58.0:
             bear_rsi_score = 20
         elif 58.0 < rsi <= 64.0:
             bear_rsi_score = 12
-        elif rsi >= 72.0:
+        elif rsi >= 70.0:
             bear_rsi_score = 25  # Fuerte rechazo por sobrecompra
         else:
             bear_rsi_score = 0
 
         # 3. Margen Libre hacia Soporte / Runway Bajista (0 - 20 pts)
         bear_runway_score = 0
-        if dist_to_support >= 2.0:
+        if bear_runway_atr >= 1.5 or dist_to_support >= 1.2:
             bear_runway_score = 20
-        elif dist_to_support >= 1.2:
+        elif bear_runway_atr >= 1.0 or dist_to_support >= 0.8:
             bear_runway_score = 15
-        elif dist_to_support >= 0.8:
+        elif bear_runway_atr >= 0.5 or dist_to_support >= 0.3:
             bear_runway_score = 10
+        elif bear_runway_atr >= 0.2 or dist_to_support >= 0.08:
+            bear_runway_score = 5
         else:
             bear_runway_score = 0
 
-        # 4. Resistencia y Dinámica de Cambio 24h (0 - 20 pts)
-        dist_from_resistance = ((resistance - price) / price) * 100 if resistance > 0 else 1.0
+        # 4. Resistencia y Dinámica de Cambio 24h Bajista (0 - 20 pts)
+        res_atr = max(0.0, (resistance - price) / atr_eff) if resistance > price else 0.0
         bear_res_score = 0
-        if 0.2 <= dist_from_resistance <= 3.8:
+        if res_atr >= 0.4 or dist_to_resistance >= 0.04:
             bear_res_score += 10
-        if -5.0 <= change_24h <= 1.5:
+        if -5.0 <= change_24h <= 3.0:
             bear_res_score += 10
 
         bear_confluence = bear_trend_score + bear_rsi_score + bear_runway_score + bear_res_score
-        adjusted_conf_bear = min(98, max(20, int(bear_confluence * confidence_boost)))
+        adjusted_conf_bear = min(98, max(20, int(bear_confluence * confidence_boost_bear)))
 
-        # Condición Cuantitativa Estricta de COMPRA (CALL / Sube):
-        if total_confluence >= 80 and dist_to_resistance >= 0.8 and rsi < 68 and adjusted_conf >= 82:
+        # Condición Cuantitativa Estricta de COMPRA (CALL / Largo):
+        if can_buy_regime and total_confluence >= 72 and adjusted_conf >= 75 and rsi < 68 and (runway_atr >= 0.2 or dist_to_resistance >= 0.04):
             decision = "BUY"
             score = adjusted_conf
             action_type = "COMPRA_ALCISTA_CONFIRMADA"
             reason_simple = f"🌟 Confluencia Alcista A+ ({total_confluence}/100): {name} ({profile['vol_type']}) - Tendencia {trend_score}p, RSI {rsi:.1f} {rsi_score}p, Margen a ${resistance:,.2f} {runway_score}p."
-        # Condición Cuantitativa Estricta de VENTA / BAJA (PUT / Baja):
-        elif bear_confluence >= 80 and dist_to_support >= 0.8 and rsi > 32 and adjusted_conf_bear >= 82:
+        # Condición Cuantitativa Estricta de VENTA / BAJA (PUT / Corto):
+        elif can_sell_regime and bear_confluence >= 72 and adjusted_conf_bear >= 75 and rsi > 32 and (bear_runway_atr >= 0.2 or dist_to_support >= 0.04):
             decision = "SELL"
             score = adjusted_conf_bear
             action_type = "VENTA_BAJISTA_CONFIRMADA"
@@ -373,16 +397,16 @@ class IntelligentTradingAgent:
             action_type = "MONITOREO_ESTABLE"
             reasons = []
             if max(trend_score, bear_trend_score) < 20:
-                reasons.append("tendencia EMA débil")
+                reasons.append("tendencia EMA en espera")
             if max(rsi_score, bear_rsi_score) < 18:
-                reasons.append(f"RSI ({rsi:.1f}) subóptimo")
+                reasons.append(f"RSI ({rsi:.1f}) neutral")
             if max(runway_score, bear_runway_score) < 10:
                 reasons.append("margen acotado")
             reason_details = ", ".join(reasons) if reasons else f"confluencia {max(total_confluence, bear_confluence)}/100"
             reason_simple = f"En espera: {name} consolidando ({reason_details})."
 
-        final_conf = adjusted_conf_bear if decision == "SELL" else adjusted_conf
-        final_score = adjusted_conf_bear if decision == "SELL" else adjusted_conf
+        final_conf = score
+        final_score = score
 
         # Cálculo dinámico institucional de SL y TP con Ratio R:R mínimo 1:2.0
         decimals = 4 if price < 10.0 else (2 if price < 1000 else 1)

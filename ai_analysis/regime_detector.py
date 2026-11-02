@@ -45,6 +45,7 @@ class MarketRegimeDetector:
                 "tp_multiplier": 0.85,     # TPs defensivos y cercanos
                 "sl_multiplier": 0.80,     # Stop-Loss ceñido
                 "allow_buy": False,        # Prohibir compras durante caos
+                "allow_sell": False,       # Prohibir ventas durante caos
                 "reason": f"Volatilidad realizada disparada ({vol_ratio:.1f}x) o RSI extremo ({rsi:.1f})."
             }
 
@@ -58,6 +59,7 @@ class MarketRegimeDetector:
                 "tp_multiplier": 1.25,     # Dejar correr ganancias con TPs más amplios
                 "sl_multiplier": 1.00,
                 "allow_buy": True,
+                "allow_sell": False,       # No vender contra tendencia alcista
                 "reason": f"Alineación alcista EMA20/50 (+{ema_spread_pct:.2f}%) con RSI sólido ({rsi:.1f})."
             }
 
@@ -66,11 +68,13 @@ class MarketRegimeDetector:
             return {
                 "regime": "TRENDING_BEAR",
                 "tag": "📉 Presión Bajista Dominante",
-                "confidence_mod": 0.50,
-                "kelly_mod": 0.50,
-                "tp_multiplier": 0.80,
-                "sl_multiplier": 0.75,
+                "confidence_mod": 1.20,     # Bonificación para ventas en corto (shorting)
+                "confidence_mod_buy": 0.50, # Penalización para compras contra tendencia
+                "kelly_mod": 1.10,
+                "tp_multiplier": 1.15,
+                "sl_multiplier": 1.00,
                 "allow_buy": False,        # Prohibir compras contra tendencia
+                "allow_sell": True,        # Permitir ventas en corto (CFD Short / PUT)
                 "reason": f"Tendencia bajista EMA20 por debajo de EMA50 ({ema_spread_pct:.2f}%)."
             }
 
@@ -78,11 +82,12 @@ class MarketRegimeDetector:
         return {
             "regime": "RANGING_SIDEWAYS",
             "tag": "🌊 Consolidación Lateral / Rango",
-            "confidence_mod": 0.90,
+            "confidence_mod": 0.95,
             "kelly_mod": 0.85,
             "tp_multiplier": 1.00,
             "sl_multiplier": 0.95,
-            "allow_buy": True,            # Permitir compras solo si hay confluencia estricta
+            "allow_buy": True,            # Permitir compras en soporte con confluencia
+            "allow_sell": True,           # Permitir ventas en resistencia con confluencia
             "reason": f"Mercado en compresión de rango ({range_span_pct:.1f}% entre soporte y resistencia)."
         }
 
@@ -95,5 +100,6 @@ class MarketRegimeDetector:
             "tp_multiplier": 1.0,
             "sl_multiplier": 1.0,
             "allow_buy": True,
+            "allow_sell": True,
             "reason": f"Inicialización neutral ({code})."
         }
