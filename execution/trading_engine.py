@@ -388,6 +388,12 @@ class RealTimeTradingEngine:
                 pnl_pct = round((pnl_net / invested_amt) * 100, 2) if invested_amt > 0 else 0.0
                 pos_side = bp.get("side", "BUY")
                 pos_lev = bp.get("leverage", 500)
+                e_price = entry_q if entry_q > 0 else cur_p
+                sl_dist = round(e_price * 0.005, 5)
+                tp_dist = round(e_price * 0.010, 5)
+                is_long = pos_side in ["BUY", "BUY_LONG", "CALL"]
+                synced_sl = round(e_price - sl_dist, 5) if is_long else round(e_price + sl_dist, 5)
+                synced_tp = round(e_price + tp_dist, 5) if is_long else round(e_price - tp_dist, 5)
 
                 if pos_key not in self.open_positions:
                     self.open_positions[pos_key] = {
@@ -398,14 +404,18 @@ class RealTimeTradingEngine:
                         "side": pos_side,
                         "leverage": pos_lev,
                         "invested_amount": invested_amt,
-                        "entry_price": entry_q if entry_q > 0 else cur_p,
+                        "entry_price": e_price,
                         "current_price": cur_p,
                         "quantity": 1.0,
                         "broker_order_id": str(bp.get("id", "")),
                         "position_id": str(bp.get("external_id") or bp.get("id", "")),
                         "current_pnl": pnl_net,
                         "current_pnl_percent": pnl_pct,
-                        "entry_timestamp": time.time()
+                        "entry_timestamp": time.time(),
+                        "stop_loss": synced_sl,
+                        "initial_stop_loss": synced_sl,
+                        "take_profit": synced_tp,
+                        "progress_to_target": 0.0
                     }
                 else:
                     pos = self.open_positions[pos_key]
@@ -418,6 +428,11 @@ class RealTimeTradingEngine:
                         pos["entry_price"] = entry_q
                     if bp.get("invest"):
                         pos["invested_amount"] = invested_amt
+                    if not pos.get("stop_loss") or pos.get("stop_loss") == 0:
+                        pos["stop_loss"] = synced_sl
+                        pos["initial_stop_loss"] = synced_sl
+                    if not pos.get("take_profit") or pos.get("take_profit") == 0:
+                        pos["take_profit"] = synced_tp
 
         # 2. Si el broker reporta cero posiciones abiertas, purgar con confirmación de 3 sondeos consecutivos
         elif len(broker_positions) == 0:
