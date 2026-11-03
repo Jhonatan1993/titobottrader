@@ -409,27 +409,24 @@ class IntelligentTradingAgent:
         final_score = score
 
         # Cálculo dinámico institucional de SL y TP con Ratio R:R mínimo 1:2.0
+        # En Forex CFD, el SL debe tener un suelo mínimo absoluto basado en profile['sl_pct'] (mínimo 0.35% a 0.55%, o 25-50 pips)
+        # para que el spread del broker (1.5 - 2.5 pips) no asfixie la posición inmediatamente tras abrir.
+        sl_pct_floor = profile.get("sl_pct", 0.0035)
+        min_sl_dist = price * sl_pct_floor
+        sl_dist = max(min_sl_dist, 2.0 * atr) if atr > 0 else min_sl_dist
+        tp_dist = max(sl_dist * 2.0, 4.0 * atr) if atr > 0 else (sl_dist * 2.0)
+
         decimals = 4 if price < 10.0 else (2 if price < 1000 else 1)
         if decision == "SELL":
-            if atr > 0:
-                final_sl = round(price + (1.5 * atr), decimals)
-                final_tp = round(price - (3.0 * atr), decimals)
-            else:
-                sl_p = adaptive_levels.get("sl_pct", profile.get("sl_pct", 0.005))
-                tp_p = max(sl_p * 2.0, adaptive_levels.get("tp_pct", profile.get("tp_pct", 0.010)))
-                final_sl = round(price * (1.0 + sl_p), decimals)
-                final_tp = round(price * (1.0 - tp_p), decimals)
+            final_sl = round(price + sl_dist, decimals)
+            final_tp = round(price - tp_dist, decimals)
             if support and support < price:
                 capped_tp = round(support * 1.002, decimals)
                 if capped_tp < price * 0.995:
                     final_tp = max(final_tp, capped_tp)
         else:
-            if atr > 0:
-                final_sl = round(price - (1.5 * atr), decimals)
-                final_tp = round(price + (3.0 * atr), decimals)
-            else:
-                final_sl = suggested_sl
-                final_tp = suggested_tp
+            final_sl = round(price - sl_dist, decimals)
+            final_tp = round(price + tp_dist, decimals)
             if resistance and resistance > price:
                 capped_tp = round(resistance * 0.998, decimals)
                 if capped_tp > price * 1.005:

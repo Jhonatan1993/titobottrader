@@ -1092,6 +1092,10 @@ class RealTimeTradingEngine:
                     elif sl > 0.0 and current_price >= sl:
                         is_hit_sl = True
 
+                # Margen de maduración contra spread del broker en los primeros 20 segundos
+                if is_hit_sl and elapsed < 20.0 and pnl_pct > -1.5:
+                    is_hit_sl = False
+
                 if is_hit_tp:
                     self._execute_sell(pos_key, asset, {"decision": "SELL_TAKE_PROFIT", "reason_simple": f"🎯 Take-Profit alcanzado en {sym}: Objetivo cumplido en ${current_price:,.5f}."})
                     continue
