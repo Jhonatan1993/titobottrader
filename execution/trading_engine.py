@@ -1066,6 +1066,30 @@ class RealTimeTradingEngine:
                     pct_to_tp = 0.0
                 pos["progress_to_target"] = round(pct_to_tp, 1)
 
+                # 4. Verificación y Cierre Automático por Take-Profit o Stop-Loss (ACTIVA SIEMPRE, incluso si el motor está en pausa)
+                sl = float(pos.get("stop_loss", 0.0) or 0.0)
+                tp = float(pos.get("take_profit", 0.0) or 0.0)
+                is_hit_tp = False
+                is_hit_sl = False
+
+                if is_long:
+                    if tp > entry_price and current_price >= tp:
+                        is_hit_tp = True
+                    elif sl > 0.0 and current_price <= sl:
+                        is_hit_sl = True
+                else:  # Short / Sell / Put
+                    if tp > 0.0 and tp < entry_price and current_price <= tp:
+                        is_hit_tp = True
+                    elif sl > 0.0 and current_price >= sl:
+                        is_hit_sl = True
+
+                if is_hit_tp:
+                    self._execute_sell(pos_key, asset, {"decision": "SELL_TAKE_PROFIT", "reason_simple": f"🎯 Take-Profit alcanzado en {sym}: Objetivo cumplido en ${current_price:,.5f}."})
+                    continue
+                elif is_hit_sl:
+                    self._execute_sell(pos_key, asset, {"decision": "SELL_STOP_LOSS", "reason_simple": f"🛡️ Stop-Loss ejecutado en {sym}: Límite alcanzado en ${current_price:,.5f}."})
+                    continue
+
         # 2 & 3. CIRCUIT BREAKERS PARA IQ OPTION
         for b_id, b_wal in list(self.broker_wallets.items()):
             b_equity = self.get_broker_equity(b_id)
