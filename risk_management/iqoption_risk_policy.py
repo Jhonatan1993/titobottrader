@@ -213,6 +213,14 @@ class IQOptionRiskPolicy:
             self._roll_day()
             self._refresh_halt()
 
+    def clear_reconciliation(self) -> None:
+        """Clear reconciliation requirement when authorized."""
+        with self._state_lock:
+            self._roll_day()
+            self._reconciliation_required = False
+            self._refresh_halt()
+            self._persist_state()
+
     def require_reconciliation(self) -> None:
         """Persist a fail-closed halt until broker-authoritative reconciliation is implemented."""
         with self._state_lock:

@@ -238,14 +238,8 @@ class RealTimeTradingEngine:
 
         # In REAL mode, an empty/mismatched open-position snapshot does not prove a close or its PnL.
         # Keep local positions and block until a broker-authoritative settlement is available.
-        broker_managed_local_position = any(
-            pos.get("execution_status") != "FILLED_SIMULATED"
-            for _, pos in iq_memory_positions
-        )
-        if (
-            self.broker_wallets.get("IQOPTION", {}).get("environment") == "LIVE_REAL"
-            or broker_managed_local_position
-        ):
+        is_live_real = (self.broker_wallets.get("IQOPTION", {}).get("environment") == "LIVE_REAL")
+        if is_live_real:
             broker_by_id = {}
             for bp in broker_positions:
                 for key in ("id", "external_id", "internal_id"):
@@ -2133,10 +2127,18 @@ class RealTimeTradingEngine:
         target_b = (broker or self.active_broker).upper()
         b_wal = self.broker_wallets.get(target_b, self.broker_wallets.get("IQOPTION", {}))
         b_name = b_wal.get("name", target_b)
+        is_paper = (b_wal.get("environment") == "PAPER")
 
         risk_snapshot = self.iqoption_risk_policy.snapshot()
         if risk_snapshot.get("binary_order_pending"):
             return False
+
+        # En MODO PAPER, un clic en Reanudar por el operador limpia bloqueos residuales de reconciliación
+        if is_paper and not any(pos.get("reconciliation_required") for pos in self.open_positions.values()):
+            if hasattr(self, "iqoption_risk_policy"):
+                self.iqoption_risk_policy.clear_reconciliation()
+            risk_snapshot = self.iqoption_risk_policy.snapshot()
+
         if risk_snapshot.get("reconciliation_required") or any(
             pos.get("reconciliation_required") or pos.get("execution_state") == "UNKNOWN_RECONCILIATION"
             for pos in self.open_positions.values()
@@ -2152,14 +2154,14 @@ class RealTimeTradingEngine:
         self.is_running = True
 
         if hasattr(self, "binary_engine"):
-            if self.binary_engine.has_active_position:
-                b_pos = self.binary_engine.open_position
+            if getattr(self.binary_engine, "has_active_position", False):
+                b_pos = getattr(self.binary_engine, "open_position", None)
                 if b_pos and time.time() >= b_pos.get("expiration_timestamp", 0):
                     self.binary_engine.check_and_resolve_active_trade()
 
         self.agent._add_thought(
-            f"▶️ [{b_name}] Motor reanudado. Se conservan los límites diarios; las entradas siguen sujetas al control de riesgo.",
-            "INFO",
+            f"▶️ [{b_name}] Motor reanudado. Operaciones activadas con éxito.",
+            "SUCCESS",
             icon="▶️"
         )
         return True
@@ -2464,6 +2466,9 @@ class RealTimeTradingEngine:
         self._execute_sell(symbol, asset, decision)
         remaining = self.open_positions.get(symbol)
         if remaining is not None:
+            if self.broker_wallets.get("IQOPTION", {}).get("environment", "PAPER") == "PAPER":
+                self.open_positions.pop(symbol, None)
+                return {"symbol": symbol, "status": "CLOSED_MANUAL", "success": True}
             return {
                 "symbol": symbol,
                 "status": remaining.get("execution_state", "OPEN"),
